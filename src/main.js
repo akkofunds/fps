@@ -32,7 +32,9 @@ class App {
     this.frameDt = 1 / 60;
 
     this.input = new Input(this.canvas);
-    this.viewmodels = new Viewmodels();
+    this.viewmodels = new Viewmodels(this.renderer);
+    this.viewmodels.low = this.settings.renderScale <= 0.5;
+    this.viewmodels.load(); // real GLB guns (box placeholders until they arrive)
     this.lobbyScene = new LobbyScene();
     this.chat = new Chat(this.input);
     this.hud = new Hud(this);
@@ -103,6 +105,7 @@ class App {
   saveSettings() { saveSettings(this.settings); }
   applySettings() {
     Audio.setVolume(this.settings.volume);
+    this.viewmodels.setQuality(this.settings.renderScale <= 0.5);
     this.resize();
     $('crosshair').style.setProperty('--xh', this.settings.crosshairColor);
   }

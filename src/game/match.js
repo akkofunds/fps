@@ -57,6 +57,7 @@ export class Match {
     this.camera.rotation.order = 'YXZ';
     this.vm = app.viewmodels;
     this.vm.select(1);
+    this.vm.onEvent = (ev) => this._vmEvent(ev);
     if (this.map.buttons) this._buildButtons();
 
     // ---- entities ----
@@ -501,11 +502,12 @@ export class Match {
       if (h && h.zone !== 'btn' && this.isEnemy(h.ent)) { fire = true; if (!this._afWas) firePressed = true; this._afWas = true; } else this._afWas = false;
     }
     const canShoot = alive && !this.buyOpen && !this.ended && this.phase !== 'buy' && this.phase !== 'end';
-    const altPressed = pressed.alt || (input.mode === 'touch' && inp.alt && !this._touchAltWas);
-    this._touchAltWas = inp.alt;
+    const altPressed = pressed.alt;
     if (canShoot) {
       this.ws.update({
         now, dt, fire, firePressed, altPressed, reloadPressed: pressed.reload,
+        altHeld: inp.alt, modePressed: pressed.mode, inspectPressed: pressed.inspect,
+        adsToggle: input.mode === 'touch' || !!s.adsToggle,
         speed: c.speed2D(), onGround: c.onGround, crouched: c.crouched, yaw: this.yaw, pitch: this.pitch,
       }, (dx, dy, dz) => this._fireLocal(dx, dy, dz), (snd) => this._wsSound(snd));
     } else if (alive && pressed.reload) this.ws.startReload(now);
@@ -558,17 +560,40 @@ export class Match {
 
     // --- viewmodel ---
     const speed = c.speed2D();
-    const scoped = this.ws.slot === 3 && this.ws.zoom > 0;
-    this.vm.update(dt, ldx, ldy, Math.min(1, speed / PHYS.runSpeed), c.onGround, this.ws.reloadProgress(now), this.ws.boltProgress(now), alive && !scoped, c.crouched ? 1 : 0);
+    const ws = this.ws, adsE = ws.adsEase();
+    const scoped = ws.scoped;
+    const vs = this._vs || (this._vs = {});
+    vs.lookDX = ldx; vs.lookDY = ldy; vs.move = Math.min(1, speed / PHYS.runSpeed); vs.onGround = c.onGround; vs.crouch = c.crouched ? 1 : 0;
+    vs.ads = adsE; vs.reloadP = ws.reloadProgress(now); vs.boltP = ws.boltProgress(now); vs.drawP = ws.drawProgress(now);
+    vs.inspectP = ws.inspectProgress(now); vs.fireAge = now - ws.lastShotT; vs.visible = alive && !scoped;
+    vs.slideLocked = ws.slot === 2 && ws.ammo[2].mag === 0;
+    this.vm.update(dt, vs);
 
     // --- HUD ---
-    this.hud.frame(this, now, toUPS(speed), scoped ? this.ws.zoom : 0);
+    this.hud.frame(this, now, toUPS(speed), adsE);
     if (!alive && this.map.buttons && this.isHost) { /* range: no deaths */ }
     input.clearPressed();
   }
 
+  // sounds keyed to the baked viewmodel animations
+  _vmEvent(ev) {
+    switch (ev) {
+      case 'magout': Audio.play('reload', 0.55, 0.15, 0.75); break;
+      case 'magin': Audio.play('reload', 0.65, 0.15, 1.15); Audio.play('empty', 0.3, 0.1, 0.8); break;
+      case 'rack': Audio.play('bolt', 0.6, 0.2, 1.25); break;
+      case 'release': Audio.play('bolt', 0.6, 0.2, 1.6); break;
+      case 'boltup': Audio.play('bolt', 0.45, 0.25, 1.5); break;
+      case 'boltback': Audio.play('bolt', 0.6, 0.25, 1.0); break;
+      case 'boltfwd': Audio.play('bolt', 0.6, 0.25, 1.15); break;
+      case 'boltdown': Audio.play('bolt', 0.45, 0.25, 1.7); break;
+      case 'cloth': Audio.play('step', 0.25, 0, 1.6); break;
+      case 'draw': Audio.play('reload', 0.3, 0.1, 1.4); break;
+      default: break;
+    }
+  }
+
   _wsSound(snd) {
-    if (snd === 'reload') Audio.play('reload', 0.5);
+    if (snd === 'reload') Audio.play('step', 0.25, 0, 1.3);
     else if (snd === 'empty') Audio.play('empty', 0.6);
     else if (snd === 'mode') { Audio.play('ui', 0.5); this.hud.toast(this.ws.burstMode ? 'GLOCK: 3-ROUND BURST' : 'GLOCK: SEMI-AUTO', 900); }
     else if (snd === 'zoom') Audio.play('bolt', 0.25, 0, 1.6);
@@ -584,15 +609,14 @@ export class Match {
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     const mx = ox - sy * 0.55 + cy * 0.13, my = oy - 0.1, mz = oz - cy * 0.55 - sy * 0.13;
     if (w.slot === 3 || this.ws.shotsFired % 2 === 0 || w.slot === 2) this.tracers.spawn(mx, my, mz, end[0], end[1], end[2]);
-    this.vm.fire(w.kick / 0.07);
+    this.vm.fire((w.kick / 0.07) * (1 - 0.3 * this.ws.adsEase()), this.now);
     Audio.play(w.id, w.id === 'sniper' ? 0.95 : 0.7, 0, 0.96 + Math.random() * 0.08);
-    if (w.slot === 3) setTimeout(() => Audio.play('bolt', 0.5), 450);
     this.me.firedAt = this.now;
     const r = (v) => Math.round(v * 100) / 100;
     this.toHost({ t: 'shot', o: [r(mx), r(my), r(mz)], e: [r(end[0]), r(end[1]), r(end[2])], nrm: this.lastImpact, w: w.slot });
   }
 
-  _flags() { const c = this.ctrl; return (this.me.alive ? 1 : 0) | (c.crouched ? 2 : 0) | (c.onGround ? 4 : 0) | (this.ws.zoom ? 8 : 0); }
+  _flags() { const c = this.ctrl; return (this.me.alive ? 1 : 0) | (c.crouched ? 2 : 0) | (c.onGround ? 4 : 0) | (this.ws.ads > 0.5 ? 8 : 0); }
 
   _sendState() {
     const c = this.ctrl, r = (v) => Math.round(v * 100) / 100, ra = (v) => Math.round(v * 1000) / 1000;

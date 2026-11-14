@@ -48,7 +48,9 @@ export class WeaponSystem {
     this.nextFire = 0; this.reloadEnd = 0; this.reloadStart = 0; this.drawEnd = 0; this.boltEnd = 0; this.boltStart = 0;
     this.burstMode = false; this.burstLeft = 0; this.burstNext = 0;
     this.spray = 0; this.lastShot = -1;
-    this.zoom = 0; this.rezoom = 0;
+    this.zoom = 0; this.rezoom = 0; this.lastZoom = 1.5;
+    this.ads = 0; this.adsOn = false; // ADS progress 0..1 (eased via adsEase) and target for AK/Glock
+    this.inspectStart = 0; this.inspectEnd = 0; this.lastShotT = -10;
     this.punchP = 0; this.punchY = 0; // degrees
     this.infinite = false;
     this.spreadNow = 0;
@@ -63,6 +65,7 @@ export class WeaponSystem {
   select(slot, now) {
     if (slot < 1 || slot > 3 || slot === this.slot) return false;
     this.slot = slot; this.reloadEnd = 0; this.zoom = 0; this.rezoom = 0; this.burstLeft = 0; this.spray = 0;
+    this.ads = 0; this.adsOn = false; this.inspectEnd = 0; this.lastShotT = -10;
     this.drawEnd = now + WEAPONS[slot].draw;
     this.boltEnd = 0;
     return true;
@@ -71,27 +74,43 @@ export class WeaponSystem {
   startReload(now) {
     const a = this.ammo[this.slot], w = this.def;
     if (this.reloadEnd || a.mag >= w.mag || (a.reserve <= 0 && !this.infinite)) return false;
-    this.reloadStart = now; this.reloadEnd = now + w.reload; this.zoom = 0; this.rezoom = 0; this.burstLeft = 0;
+    this.reloadStart = now; this.reloadEnd = now + w.reload; this.zoom = 0; this.rezoom = 0; this.burstLeft = 0; this.adsOn = false; this.inspectEnd = 0;
     return true;
   }
 
   reloadProgress(now) { return this.reloadEnd ? (now - this.reloadStart) / (this.reloadEnd - this.reloadStart) : -1; }
   boltProgress(now) { return this.boltEnd > now ? (now - this.boltStart) / (this.boltEnd - this.boltStart) : -1; }
-  zoomFactor() { return this.slot === 3 && this.zoom ? WEAPONS[3].zooms[this.zoom - 1] : 1; }
+  drawProgress(now) { const w = this.def; return this.drawEnd > now ? 1 - (this.drawEnd - now) / w.draw : 1; }
+  inspectProgress(now) { return this.inspectEnd > now ? (now - this.inspectStart) / (this.inspectEnd - this.inspectStart) : -1; }
+  adsEase() { const t = this.ads; return t * t * (3 - 2 * t); }
+  get scoped() { return this.slot === 3 && this.adsEase() > 0.92; }
 
-  maxSpeed() { const w = this.def; return this.slot === 3 && this.zoom ? w.scopedSpeed : w.speed; }
+  // camera zoom: AK/Glock blend to their ADS zoom; the sniper zooms in as the scope reaches the eye
+  zoomFactor() {
+    const e = this.adsEase(), w = this.def;
+    if (this.slot === 3) { const z = this.zoom ? w.zooms[this.zoom - 1] : this.lastZoom; return 1 + (z - 1) * e * e * e; }
+    return 1 + (w.adsZoom - 1) * e;
+  }
+
+  maxSpeed() {
+    const w = this.def, e = this.adsEase();
+    if (this.slot === 3) return w.speed + (w.scopedSpeed - w.speed) * e;
+    return w.speed * (1 - (1 - w.adsSpeed) * e);
+  }
 
   computeSpread(speed, onGround, crouched) {
     const w = this.def;
     const max = w.speed;
     let moveFrac = (speed - 0.34 * max) / (0.66 * max);
     moveFrac = moveFrac < 0 ? 0 : moveFrac > 1 ? 1 : moveFrac;
-    let s = this.slot === 3 && this.zoom ? w.spreadScoped : w.spreadBase;
-    s += moveFrac * w.spreadMove * (this.slot === 3 && !this.zoom ? 1.6 : 1);
+    const scoped = this.scoped;
+    let s = scoped ? w.spreadScoped : w.spreadBase;
+    s += moveFrac * w.spreadMove * (this.slot === 3 && !scoped ? 1.6 : 1);
     if (!onGround) s += w.spreadAir;
     if (crouched && onGround) s *= w.spreadCrouch;
     if (this.slot === 2 && this.burstMode) s = Math.max(s, w.burst.spread);
     if (this.slot === 1 && this.spray > 0) s += Math.min(1.1, this.spray * 0.05);
+    if (this.slot !== 3) s *= 1 - 0.35 * this.adsEase(); // aiming down sights tightens the cone
     return s;
   }
 
@@ -111,11 +130,21 @@ export class WeaponSystem {
 
     if (ctx.reloadPressed && this.startReload(now)) sfx('reload');
 
-    // right click
-    if (ctx.altPressed && !this.reloadEnd) {
-      if (this.slot === 2) { this.burstMode = !this.burstMode; sfx('mode'); }
-      else if (this.slot === 3 && now >= this.drawEnd) { this.zoom = (this.zoom + 1) % 3; this.rezoom = 0; sfx('zoom'); }
-    }
+    // ADS (right click). AK/Glock: hold or toggle; sniper: cycle scope 1.5x → 3.0x → hip.
+    const blocked = !!this.reloadEnd || now < this.drawEnd;
+    if (this.slot === 3) {
+      if (ctx.altPressed && !blocked) { this.zoom = (this.zoom + 1) % 3; this.rezoom = 0; if (this.zoom) this.lastZoom = w.zooms[this.zoom - 1]; sfx('zoom'); }
+    } else if (ctx.adsToggle) {
+      if (ctx.altPressed && !blocked) this.adsOn = !this.adsOn;
+    } else this.adsOn = !!ctx.altHeld;
+    if (ctx.modePressed && this.slot === 2) { this.burstMode = !this.burstMode; sfx('mode'); }
+    const target = blocked ? 0 : this.slot === 3 ? (this.zoom ? 1 : 0) : (this.adsOn ? 1 : 0);
+    const rate = dt / w.adsTime;
+    if (target > this.ads) this.ads = Math.min(target, this.ads + rate);
+    else if (target < this.ads) this.ads = Math.max(target, this.ads - rate * 1.25);
+    // inspect (F): only when idle at the hip
+    if (ctx.inspectPressed && !blocked && now >= this.boltEnd && this.ads < 0.05) { this.inspectStart = now; this.inspectEnd = now + w.inspect; }
+    if (this.inspectEnd && (now >= this.inspectEnd || this.ads > 0.05 || ctx.fire)) this.inspectEnd = 0;
 
     this.spreadNow = this.computeSpread(ctx.speed, ctx.onGround, ctx.crouched);
     // Auto weapons keep an exact cadence (nextFire += interval) and may fire more than once in
@@ -182,7 +211,7 @@ export class WeaponSystem {
     by -= Math.cos(th) * r; bp += Math.sin(th) * r;
     dirFromAngles(by, bp, this._dir);
     fireFn(this._dir[0], this._dir[1], this._dir[2]);
-    this.lastShot = now;
+    this.lastShot = now; this.lastShotT = now; this.inspectEnd = 0;
     if (this.slot !== 1) { this.punchP += w.kickPitch * w.punch; this.punchY += (Math.random() - 0.5) * 0.5; }
     if (this.slot === 3) {
       this.boltStart = now; this.boltEnd = now + w.interval;

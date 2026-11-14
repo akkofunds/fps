@@ -201,7 +201,7 @@ input[type=range] { width: 150px; accent-color: var(--red); }
 #dmgind { position: absolute; left: 50%; top: 50%; width: 220px; height: 220px; margin: -110px 0 0 -110px; opacity: 0; }
 #dmgind::before { content: ''; position: absolute; left: 50%; top: 0; width: 80px; height: 26px; margin-left: -40px; background: radial-gradient(ellipse at 50% 100%, rgba(255, 70, 85, 0.9), transparent 70%); clip-path: polygon(10% 100%, 50% 0, 90% 100%); }
 #vignette { position: absolute; inset: 0; box-shadow: inset 0 0 160px rgba(255, 30, 40, 0.65); opacity: 0; transition: opacity 0.3s; }
-#scope { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, transparent 0, transparent 34vmin, #000 34.3vmin); }
+#scope { position: absolute; inset: 0; transition: none; background: radial-gradient(circle at 50% 50%, transparent 0, transparent 34vmin, #000 34.3vmin); }
 #scope::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(0, 0, 0, 0.9); }
 #scope::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(0, 0, 0, 0.9); }
 #scope i { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--red); box-shadow: 0 0 4px var(--red); z-index: 2; }
@@ -263,6 +263,7 @@ input[type=range] { width: 150px; accent-color: var(--red); }
 #tCrouch { right: 196px; bottom: 26px; width: 54px; height: 54px; }
 #tScope { right: 128px; bottom: 210px; width: 54px; height: 54px; }
 #tReload { right: 24px; bottom: 228px; width: 52px; height: 52px; }
+#tMode { right: 204px; bottom: 104px; width: 46px; height: 46px; font-size: 9px; }
 #tSwap { right: 24px; bottom: 36px; width: 58px; height: 58px; }
 #tBuy { right: 14px; top: 64px; } #tChat { right: 68px; top: 64px; } #tBoard { right: 122px; top: 64px; } #tPause { right: 176px; top: 64px; }
 #tAuto { left: 14px; top: 64px; width: 80px; }

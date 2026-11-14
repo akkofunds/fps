@@ -177,7 +177,7 @@ export class Lobby {
     $('sTSens').value = s.touchSens; $('sTSensV').textContent = s.touchSens.toFixed(2);
     $('sFov').value = s.fov; $('sFovV').textContent = `${s.fov}°`;
     $('sVol').value = s.volume; $('sVolV').textContent = `${Math.round(s.volume * 100)}%`;
-    $('sSpeedo').classList.toggle('on', s.speedometer); $('sFps').classList.toggle('on', !!s.showFps);
+    $('sSpeedo').classList.toggle('on', s.speedometer); $('sAds').classList.toggle('on', !!s.adsToggle); $('sFps').classList.toggle('on', !!s.showFps);
     for (const b of $('sScale').children) b.classList.toggle('on', +b.dataset.v === s.renderScale);
     for (const b of $('sXh').children) b.classList.toggle('on', b.dataset.v === s.crosshairColor);
   }
@@ -189,6 +189,7 @@ export class Lobby {
     $('sFov').oninput = (e) => { app.settings.fov = +e.target.value; upd(); };
     $('sVol').oninput = (e) => { app.settings.volume = +e.target.value; upd(); };
     $('sSpeedo').onclick = () => { app.settings.speedometer = !app.settings.speedometer; upd(); };
+    $('sAds').onclick = () => { app.settings.adsToggle = !app.settings.adsToggle; upd(); };
     $('sFps').onclick = () => { app.settings.showFps = !app.settings.showFps; upd(); };
     $('sScale').onclick = (e) => { const b = e.target.closest('button'); if (b) { app.settings.renderScale = +b.dataset.v; upd(); } };
     $('sXh').onclick = (e) => { const b = e.target.closest('button'); if (b) { app.settings.crosshairColor = b.dataset.v; upd(); } };

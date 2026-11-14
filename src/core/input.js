@@ -12,7 +12,7 @@ export class Input extends Emitter {
       fire: false, alt: false, lookDX: 0, lookDY: 0,
     };
     // edge-triggered (consumed by game each frame)
-    this.pressed = { fire: false, alt: false, reload: false, slot: 0, cycle: 0, interact: false, jump: false };
+    this.pressed = { fire: false, alt: false, reload: false, slot: 0, cycle: 0, interact: false, jump: false, mode: false, inspect: false };
     this.touch = { fwd: 0, side: 0, jump: false, crouch: false, fire: false, alt: false };
     this.typing = false; // chat input focused → gameplay input suppressed
     this.enabled = false; // gameplay capture on (match running)
@@ -90,7 +90,9 @@ export class Input extends Emitter {
         case 'KeyB': this.emit('buy'); break;
         case 'Escape': this.emit('escape'); break;
         case 'KeyR': this.pressed.reload = true; break;
-        case 'KeyE': case 'KeyF': this.pressed.interact = true; break;
+        case 'KeyE': this.pressed.interact = true; break;
+        case 'KeyF': this.pressed.inspect = true; break;
+        case 'KeyX': this.pressed.mode = true; break;
         case 'Digit1': this.pressed.slot = 1; break;
         case 'Digit2': this.pressed.slot = 2; break;
         case 'Digit3': this.pressed.slot = 3; break;
@@ -127,5 +129,5 @@ export class Input extends Emitter {
   }
 
   consumeLook() { const dx = this.state.lookDX, dy = this.state.lookDY; this.state.lookDX = 0; this.state.lookDY = 0; return [dx, dy]; }
-  clearPressed() { const p = this.pressed; p.fire = p.alt = p.reload = p.interact = p.jump = false; p.slot = 0; p.cycle = 0; }
+  clearPressed() { const p = this.pressed; p.fire = p.alt = p.reload = p.interact = p.jump = p.mode = p.inspect = false; p.slot = 0; p.cycle = 0; }
 }

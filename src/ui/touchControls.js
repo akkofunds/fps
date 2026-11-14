@@ -68,10 +68,12 @@ export class TouchControls {
       const up = (e) => { e.preventDefault(); T[key] = false; b.classList.remove('down'); };
       b.addEventListener('touchend', up, opt); b.addEventListener('touchcancel', up, opt);
     };
-    hold('tFire', 'fire', true); hold('tFireL', 'fire', false); hold('tJump', 'jump', false); hold('tScope', 'alt', false);
+    hold('tFire', 'fire', true); hold('tFireL', 'fire', false); hold('tJump', 'jump', false);
     // toggles / taps
     const tap = (id, fn) => $(id).addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); fn(); }, opt);
     tap('tCrouch', () => { T.crouch = !T.crouch; $('tCrouch').classList.toggle('on', T.crouch); });
+    tap('tScope', () => { this.input.pressed.alt = true; }); // ADS toggle / sniper scope cycle
+    tap('tMode', () => { this.input.pressed.mode = true; });
     tap('tReload', () => { this.input.pressed.reload = true; });
     tap('tSwap', () => { this.input.pressed.cycle = 1; });
     tap('tBuy', () => this.input.emit('buy'));

@@ -108,10 +108,12 @@
       <div class="opt"><div>FIELD OF VIEW<small id="sFovV"></small></div><input type="range" id="sFov" min="70" max="110" step="1" /></div>
       <div class="opt"><div>RENDER SCALE<small id="sScaleV">Lower = faster on old Chromebooks</small></div><div class="seg" id="sScale"><button data-v="1">100%</button><button data-v="0.75">75%</button><button data-v="0.5">50%</button></div></div>
       <div class="opt"><div>VOLUME<small id="sVolV"></small></div><input type="range" id="sVol" min="0" max="1" step="0.05" /></div>
+      <div class="opt"><div>TOGGLE ADS<small>Off = hold right-click to aim (sniper always cycles zoom)</small></div><button class="toggle" id="sAds"></button></div>
       <div class="opt"><div>SPEEDOMETER<small>Live UPS readout in the HUD</small></div><button class="toggle" id="sSpeedo"></button></div>
       <div class="opt"><div>SHOW FPS</div><button class="toggle" id="sFps"></button></div>
       <div class="opt"><div>CROSSHAIR COLOR</div><div class="seg" id="sXh"><button data-v="#00ffaa">GREEN</button><button data-v="#ffffff">WHITE</button><button data-v="#ffe14f">YELLOW</button><button data-v="#ff4fd8">PINK</button></div></div>
       <div class="opt"><div>CHANGE NAME<small>Generates a new tag</small></div><button class="btn small" id="btnRename">RENAME</button></div>
+      <p class="hint" style="margin-top:14px;font-size:12px">Weapon models: AK-47 by Billy Jackman (CC BY 4.0), Glock 17 DEVGRU by xlisov (CC BY-NC 4.0), Sniper by DJMaesen (CC BY 4.0) — via Sketchfab, modified. See CREDITS.md.</p>
       <div class="row"><button class="btn red" data-close>DONE</button></div>
     </div>
   </div>
@@ -165,7 +167,8 @@
     <button class="tb" id="tFireL">FIRE</button>
     <button class="tb" id="tJump">JUMP</button>
     <button class="tb" id="tCrouch">DUCK</button>
-    <button class="tb" id="tScope">ALT</button>
+    <button class="tb" id="tScope">ADS</button>
+    <button class="tb" id="tMode">MODE</button>
     <button class="tb" id="tReload">R</button>
     <button class="tb" id="tSwap">SWAP</button>
     <button class="tb sq" id="tBuy">BUY</button>

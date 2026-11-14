@@ -26,6 +26,7 @@ export const DEFAULT_SETTINGS = {
   renderScale: 1.0,
   volume: 0.7,
   autoFire: false,
+  adsToggle: false, // right-click ADS: hold (false) or toggle (true)
   crosshairColor: '#00ffaa',
 };
 export function loadSettings() { return { ...DEFAULT_SETTINGS, ...(read(KEY_SET) || {}) }; }

@@ -47,13 +47,24 @@ multiplayer, Source-style bunny hopping, and a performance budget aimed at 60 FP
 | `Ctrl` / `C` | Crouch |
 | `1` `2` `3` / wheel / `Q` | AK-47 / Glock / Sniper |
 | Left click | Fire |
-| Right click | Sniper scope / Glock burst toggle |
+| Right click | Aim down sights (hold; toggle in Settings). Sniper: scope 1.5x → 3.0x → hip |
+| `X` | Glock semi / 3-round burst |
+| `F` | Inspect weapon |
 | `R` | Reload |
 | `B` | Buy menu |
 | `Tab` | Scoreboard |
 | `Enter` | Chat (`Shift+Enter` team) |
 | `E` | Press Range console buttons |
 | `Esc` | Release mouse / pause |
+
+## First-person weapons
+
+Real textured GLB guns (`public/models`, ~2 MB total) with gloved arms and baked animations:
+reload (mag out/in, charging handle / slide rack), draw, inspect (`F`), per-shot charging-handle/slide
+cycling, Glock slide lock on empty, and a full sniper bolt cycle with the hand on the bolt.
+**ADS** on all three: AK iron sights, Glock red dot with a live reticle, and a custom sniper ADS where
+the scope rises to the eye before the blacked-out overlay fades in (1.5x → 3.0x). Aiming tightens spread
+and slows movement. Rebuild the assets with `tools/weapons` — see [CREDITS.md](CREDITS.md) for model licenses.
 
 ## Performance architecture
 

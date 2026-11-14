@@ -165,7 +165,7 @@ export class Hud {
     if (this.c.board !== html) { this.c.board = html; this.e.board.innerHTML = html; }
   }
 
-  frame(m, now, ups, zoom) {
+  frame(m, now, ups, adsE) {
     const dt = this.app.frameDt;
     // FPS meter
     this.fpsAcc += dt; this.fpsN++;
@@ -177,7 +177,7 @@ export class Hud {
     // ammo + weapon
     const ws = m.ws, w = ws.def, a = ws.ammo[ws.slot];
     this.set('ammo', this.e.ammo, 'innerHTML', `${a.mag}<small>/${ws.infinite ? '∞' : a.reserve}</small>`);
-    const mode = ws.reloading ? 'RELOADING' : ws.slot === 2 ? (ws.burstMode ? 'BURST' : 'SEMI') : ws.slot === 3 ? (ws.zoom ? `${w.zooms[ws.zoom - 1]}x` : 'HIP') : 'AUTO';
+    const mode = ws.reloading ? 'RELOADING' : ws.inspectEnd ? 'INSPECT' : ws.slot === 3 ? (ws.zoom ? `SCOPE ${w.zooms[ws.zoom - 1]}x` : 'HIP') : `${ws.slot === 2 ? (ws.burstMode ? 'BURST' : 'SEMI') : 'AUTO'}${adsE > 0.5 ? ' · ADS' : ''}`;
     this.set('wn', this.e.wname, 'innerHTML', `<b>${w.name}</b>${mode}`);
     if (this.c.slot !== ws.slot) { this.c.slot = ws.slot; for (const d of this.e.slots.children) d.classList.toggle('on', +d.dataset.s === ws.slot); }
 
@@ -214,11 +214,18 @@ export class Hud {
       const [, l, r, u, b] = this.xhParts;
       l.style.left = `${-gap - 7}px`; r.style.left = `${gap}px`; u.style.top = `${-gap - 7}px`; b.style.top = `${gap}px`;
     }
-    const xhOn = zoom === 0 && m.me.alive;
-    if (this.c.xh !== xhOn) { this.c.xh = xhOn; this.e.xh.style.display = xhOn ? '' : 'none'; }
+    // crosshair fades out while aiming down sights (irons / red dot / scope take over)
+    const xhO = m.me.alive ? Math.max(0, 1 - adsE / 0.35) : 0;
+    const xhK = xhO.toFixed(2);
+    if (this.c.xh !== xhK) { this.c.xh = xhK; this.e.xh.style.opacity = xhK; this.e.xh.style.display = xhO > 0 ? '' : 'none'; }
 
     // scope
-    if (this.c.zoom !== zoom) { this.c.zoom = zoom; show(this.e.scope, zoom > 0); if (zoom) this.e.zoom.textContent = `${WEAPONS[3].zooms[zoom - 1]}x`; }
+    // sniper scope overlay fades in as the scope reaches the eye
+    const so = ws.slot === 3 && m.me.alive ? Math.max(0, Math.min(1, (adsE - 0.82) / 0.13)) : 0;
+    const soK = so.toFixed(2);
+    if (this.c.scope !== soK) { this.c.scope = soK; show(this.e.scope, so > 0); this.e.scope.style.opacity = soK; }
+    const zl = `${ws.zoom ? WEAPONS[3].zooms[ws.zoom - 1] : ws.lastZoom}x`;
+    if (so > 0 && this.c.zl !== zl) { this.c.zl = zl; this.e.zoom.textContent = zl; }
 
     // transient fades
     if (this.hitT > 0) { this.hitT -= dt; if (this.hitT <= 0) this.e.hit.style.opacity = '0'; }
