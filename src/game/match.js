@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TICK, NET_HZ, INTERP_DELAY, PHYS, PHYS_BOOST, MAX_HP, MODES, toUPS } from '../config.js';
 import { buildMap } from '../maps/index.js';
 import { CharacterRenderer } from '../entities/characterModel.js';
-import { TracerPool, DecalPool, SparkPool } from '../effects/pools.js';
+import { TrailPool, TRAIL_STYLE, DecalPool, SparkPool } from '../effects/pools.js';
 import { BhopController } from '../physics/bhopController.js';
 import { WeaponSystem, traceShot, dirFromAngles } from '../weapons/weaponSystem.js';
 import { WEAPONS } from '../weapons/weaponDefs.js';
@@ -50,7 +50,8 @@ export class Match {
     const [sc, si, sd] = this.map.sun;
     const sun = new THREE.DirectionalLight(sc, si * 1.5); sun.position.set(...sd); scene.add(sun);
     this.chars = new CharacterRenderer(scene, 16);
-    this.tracers = new TracerPool(scene, 48);
+    this.trails = new TrailPool(scene, 64);
+    this._mv = new THREE.Vector3();
     this.decals = new DecalPool(scene, 256);
     this.sparks = new SparkPool(scene, 256);
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 400);
@@ -343,11 +344,11 @@ export class Match {
         if (msg.n === this.me.n) break;
         const e = this.byN[msg.n];
         const o = msg.o, en = msg.e;
-        this.tracers.spawn(o[0], o[1], o[2], en[0], en[1], en[2]);
+        this.trails.spawn(o[0], o[1], o[2], en[0], en[1], en[2], TRAIL_STYLE[msg.w] || TRAIL_STYLE[1]);
         if (msg.nrm) { this.decals.spawn(en[0], en[1], en[2], msg.nrm[0], msg.nrm[1], msg.nrm[2]); this.sparks.burst(en[0], en[1], en[2], msg.nrm[0], msg.nrm[1], msg.nrm[2], 4, 1, 0.85, 0.5, 3); }
         this.sparks.burst(o[0], o[1], o[2], 0, 0.2, 0, 3, 1, 0.8, 0.3, 1.2, 0);
         const w = WEAPONS[msg.w] || WEAPONS[1];
-        Audio.play3D(w.id, o[0], o[1], o[2], this.ctrl.x, this.ctrl.y, this.ctrl.z, this.yaw, 0.9, w.id === 'sniper' ? 90 : 55, 0.95 + Math.random() * 0.1);
+        Audio.gun3D(w.id, o[0], o[1], o[2], this.ctrl.x, this.ctrl.y + 1.6, this.ctrl.z, this.yaw);
         if (e) e.firedAt = now;
         break;
       }
@@ -375,7 +376,6 @@ export class Match {
       case 'left': {
         const e = this.byN[msg.n]; if (!e) break;
         this.app.chat.system(`${e.name} left the match`);
-        this.chars.hide(e.slot);
         this.ents.delete(e.pid); this.byN[msg.n] = null;
         this.entList = [...this.ents.values()];
         break;
@@ -524,13 +524,14 @@ export class Match {
     if (!this.isHost) { this.pingT -= dt; if (this.pingT <= 0) { this.pingT = 2; this.net.send({ t: 'ping', c: now }); } }
 
     // --- remote characters ---
+    this.chars.begin();
     const renderT = this.isHost ? now - INTERP_DELAY : now - (this.clockOff || 0) - INTERP_DELAY;
     for (let i = 0; i < this.entList.length; i++) {
       const e = this.entList[i];
       if (e === me) continue;
       if (!e.alive) {
         if (e.deadT > 0) e.deadT += dt;
-        if (e.deadT <= 0 || e.deadT > 3) { this.chars.hide(e.slot); continue; }
+        if (e.deadT <= 0 || e.deadT > 3) continue;
       }
       if (e.direct) { e.rx = e.x; e.ry = e.y; e.rz = e.z; e.ryaw = e.yaw; e.rpitch = e.pitch; e.rw = e.w; }
       else if (e.alive) this.sampleEnt(e, renderT);
@@ -547,15 +548,13 @@ export class Match {
       }
       if (e.flash > 0) e.flash = Math.max(0, e.flash - dt * 6);
       const fall = e.alive ? 0 : Math.min(1, e.deadT * 3.5);
-      this.chars.set(e.slot, e.rx, e.ry, e.rz, e.ryaw, e.rc, e.phase, e.alive ? e.walk : 0, fall, e.rpitch);
       const col = e.practice ? TARGET : this.isEnemy(e) ? ENEMY : ALLY;
-      if (e._col !== col || e.flash > 0 || e._fl) { this.chars.setColor(e.slot, col, e.flash); e._col = col; e._fl = e.flash > 0; }
+      this.chars.add(e.rx, e.ry, e.rz, e.ryaw, e.rc, e.phase, e.alive ? e.walk : 0, fall, e.rpitch, (e.rw | 0) || 1, col, e.flash);
     }
-    this.chars.hide(me.slot);
-    this.chars.flush();
+    this.chars.end();
 
     // --- effects ---
-    this.tracers.update(dt);
+    this.trails.update(dt, this.camera);
     this.sparks.update(dt);
 
     // --- viewmodel ---
@@ -605,12 +604,17 @@ export class Match {
     this.lastImpact = null;
     this.shotsLocal++;
     const end = traceShot(this.map.world, this._traceEnts, ox, oy, oz, dx, dy, dz, w, this._shotCb);
-    // tracer starts at the (approximate) world-space muzzle
-    const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
-    const mx = ox - sy * 0.55 + cy * 0.13, my = oy - 0.1, mz = oz - cy * 0.55 - sy * 0.13;
-    if (w.slot === 3 || this.ws.shotsFired % 2 === 0 || w.slot === 2) this.tracers.spawn(mx, my, mz, end[0], end[1], end[2]);
+    // trail starts where the viewmodel muzzle appears on screen: unproject its screen position into
+    // the world 0.7 m in front of the eye (the gun is drawn on top, so the trail exits the barrel)
+    const v = this._mv;
+    if (this.vm.muzzleNDC(v) && !this.ws.scoped) {
+      v.z = 0.5; v.unproject(cam).sub(cam.position).normalize();
+      v.multiplyScalar(0.7).add(cam.position);
+    } else v.set(ox + dx * 0.4, oy + dy * 0.4 - 0.04, oz + dz * 0.4);
+    const mx = v.x, my = v.y, mz = v.z;
+    this.trails.spawn(mx, my, mz, end[0], end[1], end[2], TRAIL_STYLE[w.slot]);
     this.vm.fire((w.kick / 0.07) * (1 - 0.3 * this.ws.adsEase()), this.now);
-    Audio.play(w.id, w.id === 'sniper' ? 0.95 : 0.7, 0, 0.96 + Math.random() * 0.08);
+    Audio.gunLocal(w.id);
     this.me.firedAt = this.now;
     const r = (v) => Math.round(v * 100) / 100;
     this.toHost({ t: 'shot', o: [r(mx), r(my), r(mz)], e: [r(end[0]), r(end[1]), r(end[2])], nrm: this.lastImpact, w: w.slot });
@@ -647,7 +651,7 @@ export class Match {
     this.ended = true;
     this.map.dispose();
     this.chars.dispose();
-    for (const o of [this.tracers.mesh, this.decals.mesh, this.sparks.points, this.buttons]) {
+    for (const o of [this.trails.mesh, this.decals.mesh, this.sparks.points, this.buttons]) {
       if (!o) continue;
       this.scene.remove(o); o.geometry.dispose(); if (o.material.map) o.material.map.dispose(); o.material.dispose();
     }

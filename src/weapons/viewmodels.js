@@ -5,6 +5,8 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { muzzleTexture } from '../effects/pools.js';
 import { WEAPONS } from './weaponDefs.js';
+import { setThirdPersonGuns } from '../entities/characterModel.js';
+import { MeshoptSimplifier } from 'meshoptimizer/simplifier';
 
 // First-person viewmodels. The real guns are GLBs in public/models (built by tools/weapons):
 // each has a `weapon` root, animatable parts (mag, slide/charge, bolt, trigger), gloved arms,
@@ -214,6 +216,75 @@ class Rig {
   }
 }
 
+// Third-person gun for other players: the viewmodel GLB without arms, baked into one geometry.
+// Single-material guns keep their texture (Lambert); multi-material ones (Glock) get vertex colors
+// averaged from each material's texture → always one draw call per gun type.
+function avgTextureColor(mat) {
+  const out = new THREE.Color().copy(mat.color || new THREE.Color(1, 1, 1));
+  const img = mat.map && mat.map.image;
+  if (!img) return out;
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 8;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0, 8, 8);
+    const d = g.getImageData(0, 0, 8, 8).data; let r = 0, gg = 0, b = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; }
+    const n = d.length / 4; const t = new THREE.Color().setRGB(r / n / 255, gg / n / 255, b / n / 255, THREE.SRGBColorSpace);
+    return out.multiply(t);
+  } catch { return out; }
+}
+function floatGeometry(src, withUv) {
+  const g = new THREE.BufferGeometry();
+  for (const name of withUv ? ['position', 'normal', 'uv'] : ['position', 'normal']) {
+    const a = src.attributes[name]; if (!a) continue;
+    const n = a.count, size = a.itemSize, arr = new Float32Array(n * size);
+    for (let i = 0; i < n; i++) { arr[i * size] = a.getX(i); if (size > 1) arr[i * size + 1] = a.getY(i); if (size > 2) arr[i * size + 2] = a.getZ(i); }
+    g.setAttribute(name, new THREE.BufferAttribute(arr, size));
+  }
+  if (src.index) g.setIndex(Array.from(src.index.array));
+  return g;
+}
+function thirdPersonGun(rig) {
+  const weapon = rig.weapon;
+  rig.model.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(weapon.matrixWorld).invert();
+  const parts = [];
+  weapon.traverse((o) => {
+    if (!o.isMesh || o === rig.dot) return;
+    for (let p = o; p && p !== weapon; p = p.parent) if (p.name === 'arm_L' || p.name === 'arm_R') return;
+    const m = o.material.isMeshStandardMaterial || o.material.isMeshLambertMaterial ? o.material : null;
+    if (!m || (m.transparent && m.opacity < 0.9) || m.name.includes('glass')) return;
+    parts.push({ o, m: rig.meshes ? (rig.meshes.find((r) => r.o === o) || { hi: m }).hi : m });
+  });
+  const mats = new Set(parts.map((p) => p.m));
+  const single = mats.size === 1;
+  const geos = parts.map(({ o, m }) => {
+    const g = floatGeometry(o.geometry, single);
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+    if (!single) {
+      const c = avgTextureColor(m), n = g.attributes.position.count, col = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    }
+    return g;
+  });
+  const geometry = mergeGeometries(geos, false);
+  // decimate: other players' guns are small on screen, ~2.5k triangles is plenty
+  try {
+    if (MeshoptSimplifier.supported) {
+      const idx = new Uint32Array(geometry.index.array);
+      const target = Math.min(idx.length, 7500);
+      if (target < idx.length) {
+        const [res] = MeshoptSimplifier.simplify(idx, geometry.attributes.position.array, 3, target, 0.012, single ? ['Prune'] : ['Prune', 'Permissive']);
+        if (res.length >= 300) geometry.setIndex(new THREE.BufferAttribute(res, 1));
+      }
+    }
+  } catch (e) { console.warn('simplify', e); }
+  geometry.computeBoundingSphere();
+  const m0 = parts[0].m;
+  const material = single ? new THREE.MeshLambertMaterial({ map: m0.map, color: m0.color }) : new THREE.MeshLambertMaterial({ vertexColors: true });
+  return { geometry, material };
+}
+
 export class Viewmodels {
   constructor(renderer) {
     this.scene = new THREE.Scene();
@@ -265,11 +336,27 @@ export class Viewmodels {
         res();
       }, undefined, (e) => { console.warn('viewmodel load failed', url, e); res(); });
     }));
-    return Promise.all(jobs).then(() => { this.select(this.cur, true); this.setQuality(this.low); });
+    return Promise.all(jobs).then(() => {
+      this.select(this.cur, true); this.setQuality(this.low);
+      return MeshoptSimplifier.ready.catch(() => null).then(() => {
+        const tp = {};
+        for (let s = 1; s <= 3; s++) { try { if (this.rigs[s].glb) tp[s] = thirdPersonGun(this.rigs[s]); } catch (e) { console.warn('tp gun', s, e); } }
+        setThirdPersonGuns(tp);
+      });
+    });
   }
 
   // low = Lambert materials on the guns (auto when render scale is 50%)
   setQuality(low) { this.low = !!low; for (let i = 1; i < this.rigs.length; i++) this.rigs[i].setQuality(this.low); }
+
+  // screen-space (NDC) position of the current muzzle; false if unavailable
+  muzzleNDC(out) {
+    const r = this.rigs[this.cur];
+    if (!r || !r.muzzle || !r.holder.visible) return false;
+    r.muzzle.getWorldPosition(out);
+    out.project(this.camera);
+    return Math.abs(out.x) < 1.5 && Math.abs(out.y) < 1.5;
+  }
 
   hideShells() { const z = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < 12; i++) this.shells.setMatrixAt(i, z); this.shells.instanceMatrix.needsUpdate = true; }
   setAspect(a) { this.camera.aspect = a; this.camera.updateProjectionMatrix(); }

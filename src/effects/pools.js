@@ -15,45 +15,123 @@ function radialTexture(inner, outer, size = 64) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 
-export class TracerPool {
-  constructor(scene, n = 48) {
-    this.mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.025, 0.025, 1), new THREE.MeshBasicMaterial({ color: 0xffe7a3, fog: false }), n);
+// Bullet trails: camera-facing glowing ribbons from muzzle to impact. Each trail draws instantly
+// along the whole path with a bright "bullet" head racing to the target, then fades and thins out.
+// One InstancedMesh (additive, per-instance color used as brightness) → one draw call.
+function trailTexture() {
+  const w = 128, h = 32, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const img = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = Math.abs((y + 0.5) / h - 0.5) * 2; // 0 center → 1 edge
+    const across = Math.exp(-v * v * 5) * 0.85 + Math.exp(-v * v * 40) * 0.6; // soft glow + hot core
+    const u = x / (w - 1); // 0 = muzzle end, 1 = impact end
+    const along = Math.min(1, u * 14) * (0.7 + 0.3 * u);
+    const a = Math.min(1, across * along);
+    const core = Math.exp(-v * v * 22);
+    const i = (y * w + x) * 4;
+    img.data[i] = Math.round(core * 255); img.data[i + 1] = 0; img.data[i + 2] = 0; img.data[i + 3] = Math.round(a * 255);
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.premultiplyAlpha = false; return t;
+}
+
+const TRAIL_VS = `
+  varying vec2 vUv; varying vec3 vCol;
+  void main() {
+    vUv = uv;
+    vCol = instanceColor;
+    // point on the path + side offset scaled by distance → constant on-screen width
+    vec4 base = modelMatrix * instanceMatrix * vec4(position.x, 0.0, 0.0, 1.0);
+    vec3 side = (modelMatrix * instanceMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+    float d = max(0.35, distance(base.xyz, cameraPosition));
+    vec4 world = vec4(base.xyz + side * position.y * d, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }`;
+const TRAIL_FS = `
+  uniform sampler2D map; varying vec2 vUv; varying vec3 vCol;
+  void main() {
+    float fade = max(vCol.r, max(vCol.g, vCol.b));
+    if (fade < 0.003) discard;
+    vec3 tint = vCol / fade;
+    vec4 t = texture2D(map, vUv);
+    float core = t.r;
+    vec3 col = mix(tint * 0.5, tint, smoothstep(0.02, 0.3, core));   // darker halo → readable on bright maps
+    col = mix(col, vec3(1.0, 0.98, 0.9), smoothstep(0.55, 1.0, core)); // white-hot center line
+    gl_FragColor = vec4(col, t.a * fade);
+    #include <colorspace_fragment>
+  }`;
+
+export class TrailPool {
+  constructor(scene, n = 64) {
+    const geo = new THREE.PlaneGeometry(1, 1).translate(0.5, 0, 0); // x: 0..1 along the path, y: ±0.5 across
+    const tex = trailTexture();
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: tex } }, vertexShader: TRAIL_VS, fragmentShader: TRAIL_FS,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    });
+    this.mesh = new THREE.InstancedMesh(geo, mat, n);
     this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 5;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.items = [];
-    for (let i = 0; i < n; i++) { this.items.push({ on: false, sx: 0, sy: 0, sz: 0, dx: 0, dy: 0, dz: 0, len: 0, t: 0 }); this.mesh.setMatrixAt(i, ZERO); }
-    this.next = 0;
+    const black = new THREE.Color(0, 0, 0);
+    for (let i = 0; i < n; i++) {
+      this.items.push({ on: false, a: new THREE.Vector3(), b: new THREE.Vector3(), t: 0, life: 0.2, w: 0.005, col: new THREE.Color(), speed: 600 });
+      this.mesh.setMatrixAt(i, ZERO); this.mesh.setColorAt(i, black);
+    }
+    this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    this.next = 0; this.n = n;
+    this._x = new THREE.Vector3(); this._y = new THREE.Vector3(); this._z = new THREE.Vector3(); this._mid = new THREE.Vector3(); this._c = new THREE.Color();
     scene.add(this.mesh);
   }
-  spawn(sx, sy, sz, ex, ey, ez) {
-    const it = this.items[this.next]; this.next = (this.next + 1) % this.items.length;
-    const dx = ex - sx, dy = ey - sy, dz = ez - sz;
-    const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    if (len < 1) return;
-    it.on = true; it.sx = sx; it.sy = sy; it.sz = sz; it.dx = dx / len; it.dy = dy / len; it.dz = dz / len; it.len = len; it.t = 0;
+  // style: { color (hex), life (s), width (screen-space factor), speed (m/s) }
+  spawn(sx, sy, sz, ex, ey, ez, style) {
+    const it = this.items[this.next]; this.next = (this.next + 1) % this.n;
+    it.a.set(sx, sy, sz); it.b.set(ex, ey, ez);
+    if (it.a.distanceToSquared(it.b) < 0.25) return;
+    it.on = true; it.t = 0; it.life = style.life; it.w = style.width; it.speed = style.speed; it.col.set(style.color);
   }
-  update(dt) {
-    const items = this.items; let any = false;
+  update(dt, camera) {
+    const items = this.items, cp = camera.position;
+    let any = false;
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (!it.on) continue;
       any = true;
-      it.t += dt * 420;
-      const seg = 4.5;
-      const head = Math.min(it.t, it.len), tail = Math.max(0, it.t - seg);
-      if (tail >= it.len) { it.on = false; this.mesh.setMatrixAt(i, ZERO); continue; }
-      const mid = (head + tail) / 2, l = Math.max(0.05, head - tail);
-      _p.set(it.sx + it.dx * mid, it.sy + it.dy * mid, it.sz + it.dz * mid);
-      _d.set(it.dx, it.dy, it.dz);
-      _q.setFromUnitVectors(_z, _d);
-      _s.set(1, 1, l);
-      _m.compose(_p, _q, _s);
+      it.t += dt;
+      const len = it.a.distanceTo(it.b);
+      const head = Math.min(len, it.t * it.speed); // bullet head racing to the target
+      const fade = 1 - Math.min(1, Math.max(0, (it.t - len / it.speed) / it.life));
+      if (fade <= 0) { it.on = false; this.mesh.setMatrixAt(i, ZERO); this._c.setRGB(0, 0, 0); this.mesh.setColorAt(i, this._c); continue; }
+      const x = this._x.subVectors(it.b, it.a).normalize();
+      this._mid.copy(it.a).addScaledVector(x, head * 0.5);
+      const toCam = this._z.subVectors(cp, this._mid);
+      const y = this._y.crossVectors(x, toCam).normalize();
+      const w = it.w * (0.5 + 0.5 * fade);
+      const z = this._z.crossVectors(x, y);
+      _m.set(
+        x.x * head, y.x * w, z.x, it.a.x,
+        x.y * head, y.y * w, z.y, it.a.y,
+        x.z * head, y.z * w, z.z, it.a.z,
+        0, 0, 0, 1,
+      );
       this.mesh.setMatrixAt(i, _m);
+      const k = fade * fade;
+      this._c.setRGB(it.col.r * k, it.col.g * k, it.col.b * k);
+      this.mesh.setColorAt(i, this._c);
     }
-    if (any || this._was) this.mesh.instanceMatrix.needsUpdate = true;
+    if (any || this._was) { this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor.needsUpdate = true; }
     this._was = any;
   }
 }
+
+// width is screen-space: world width = width × distance (0.015 ≈ 9 px glow, ~3 px hot core at 720p)
+export const TRAIL_STYLE = {
+  1: { color: 0xffa020, life: 0.22, width: 0.015, speed: 900 },
+  2: { color: 0xffb84d, life: 0.16, width: 0.012, speed: 700 },
+  3: { color: 0xff8a3a, life: 0.6, width: 0.026, speed: 1400 },
+};
 
 export class DecalPool {
   constructor(scene, n = 256) {

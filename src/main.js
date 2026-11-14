@@ -43,6 +43,7 @@ class App {
     this.paused = false;
 
     window.addEventListener('resize', () => this.resize());
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', () => this.resize());
     window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
     this.resize();
 
@@ -115,7 +116,7 @@ class App {
     this.width = w; this.height = h; this.aspect = w / h;
     // Clamp DPR to 1.0 — high-DPI Chromebook/phone screens would otherwise render 2-4x the pixels.
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.0) * (this.settings.renderScale || 1));
-    this.renderer.setSize(w, h, false);
+    this.renderer.setSize(w, h, true); // also sets CSS px size = visible viewport → crosshair == view center
     this.viewmodels.setAspect(w / h);
     const panel = w > 860 ? 340 : 0;
     this.lobbyScene.resize(w, h, panel);
@@ -218,3 +219,4 @@ class App {
 }
 
 window.__app = new App();
+window.__audio = Audio; // debug/inspection handle
