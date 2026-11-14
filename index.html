@@ -2,103 +2,180 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Bhop Arena — Source-style movement</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a0f; font-family: 'Segoe UI', system-ui, sans-serif; }
-    #canvas { display: block; width: 100%; height: 100%; }
-    #ui {
-      position: absolute; inset: 0; pointer-events: none;
-      color: #e8e8f0; text-shadow: 0 1px 3px #000;
-    }
-    #crosshair {
-      position: absolute; top: 50%; left: 50%; width: 4px; height: 4px;
-      background: #fff; border-radius: 50%; transform: translate(-50%, -50%);
-      box-shadow: 0 0 0 1px #0008;
-    }
-    #hud {
-      position: absolute; bottom: 24px; left: 24px;
-      font-size: 14px; line-height: 1.5; opacity: 0.9;
-    }
-    #hud .speed { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
-    #hud .speed.fast { color: #7dffb3; }
-    #hud .speed.veryfast { color: #ffd166; }
-    #hud .speed.insane { color: #ff6b6b; }
-    #menu {
-      position: absolute; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; background: #0a0a0fcc;
-      pointer-events: auto; transition: opacity 0.3s;
-    }
-    #menu.hidden { opacity: 0; pointer-events: none; }
-    #menu h1 {
-      font-size: 42px; font-weight: 800; letter-spacing: -1px;
-      background: linear-gradient(135deg, #7dffb3, #5b8def);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      margin-bottom: 8px;
-    }
-    #menu p { color: #aaa; margin-bottom: 28px; max-width: 420px; text-align: center; line-height: 1.5; }
-    .btn {
-      background: #1a1a24; border: 1px solid #333; color: #eee;
-      padding: 12px 28px; font-size: 16px; border-radius: 8px;
-      cursor: pointer; margin: 6px; transition: all 0.15s;
-    }
-    .btn:hover { background: #252532; border-color: #7dffb3; color: #7dffb3; }
-    .btn.primary { background: #1e3a2f; border-color: #7dffb3; color: #7dffb3; }
-    #room-input {
-      background: #12121a; border: 1px solid #333; color: #eee;
-      padding: 10px 16px; font-size: 15px; border-radius: 6px;
-      width: 180px; text-align: center; margin: 8px;
-    }
-    #status {
-      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
-      font-size: 13px; color: #aaa; background: #0006; padding: 6px 14px; border-radius: 20px;
-    }
-    #controls-hint {
-      position: absolute; top: 16px; right: 16px; font-size: 12px;
-      color: #666; text-align: right; line-height: 1.6;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0F1923" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>RIFTLINE — Tactical FPS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <canvas id="canvas"></canvas>
-  <div id="ui">
-    <div id="crosshair"></div>
-    <div id="status">Click to play</div>
-    <div id="controls-hint">
-      WASD move · Space jump / bhop<br>
-      Ctrl / C slide · Shift walk<br>
-      Mouse look · Esc unlock
+  <canvas id="game"></canvas>
+
+  <!-- ============ LOBBY ============ -->
+  <div id="lobby" class="hidden">
+    <header class="topbar">
+      <div class="logo"><i></i>RIFTLINE</div>
+      <nav class="nav">
+        <button class="btn red play" id="btnPlay">PLAY</button>
+        <button class="btn" id="btnCustom">CUSTOM</button>
+        <button class="btn" id="btnRange">RANGE</button>
+        <button class="btn" id="btnSettings">SETTINGS</button>
+      </nav>
+      <div class="me"><span class="dot" id="netDot"></span><span class="tagchip" id="meTag"></span></div>
+    </header>
+    <div class="hero-copy">
+      <h1>TACTICAL<br /><span>FPS</span></h1>
+      <p>Source-style bhop. One-tap AK. Peer-to-peer matches with friends — no server, no install.</p>
     </div>
-    <div id="hud">
-      <div class="speed" id="speed">0</div>
-      <div id="info">u/s</div>
+    <div id="plates"></div>
+    <aside id="social" class="panel">
+      <h3>SOCIAL <span class="dot" id="socialDot"></span></h3>
+      <div class="mytag" id="myTagBox" title="Click to copy your tag">
+        <div><small>YOUR TAG — SHARE IT</small><div class="tagchip" id="myTagText"></div></div>
+        <span class="label">COPY</span>
+      </div>
+      <div class="label">ADD FRIEND</div>
+      <div class="addrow">
+        <input class="field" id="friendTag" placeholder="Name#1234" maxlength="20" autocomplete="off" spellcheck="false" />
+        <button class="btn red small" id="btnInvite">INVITE</button>
+      </div>
+      <div id="invites" class="list"></div>
+      <h3>PARTY <span id="partyCount" class="label"></span></h3>
+      <div id="party" class="list"></div>
+      <button class="btn small ghost" id="btnLeaveParty">LEAVE PARTY</button>
+      <p class="hint" id="socialHint">Party members appear next to you in the lobby. Anyone in the party can pick the map; the leader starts queues and custom games. Press Enter to chat.</p>
+    </aside>
+    <section id="maps"></section>
+  </div>
+
+  <!-- queue timer (top center) -->
+  <div id="queueTimer" class="hidden">
+    <div class="spin"></div>
+    <div><div class="q1"><span id="qText">SEARCHING FOR MATCH...</span><b id="qTime">00:00</b></div><div class="q2" id="qSub"></div></div>
+    <button class="btn small" id="btnCancelQ">CANCEL</button>
+  </div>
+
+  <!-- ============ MODALS ============ -->
+  <div id="namePrompt" class="modal hidden">
+    <div class="panel">
+      <div class="label">WELCOME, AGENT</div>
+      <h2>CHOOSE YOUR NAME</h2>
+      <p>You'll get a unique 4-digit tag (like <b>Player#4821</b>). Friends invite you with it.</p>
+      <input class="field" id="nameInput" maxlength="14" placeholder="Username (letters, numbers, _)" autocomplete="off" spellcheck="false" />
+      <div class="row"><button class="btn red" id="btnName">CONTINUE</button></div>
     </div>
   </div>
 
-  <div id="menu">
-    <h1>BHOP ARENA</h1>
-    <p>Source-style movement · air strafe · perfect bhop · slide<br>
-       Pure client-side · works on GitHub Pages</p>
-    <button class="btn primary" id="btn-solo">Play Solo</button>
-    <div style="margin-top:18px; display:flex; align-items:center; gap:8px;">
-      <input id="room-input" placeholder="room code" maxlength="8" />
-      <button class="btn" id="btn-join">Join / Host</button>
+  <div id="modeModal" class="modal hidden">
+    <div class="panel">
+      <div class="label">MATCHMAKING</div>
+      <h2>SELECT MODE</h2>
+      <p>Pairs you with live players. Empty slots are filled with combat bots after 15 seconds.</p>
+      <div class="modes">
+        <button class="modecard" data-mode="duel"><b>1V1 DUEL</b><span>First to 5 rounds · one life per round</span></button>
+        <button class="modecard" data-mode="wingman"><b>2V2 WINGMAN</b><span>First to 5 rounds · bring a friend</span></button>
+        <button class="modecard" data-mode="ffa"><b>FREE-FOR-ALL</b><span>First to 20 kills · instant respawn</span></button>
+      </div>
+      <div class="row"><button class="btn ghost" data-close>BACK</button></div>
     </div>
-    <p style="margin-top:20px; font-size:13px; color:#666;">
-      Multiplayer uses PeerJS (public free server).<br>
-      Share the same room code with friends.
-    </p>
   </div>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
-    }
-  }
-  </script>
+  <div id="customModal" class="modal hidden">
+    <div class="panel">
+      <div class="label">PRIVATE MATCH</div>
+      <h2>CUSTOM GAME</h2>
+      <p id="customHint">Host a private match for your party.</p>
+      <div class="opt"><div>MODE</div><div class="seg" id="cMode">
+        <button data-v="duel" class="on">1V1</button><button data-v="wingman">2V2</button><button data-v="ffa">FFA</button><button data-v="range">RANGE</button>
+      </div></div>
+      <div class="opt"><div>MAP</div><div class="seg" id="cMap"></div></div>
+      <div class="opt"><div>BHOP SPEED BOOST<small>Air-accelerate 150 — easy 450+ UPS</small></div><button class="toggle" id="cBhop"></button></div>
+      <div class="opt"><div>HEADSHOTS ONLY<small>Body shots deal no damage</small></div><button class="toggle" id="cHs"></button></div>
+      <div class="opt"><div>BOT FILL<small>Fill empty slots with combat bots</small></div><button class="toggle on" id="cBots"></button></div>
+      <div class="row"><button class="btn ghost" data-close>BACK</button><button class="btn red" id="btnStartCustom">START MATCH</button></div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal hidden">
+    <div class="panel">
+      <div class="label">OPTIONS</div>
+      <h2>SETTINGS</h2>
+      <div class="opt"><div>MOUSE SENSITIVITY<small id="sSensV"></small></div><input type="range" id="sSens" min="0.1" max="4" step="0.05" /></div>
+      <div class="opt"><div>TOUCH SENSITIVITY<small id="sTSensV"></small></div><input type="range" id="sTSens" min="0.2" max="3" step="0.05" /></div>
+      <div class="opt"><div>FIELD OF VIEW<small id="sFovV"></small></div><input type="range" id="sFov" min="70" max="110" step="1" /></div>
+      <div class="opt"><div>RENDER SCALE<small id="sScaleV">Lower = faster on old Chromebooks</small></div><div class="seg" id="sScale"><button data-v="1">100%</button><button data-v="0.75">75%</button><button data-v="0.5">50%</button></div></div>
+      <div class="opt"><div>VOLUME<small id="sVolV"></small></div><input type="range" id="sVol" min="0" max="1" step="0.05" /></div>
+      <div class="opt"><div>SPEEDOMETER<small>Live UPS readout in the HUD</small></div><button class="toggle" id="sSpeedo"></button></div>
+      <div class="opt"><div>SHOW FPS</div><button class="toggle" id="sFps"></button></div>
+      <div class="opt"><div>CROSSHAIR COLOR</div><div class="seg" id="sXh"><button data-v="#00ffaa">GREEN</button><button data-v="#ffffff">WHITE</button><button data-v="#ffe14f">YELLOW</button><button data-v="#ff4fd8">PINK</button></div></div>
+      <div class="opt"><div>CHANGE NAME<small>Generates a new tag</small></div><button class="btn small" id="btnRename">RENAME</button></div>
+      <div class="row"><button class="btn red" data-close>DONE</button></div>
+    </div>
+  </div>
+
+  <!-- ============ HUD ============ -->
+  <div id="hud" class="hidden">
+    <div class="tl" id="netinfo"></div>
+    <div id="scorebox"><div class="sa" id="scA">0</div><div class="tm"><span id="tmr">0:00</span><small id="phaseLbl"></small></div><div class="sb" id="scB">0</div></div>
+    <div id="killfeed"></div>
+    <div id="crosshair"><i class="d"></i><i class="l"></i><i class="r"></i><i class="u"></i><i class="b"></i></div>
+    <div id="hitmark"><i style="transform:rotate(45deg) translateY(-9px)"></i><i style="transform:rotate(135deg) translateY(-9px)"></i><i style="transform:rotate(225deg) translateY(-9px)"></i><i style="transform:rotate(315deg) translateY(-9px)"></i></div>
+    <div id="dmgind"></div>
+    <div id="vignette"></div>
+    <div id="scope" class="hidden"><i></i><b id="zoomLbl">1.5x</b></div>
+    <div id="center"><div class="c1" id="c1"></div><div class="c2" id="c2"></div></div>
+    <div id="dead" class="hidden"><b>ELIMINATED BY <span id="deadBy"></span></b><small id="deadSub"></small></div>
+    <div id="interact" class="hidden">[E] PRESS</div>
+    <div id="rangePanel" class="panel hidden"></div>
+    <div id="hpbox"><div id="hp">100</div><div id="hpbar"><i style="width:100%"></i></div></div>
+    <div id="speedo"><div class="v" id="spd">0</div><div class="u">UPS</div></div>
+    <div id="ammobox"><div id="wname"><b>AK-47</b><span id="wmode"></span></div><div id="ammo">30<small>/90</small></div></div>
+    <div id="slots"><div data-s="1">1 AK-47</div><div data-s="2">2 GLOCK-17</div><div data-s="3">3 SNIPER</div></div>
+    <div id="tags"></div>
+    <div id="board" class="panel hidden"></div>
+    <div id="buy" class="panel hidden"></div>
+    <div id="results" class="hidden"><div class="r1" id="r1"></div><div class="r2" id="r2"></div></div>
+  </div>
+
+  <div id="pause" class="hidden">
+    <div class="panel">
+      <div class="title">PAUSED</div>
+      <p class="hint" id="pauseHint">Click Resume to lock the mouse. Esc to release.</p>
+      <button class="btn red" id="btnResume">RESUME</button>
+      <button class="btn" id="btnPauseSettings">SETTINGS</button>
+      <button class="btn ghost" id="btnLeave">LEAVE MATCH</button>
+    </div>
+  </div>
+
+  <!-- ============ CHAT ============ -->
+  <div id="chat" class="lobby">
+    <div id="chatFeed"></div>
+    <div id="chatInputWrap" class="hidden"><span id="chatChan">[ALL]</span><input id="chatInput" maxlength="120" autocomplete="off" spellcheck="false" /></div>
+  </div>
+
+  <!-- ============ TOUCH ============ -->
+  <div id="touch" class="hidden">
+    <div class="zone" id="tzL"></div>
+    <div class="zone" id="tzR"></div>
+    <div id="joy" class="hidden"><i></i></div>
+    <button class="tb big" id="tFire">FIRE</button>
+    <button class="tb" id="tFireL">FIRE</button>
+    <button class="tb" id="tJump">JUMP</button>
+    <button class="tb" id="tCrouch">DUCK</button>
+    <button class="tb" id="tScope">ALT</button>
+    <button class="tb" id="tReload">R</button>
+    <button class="tb" id="tSwap">SWAP</button>
+    <button class="tb sq" id="tBuy">BUY</button>
+    <button class="tb sq" id="tChat">CHAT</button>
+    <button class="tb sq" id="tBoard">TAB</button>
+    <button class="tb sq" id="tPause">II</button>
+    <button class="tb sq" id="tAuto">AUTO-FIRE</button>
+  </div>
+
+  <div id="toasts"></div>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -1,0 +1,19 @@
+{
+  "name": "riftline",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Browser tactical FPS: Three.js + PeerJS P2P multiplayer, Source-style bhop, 60 FPS on Chromebooks and phones.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "peerjs": "1.5.5",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "vite": "5.4.21"
+  }
+}
