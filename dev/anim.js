@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadMageModel, MageInstance } from '../src/character/characterModel.js';
+import * as C from '../src/character/clips.js';
 
 // Dev viewer: ?state=idle|run|strafe|back|air|fall|roll|dash|slam|leap|death|bolt|orb|ult&t=0.2&yaw=0
 const q = new URLSearchParams(location.search);
@@ -43,6 +44,11 @@ function sim(inst) {
   if (st === 'mraise') a.play('cast', { anim: 'mRaise' });
   if (st === 'mblink') a.play('cast', { anim: 'mBlink' });
   if (['plant', 'nova', 'exhausted'].includes(st)) a.play(st);
+  if (st === 'fidget') a.castA = { def: { clip: a.rig.hasProp ? C.FIDGET_M : C.FIDGET_P, in: 0.3, out: 0.4, fidget: true }, t: 0, w: 0 };
+  if (st === 'respawn') a.play('respawn');
+  if (st === 'mbolt2') { a.play('cast', { anim: 'mBolt' }); for (let k = 0; k < 20; k++) a.update(dtt, s); a.play('cast', { anim: 'mBolt' }); }
+  if (st === 'hitf') a.play('hit', { dir: 0, dmg: 30 });
+  if (st === 'hitl') a.play('hit', { dir: 1.57, dmg: 30 });
   const n = Math.round(t / dtt);
   for (let k = 0; k < n; k++) a.update(dtt, s);
   m.root.rotation.y = a.yawOffset;

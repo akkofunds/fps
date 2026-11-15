@@ -350,3 +350,72 @@ export const M_EXHAUSTED = compileClip([
 export const M_SHOWCASE = compileClip([
   { t: 0, b: { spine: [0, -4, 0], chest: [0, -6, 0], neck: [4, 8, 0], head: [6, 12, 0], upperArmR: [-22, 0, 18], foreArmR: [-58, 0, 0], propR: [80, 0, -18], upperArmL: [-40, 0, 20], foreArmL: [-118, 0, 0], handL: [10, 0, 0] } },
 ]);
+
+// ================================================================== polish clips (both mages)
+// Meteora — second hit of her staff combo: a backhand sweep from her left to her right
+export const M_BOLT2 = compileClip([
+  { t: 0, b: SGUARD },
+  { t: 0.09, ease: 'out', b: {
+    spine: [2, -14, 0], chest: [0, -14, 0], upperChest: [0, -6, 0], neck: [0, 10, 0], head: [0, 12, 0],
+    upperArmR: [-74, 0, -38], foreArmR: [-34, 0, 0], handR: [0, 0, 0], propR: [150, 0, 40],
+    upperArmL: [-24, 0, 30], foreArmL: [-60, 0, 0],
+  } },
+  { t: 0.2, ease: 'out', b: {
+    spine: [3, 12, 0], chest: [2, 14, 0], upperChest: [0, 6, 0], neck: [0, -10, 0], head: [0, -10, 0],
+    upperArmR: [-84, 0, 18], foreArmR: [-6, 0, 0], propR: [178, 0, -20],
+    upperArmL: [-12, 0, 48], foreArmL: [-40, 0, 0],
+  } },
+  { t: 0.3, ease: 'linear', b: {
+    spine: [2, 10, 0], chest: [2, 12, 0], neck: [0, -8, 0], head: [0, -8, 0],
+    upperArmR: [-80, 0, 20], foreArmR: [-10, 0, 0], propR: [174, 0, -22],
+    upperArmL: [-10, 0, 46], foreArmL: [-42, 0, 0],
+  } },
+  { t: 0.6, ease: 'smooth', b: SGUARD },
+]);
+
+// Pyro idle fidget: rolls his neck, then punches a fist into his palm twice
+const FIST_PALM = { spine: [4, 0, 0], chest: [2, 0, 0], neck: [6, 0, 0], head: [10, 0, 0], upperArmR: [-46, 0, -22], foreArmR: [-86, 0, 0], handR: [0, 0, 0], upperArmL: [-42, 0, -26], foreArmL: [-94, 0, 0], handL: [-14, 0, 0] };
+const FIST_HIT = { ...FIST_PALM, spine: [7, 0, 0], upperArmR: [-52, 0, -26], foreArmR: [-74, 0, 0] };
+export const FIDGET_P = compileClip([
+  { t: 0, b: GUARD },
+  { t: 0.4, ease: 'smooth', b: { spine: [1, 0, 0], neck: [2, 0, 14], head: [4, 6, 14], upperArmL: [-2, 0, 8], foreArmL: [-22, 0, 0], upperArmR: [-2, 0, 8], foreArmR: [-24, 0, 0] } },
+  { t: 0.85, ease: 'smooth', b: { spine: [1, 0, 0], neck: [10, 0, 0], head: [12, 0, 0], upperArmL: [-2, 0, 8], foreArmL: [-22, 0, 0], upperArmR: [-2, 0, 8], foreArmR: [-24, 0, 0] } },
+  { t: 1.25, ease: 'smooth', b: { spine: [1, 0, 0], neck: [2, 0, -14], head: [4, -6, -14], upperArmL: [-2, 0, 8], foreArmL: [-22, 0, 0], upperArmR: [-2, 0, 8], foreArmR: [-24, 0, 0] } },
+  { t: 1.65, ease: 'smooth', b: FIST_PALM },
+  { t: 1.78, ease: 'in', b: FIST_HIT },
+  { t: 1.92, ease: 'out', b: FIST_PALM },
+  { t: 2.05, ease: 'in', b: FIST_HIT },
+  { t: 2.3, ease: 'linear', b: FIST_HIT },
+  { t: 2.8, ease: 'smooth', b: GUARD },
+]);
+
+// Meteora idle fidget: twirls the staff end over end, catches it, then fixes her hat
+const TWIRL = (x) => ({ spine: [2, -4, 0], chest: [0, -6, 0], head: [-4, 10, 0], upperArmR: [-56, 0, 12], foreArmR: [-56, 0, 0], handR: [0, 0, 0], propR: [x, 0, -10], upperArmL: [-10, 0, 16], foreArmL: [-34, 0, 0] });
+export const FIDGET_M = compileClip([
+  { t: 0, b: SGUARD },
+  { t: 0.3, ease: 'out', b: TWIRL(76) },
+  { t: 0.5, ease: 'linear', b: TWIRL(196) },
+  { t: 0.7, ease: 'linear', b: TWIRL(316) },
+  { t: 0.9, ease: 'linear', b: TWIRL(436) },
+  { t: 1.1, ease: 'out', b: TWIRL(530) },
+  { t: 1.35, ease: 'smooth', b: { ...SGUARD, propR: [436, 0, -14] } },
+  { t: 1.75, ease: 'smooth', b: { spine: [0, 0, 0], neck: [-4, 0, 4], head: [-8, -6, 8], upperArmR: [-14, 0, 14], foreArmR: [-62, 0, 0], propR: [436, 0, -14], upperArmL: [-148, 0, 22], foreArmL: [-112, 0, 0], handL: [20, 0, 0] } },
+  { t: 2.05, ease: 'linear', b: { spine: [0, 0, 0], neck: [-4, 0, 6], head: [-6, -4, 10], upperArmR: [-14, 0, 14], foreArmR: [-62, 0, 0], propR: [436, 0, -14], upperArmL: [-150, 0, 18], foreArmL: [-108, 0, 0], handL: [26, 0, 0] } },
+  { t: 2.6, ease: 'smooth', b: { ...SGUARD, propR: [436, 0, -14] } },
+]);
+
+// respawn: rises from one knee with the arms sweeping out as the power returns
+const KNEEL = { L: [0.14, 0, 0.3, 0], R: [-0.14, 0.02, -0.34, 55] };
+const KNEEL_B = {
+  hips: [8, 0, 0], spine: [26, 0, 0], chest: [12, 0, 0], neck: [18, 0, 0], head: [16, 0, 0],
+  upperArmL: [-30, 0, 8], foreArmL: [-60, 0, 0], handL: [-10, 0, 0], upperArmR: [-6, 0, 10], foreArmR: [-20, 0, 0],
+};
+export const RESPAWN = compileClip([
+  { t: 0, hip: [0, -0.48, -0.02], ik: KNEEL, b: KNEEL_B },
+  { t: 0.3, ease: 'linear', hip: [0, -0.46, -0.02], ik: KNEEL, b: { ...KNEEL_B, spine: [24, 0, 0], head: [10, 0, 0] } },
+  { t: 0.65, ease: 'out', hip: [0, -0.1, 0], ik: STAND, b: {
+    hips: [-4, 0, 0], spine: [-8, 0, 0], chest: [-6, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0],
+    upperArmL: [-14, 0, 62], foreArmL: [-18, 0, 0], handL: [-20, 0, 0], upperArmR: [-14, 0, 62], foreArmR: [-18, 0, 0], handR: [-20, 0, 0],
+  } },
+  { t: 1.05, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: GUARD },
+]);

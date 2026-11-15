@@ -438,7 +438,16 @@ export class Match {
         if (msg.hp < prev) {
           e.flash = 1; e.lastHurt = this.time;
           if (msg.burn) e.burnT = Math.max(e.burnT, msg.burn);
-          if (prev - msg.hp >= 5) e.view.anim.play('hit');
+          if (prev - msg.hp >= 5) {
+            // react away from whoever hit us (local angle: 0 = attacker in front, + = on our left)
+            const src = this.ents.get(msg.by);
+            let dir;
+            if (src && src !== e) {
+              const dx = src.pos.x - e.pos.x, dz = src.pos.z - e.pos.z, cy = Math.cos(e.yaw), sy = Math.sin(e.yaw);
+              dir = Math.atan2(dx * cy - dz * sy, dx * sy + dz * cy);
+            }
+            e.view.anim.play('hit', { dir, dmg: prev - msg.hp });
+          }
           if (e === this.local) {
             hud.hurt(prev - msg.hp, this.ents.get(msg.by));
             Audio.play('hurt', Math.min(1, 0.4 + (prev - msg.hp) / 60));
