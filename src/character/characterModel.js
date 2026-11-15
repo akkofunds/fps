@@ -8,6 +8,7 @@ import { Animator } from './animator.js';
 const cache = new Map();
 
 export function loadMageModel(url) {
+  if (!/^(\/|https?:)/.test(url)) url = (import.meta.env.BASE_URL || '/') + url;
   if (!cache.has(url)) {
     cache.set(url, new Promise((resolve, reject) => {
       new GLTFLoader().load(url, (g) => {
@@ -31,15 +32,29 @@ function prepareMaterials(root) {
     } else {
       // painted anime textures: mostly self-lit, with a touch of scene light so they sit in the world
       const map = m.map;
-      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 16; map.generateMipmaps = true; map.minFilter = THREE.LinearMipmapLinearFilter; }
       o.material = new THREE.MeshLambertMaterial({
         map, emissiveMap: map, emissive: new THREE.Color(0.62, 0.6, 0.6), side: THREE.DoubleSide,
       });
       o.material.name = m.name;
+      rimLight(o.material);
       o.castShadow = true;
     }
     o.frustumCulled = false;
   });
+}
+
+// anime-style rim light: a warm fresnel edge that separates characters from the background
+function rimLight(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float rimF = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 3.0);
+        totalEmissiveRadiance += uRim * rimF;`);
+    sh.uniforms.uRim = { value: new THREE.Color(0.55, 0.42, 0.32) };
+  };
+  mat.customProgramCacheKey = () => 'mage-rim';
 }
 
 export class MageInstance {
@@ -69,7 +84,12 @@ export class MageInstance {
 
   // own (non-shared) materials so per-player flashes don't leak
   uniqueMaterials() {
-    for (const m of this.meshes) m.material = m.material.clone();
+    for (const m of this.meshes) {
+      const src = m.material;
+      m.material = src.clone();
+      m.material.onBeforeCompile = src.onBeforeCompile;
+      m.material.customProgramCacheKey = src.customProgramCacheKey;
+    }
     return this;
   }
 

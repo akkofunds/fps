@@ -14,6 +14,11 @@ export class Input extends Emitter {
     this.enabled = false;
     this.locked = false;
     this.mouseL = false; this.mouseR = false;
+    this.touch = { fwd: 0, side: 0, fire: false, aim: false, jump: false };
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    this.mode = coarse && (navigator.maxTouchPoints || 0) > 0 ? 'touch' : 'kbm';
+    window.addEventListener('touchstart', () => this._setMode('touch'), { passive: true });
+    window.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && (Math.abs(e.movementX) + Math.abs(e.movementY)) > 2) this._setMode('kbm'); }, { passive: true });
 
     window.addEventListener('keydown', (e) => this._key(e, true));
     window.addEventListener('keyup', (e) => this._key(e, false));
@@ -38,7 +43,10 @@ export class Input extends Emitter {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
+  _setMode(m) { if (this.mode === m) return; this.mode = m; this.emit('mode', m); }
+
   requestLock() {
+    if (this.mode === 'touch') return;
     if (this.locked) return;
     const plain = () => { try { const q = this.canvas.requestPointerLock(); if (q && q.catch) q.catch(() => {}); } catch { /* ignore */ } };
     try { const p = this.canvas.requestPointerLock({ unadjustedMovement: true }); if (p && p.catch) p.catch(plain); } catch { plain(); }
@@ -52,6 +60,7 @@ export class Input extends Emitter {
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     const was = this.keys[code];
     this.keys[code] = down;
+    if (down && !e.repeat) this._setMode('kbm');
     if (down && !was) {
       switch (code) {
         case 'Enter': case 'NumpadEnter': this.emit('chat', 'all'); e.preventDefault(); break;
@@ -73,6 +82,11 @@ export class Input extends Emitter {
   poll() {
     const s = this.state, k = this.keys;
     if (this.typing || !this.enabled) { s.fwd = s.side = 0; s.jump = s.fire = s.aim = false; return s; }
+    if (this.mode === 'touch') {
+      const t = this.touch;
+      s.fwd = t.fwd; s.side = t.side; s.jump = t.jump; s.fire = t.fire; s.aim = t.aim;
+      return s;
+    }
     s.fwd = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0);
     s.side = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0);
     s.jump = !!k.Space;

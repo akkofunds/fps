@@ -95,21 +95,21 @@ function axisCoords() {
 }
 
 function detailTexture() {
-  const S = 256;
+  const S = 512;
   const c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d');
   const img = g.createImageData(S, S);
   const n = makeNoise(99);
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     // mirrored-repeat wrapping makes this seamless without torus tricks
-    const v = 0.55 * n.fbm(x / 40, y / 40, 4) + 0.3 * n.n2(x / 6, y / 6) + 0.15 * n.n2(x / 2.2, y / 2.2);
+    const v = 0.5 * n.fbm(x / 80, y / 80, 4) + 0.3 * n.n2(x / 12, y / 12) + 0.2 * n.n2(x / 3, y / 3);
     const k = 205 + v * 50 + (Math.random() - 0.5) * 16;
     const i = (y * S + x) * 4;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.max(0, Math.min(255, k)); img.data[i + 3] = 255;
   }
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  t.wrapS = t.wrapT = THREE.MirroredRepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 16;
   return t;
 }
 

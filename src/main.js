@@ -1,9 +1,14 @@
 import './ui/styles.css';
+import './ui/extra.css';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
+import { TouchControls } from './ui/touch.js';
+import { AdminPanel, isAdminRoute, isAdmin } from './ui/admin.js';
 import { Input } from './core/input.js';
 import { Audio } from './core/audio.js';
 import { loadIdentity, saveIdentity, loadSettings, saveSettings, randomTag } from './core/storage.js';
@@ -12,7 +17,7 @@ import { SessionController } from './game/session.js';
 import { Match } from './game/match.js';
 import { GameMap, QUALITY } from './world/map.js';
 import { loadMageModel } from './character/characterModel.js';
-import { PYRO } from './game/pyro.js';
+import { MAGE_LIST } from './game/mages.js';
 import { LobbyScene } from './ui/lobbyScene.js';
 import { Lobby, promptNameDialog } from './ui/lobby.js';
 import { Hud } from './ui/hud.js';
@@ -35,13 +40,30 @@ function detectQuality() {
   } catch { return 'medium'; }
 }
 
+// colour grade (HDR, before tone mapping): gentle saturation/contrast lift + vignette
+const GRADE = {
+  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.1 }, uContrast: { value: 1.05 }, uVig: { value: 0.32 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uSat, uContrast, uVig; varying vec2 vUv;
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      c.rgb = mix(vec3(l), c.rgb, uSat);
+      c.rgb = (c.rgb - 0.18) * uContrast + 0.18;
+      vec2 d = vUv - 0.5;
+      c.rgb *= 1.0 - uVig * smoothstep(0.35, 0.85, length(d * vec2(1.1, 1.0)));
+      gl_FragColor = vec4(max(c.rgb, 0.0), c.a);
+    }`,
+};
+
 class App {
   constructor() {
     this.canvas = $('game');
     this.settings = loadSettings();
     if (!QUALITY[this.settings.quality]) this.settings.quality = detectQuality();
     const Q = QUALITY[this.settings.quality];
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: this.settings.quality !== 'low', powerPreference: 'high-performance', stencil: false });
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance', stencil: false });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -54,6 +76,10 @@ class App {
     this.match = null;
     this.paused = false;
     this.lobbyScene = new LobbyScene(this);
+    this.touch = new TouchControls(this);
+    this.admin = new AdminPanel(this);
+    document.body.classList.toggle('touch', this.input.mode === 'touch');
+    this.input.on('mode', (m) => { document.body.classList.toggle('touch', m === 'touch'); this.touch.setActive(!!this.match && m === 'touch' && !this.paused); });
     window.addEventListener('resize', () => this.resize());
     this.resize();
     const unlock = () => { Audio.init(); Audio.setVolume(this.settings.volume); Audio.resume(); };
@@ -73,7 +99,7 @@ class App {
     this.map = new GameMap(this.settings.quality);
     this._setupComposer();
     this.progress(0.55, 'Summoning Pyro…');
-    try { await loadMageModel(PYRO.model); } catch (e) { console.error(e); toast('Failed to load the character model.'); }
+    try { await Promise.all(MAGE_LIST.map((m) => loadMageModel(m.model))); } catch (e) { console.error(e); toast('Failed to load a character model.'); }
     await this.lobbyScene.init(this.map);
     this.progress(0.85, 'Lighting the braziers…');
     // warm up shaders so the first frames don't hitch
@@ -98,6 +124,10 @@ class App {
     this.lobby.show(true);
     this.pm.start();
     this.chat.system(`Welcome, ${id.name}#${id.tag}. Share your tag so friends can invite you.`);
+    // admin lives inside the normal client: /admin opens the access check
+    if (isAdminRoute()) this.admin.open();
+    if (isAdmin() || isAdminRoute()) this.lobby.showAdminBadge(() => this.admin.open());
+    this._fps = { t: 0, n: 0 };
   }
 
   _setupComposer() {
@@ -105,19 +135,34 @@ class App {
     this.composer = null;
     if (!Q.bloom) return;
     const r = this.renderer;
-    const target = new THREE.WebGLRenderTarget(this.width, this.height, { type: THREE.HalfFloatType, samples: this.settings.quality === 'high' ? 4 : 0 });
+    // MSAA in the HDR target keeps grass blades and silhouettes clean
+    const target = new THREE.WebGLRenderTarget(this.width, this.height, { type: THREE.HalfFloatType, samples: Q.msaa || 0 });
     this.composer = new EffectComposer(r, target);
     this.renderPass = new RenderPass(this.map.scene, this.lobbyScene.camera);
     this.composer.addPass(this.renderPass);
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(this.width / 2, this.height / 2), 0.6, 0.45, 0.88);
+    this.gtao = null;
+    if (Q.ao) {
+      this.gtao = new GTAOPass(this.map.scene, this.lobbyScene.camera, this.width, this.height);
+      this.gtao.output = GTAOPass.OUTPUT.Default;
+      this.gtao.blendIntensity = 0.85;
+      this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 12 });
+      this.composer.addPass(this.gtao);
+    }
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(this.width / 2, this.height / 2), 0.55, 0.5, 0.9);
     this.composer.addPass(this.bloom);
+    this.grade = new ShaderPass(GRADE);
+    this.composer.addPass(this.grade);
     this.composer.addPass(new OutputPass());
     this.composer.setPixelRatio(r.getPixelRatio());
     this.composer.setSize(this.width, this.height);
   }
 
   renderScene(scene, camera) {
-    if (this.composer) { this.renderPass.scene = scene; this.renderPass.camera = camera; this.composer.render(); }
+    if (this.composer) {
+      this.renderPass.scene = scene; this.renderPass.camera = camera;
+      if (this.gtao) { this.gtao.scene = scene; this.gtao.camera = camera; }
+      this.composer.render();
+    }
     else this.renderer.render(scene, camera);
   }
 
@@ -144,33 +189,52 @@ class App {
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.width = w; this.height = h; this.aspect = w / h;
-    const q = this.settings.quality;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, q === 'high' ? 1.5 : 1));
+    this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.setSize(w, h, true);
     if (this.composer) { this.composer.setPixelRatio(this.renderer.getPixelRatio()); this.composer.setSize(w, h); this.bloom.resolution.set(w / 2, h / 2); }
-    this.lobbyScene.resize(w, h, w > 860 ? (w > 1100 ? 300 : 240) : 0);
+    this.touch && this.touch.setActive(!!this.match && this.input.mode === 'touch' && !this.paused);
+    // keep the 3D mage centred in the visible lobby area (social sidebar may be hidden)
+    const soc = document.getElementById('social');
+    const panel = soc && getComputedStyle(soc).display !== 'none' && !soc.classList.contains('open') ? soc.offsetWidth : 0;
+    this.lobbyScene.resize(w, h, panel);
     if (this.match) this.match.resize(w, h);
   }
 
   _bindMatchUi() {
     const input = this.input;
     input.on('lock', (locked) => {
-      if (!this.match) return;
+      if (!this.match || input.mode === 'touch') return;
       if (locked) { if (this.paused) this.pause(false); return; }
       if (!this.chat.isOpen && !this.match.ended) this.pause(true);
     });
     input.on('escape', () => { if (this.match && !input.locked) this.pause(!this.paused); });
-    $('btnResume').onclick = () => { this.pause(false); input.requestLock(); };
+    $('btnResume').onclick = () => { this.pause(false); if (input.mode !== 'touch') input.requestLock(); };
     $('btnLeave').onclick = () => this.leaveMatch();
     $('btnPauseSettings').onclick = () => this.lobby.openSettings();
-    $('pause').addEventListener('click', (e) => { if (e.target.id === 'pause') { this.pause(false); input.requestLock(); } });
+    $('pause').addEventListener('click', (e) => { if (e.target.id === 'pause') { this.pause(false); if (input.mode !== 'touch') input.requestLock(); } });
+  }
+
+  // render resolution: auto follows the device (Retina/4K screens render natively); Ultra
+  // supersamples up to 2× — a 1080p screen renders at 4K and downsamples, so nothing looks pixelated
+  pixelRatio() {
+    const dpr = window.devicePixelRatio || 1;
+    const q = this.settings.quality;
+    const scale = Number(this.settings.renderScale) || 0;
+    if (scale > 0) return Math.min(3, scale * dpr);
+    if (q === 'ultra') return Math.min(2.5, Math.max(2, dpr));
+    if (q === 'high') return Math.min(dpr, 2);
+    if (q === 'medium') return Math.min(dpr, 1.5);
+    // phones: crisp but bounded (their GPUs fill-rate limit hard above ~1.5×)
+    return Math.min(dpr, this.input.mode === 'touch' ? 1.5 : 1.25);
   }
 
   pause(on) {
     this.paused = on;
     show('pause', on);
     this.input.enabled = !!this.match && !on;
-    $('pauseHint').textContent = 'Click Resume to lock the mouse. Esc releases it.';
+    const touch = this.input.mode === 'touch';
+    $('pauseHint').textContent = touch ? 'Tap Resume to keep playing.' : 'Click Resume to lock the mouse. Esc releases it.';
+    this.touch.setActive(!!this.match && !on && touch);
     if (on) this.input.exitLock();
   }
 
@@ -197,10 +261,17 @@ class App {
     m.resize(this.width, this.height);
     this.input.enabled = true;
     Audio.init(); Audio.resume();
-    this.pause(true);
-    $('pauseHint').textContent = 'Match ready — click RESUME (or anywhere) to lock the mouse.';
+    document.body.classList.add('in-match');
+    this.touch.build(m.kit);
+    if (this.input.mode === 'touch') {
+      this.pause(false);
+      try { if (document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); } catch { /* ignore */ }
+    } else {
+      this.pause(true);
+      $('pauseHint').textContent = 'Match ready — click RESUME (or anywhere) to lock the mouse.';
+      this.input.requestLock();
+    }
     $('btnResume').textContent = 'PLAY';
-    this.input.requestLock();
   }
 
   leaveMatch(reason) {
@@ -211,6 +282,8 @@ class App {
     this.session.endMatch();
     this.input.enabled = false; this.input.exitLock();
     this.paused = false; show('pause', false);
+    document.body.classList.remove('in-match');
+    this.touch.setActive(false);
     this.hud.exitMatch();
     this.chat.clear();
     this.chat.setContext('lobby', (text) => this.pm.chat(text));
@@ -228,11 +301,20 @@ class App {
     this.lastT = t;
     if (this.match) {
       this.match.update(dt);
-      if (this.match) this.match.render();
+      if (this.match) { this.touch.update(this.match); this.match.render(); }
     } else {
       this.lobbyScene.update(dt);
       this.renderScene(this.map.scene, this.lobbyScene.camera);
       if (this.lobby) this.lobby.frame();
+    }
+    if (this.admin.fpsOn) {
+      const f = this._fps || (this._fps = { t: 0, n: 0 });
+      f.t += dt; f.n++;
+      if (f.t >= 0.5) {
+        const i = this.renderer.info.render;
+        $('fpsMeter').textContent = `${Math.round(f.n / f.t)} FPS\n${i.calls} calls · ${(i.triangles / 1000).toFixed(0)}k tris\n${this.renderer.domElement.width}×${this.renderer.domElement.height}`;
+        f.t = 0; f.n = 0;
+      }
     }
   }
 }

@@ -15,6 +15,12 @@ export function peerOptions() {
     config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }] },
   };
   // self-hosted broker: ?peerhost=example.com&peerport=443&peerpath=/myapp&peersecure=1
+  // (or saved from the admin panel)
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('magebreak.peer') || '{}'); } catch { /* ignore */ }
+  if (!q.get('peerhost') && saved.host) {
+    o.host = saved.host; o.port = Number(saved.port || 443); o.path = saved.path || '/'; o.secure = o.port === 443;
+  }
   if (q.get('peerhost')) {
     o.host = q.get('peerhost');
     o.port = Number(q.get('peerport') || 443);
@@ -38,7 +44,16 @@ export class PeerManager extends Emitter {
   }
 
   get id() { return peerIdFor(this.identity.name, this.identity.tag); }
-  get me() { return { id: this.id, name: this.identity.name, tag: this.identity.tag }; }
+  get me() { return { id: this.id, name: this.identity.name, tag: this.identity.tag, mage: this.mage || 'pyro' }; }
+
+  // selected mage: shown on everyone's party cards and carried into matches
+  setMage(mage) {
+    this.mage = mage;
+    const me = this.party.members.find((m) => m.id === this.id);
+    if (me) me.mage = mage;
+    if (this.isLeader) this._broadcastRoster();
+    else if (this.leaderConn) { try { this.leaderConn.send({ t: 'mage', mage }); } catch { /* ignore */ } this.emit('party', this.party); }
+  }
   get isLeader() { return this.party.leader === this.id; }
   get inParty() { return this.party.members.length > 1; }
 
@@ -196,6 +211,12 @@ export class PeerManager extends Emitter {
         break;
       case 'map':
         if (this.isLeader && typeof msg.map === 'string') { this.party.map = msg.map; this._broadcastRoster(); this.emit('toast', `${msg.by || 'Party'} picked ${msg.map.toUpperCase()}`); }
+        break;
+      case 'mage':
+        if (this.isLeader && conn._member && typeof msg.mage === 'string') {
+          const m = this.party.members.find((x) => x.id === conn._member);
+          if (m) { m.mage = msg.mage.slice(0, 16); this._broadcastRoster(); }
+        }
         break;
       case 'chat':
         if (this.isLeader && conn._member) { for (const c of this.memberConns.values()) c.send(msg); }

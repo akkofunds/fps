@@ -1,3 +1,4 @@
+import { BAL } from './balance.js';
 import * as THREE from 'three';
 import { MOVE } from '../config.js';
 import { PLAY_RADIUS } from '../world/terrain.js';
@@ -32,11 +33,11 @@ const hv = new THREE.Vector3();
 
 // cmd: { fwd, side, jump (held), jumpPressed, dashPressed, aim }
 export function stepMovement(b, cmd, dt, world, ev) {
-  const g = MOVE.gravity;
+  const g = MOVE.gravity * BAL.gravity;
   // dash charges
   if (b.dashCharges < MOVE.dashCharges) {
     b.dashRecharge += dt;
-    if (b.dashRecharge >= MOVE.dashRecharge) { b.dashRecharge = 0; b.dashCharges++; }
+    if (b.dashRecharge >= MOVE.dashRecharge * (BAL.noCooldowns ? 0.02 : BAL.cd)) { b.dashRecharge = 0; b.dashCharges++; }
   }
   b.locked = Math.max(0, b.locked - dt);
   // wish direction in world space (forward = (sin yaw, cos yaw); +side = character's right)
@@ -63,7 +64,7 @@ export function stepMovement(b, cmd, dt, world, ev) {
 
   const water = world.inWater(b.pos.x, b.pos.z);
   b.water = water;
-  const maxSpeed = MOVE.run * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * b.slow;
+  const maxSpeed = MOVE.run * BAL.speed * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * b.slow;
 
   if (b.dashT > 0) {
     b.dashT -= dt;

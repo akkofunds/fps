@@ -323,12 +323,12 @@ def main():
         if minmax: a['min'] = data.min(0).tolist(); a['max'] = data.max(0).tolist()
         accs.append(a); return len(accs) - 1
 
-    # textures (opaque → 1024 px JPEG)
+    # textures (opaque → 2048 px JPEG)
     images = []
     for ii in range(len(js['images'])):
         im = Image.open(io.BytesIO(image_bytes(js, b, ii))).convert('RGB')
-        im = im.resize((min(1024, im.width), min(1024, im.height)), Image.LANCZOS)
-        bio = io.BytesIO(); im.save(bio, 'JPEG', quality=88)
+        im = im.resize((min(2048, im.width), min(2048, im.height)), Image.LANCZOS)
+        bio = io.BytesIO(); im.save(bio, 'JPEG', quality=90)
         raw = bio.getvalue()
         while len(binbuf) % 4: binbuf.append(0)
         bvs.append({'buffer': 0, 'byteOffset': len(binbuf), 'byteLength': len(raw)}); binbuf.extend(raw)

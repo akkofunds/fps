@@ -2,15 +2,16 @@ import * as THREE from 'three';
 import { buildTerrain, groundH, WATER_Y, LAKE, PLAY_RADIUS } from './terrain.js';
 import { buildSky, buildMountains, SUN_DIR, SKY } from './sky.js';
 import { buildWater } from './water.js';
-import { buildGrass, buildFlowers, WIND } from './vegetation.js';
+import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
 import { buildProps, treeTime } from './props.js';
 import { CollisionWorld } from './collision.js';
 
 // Sunvale Meadow: assembles the scene, lighting and collision for a quality level.
 export const QUALITY = {
-  low: { grass: 14000, flowers: 900, shadow: 1024, shadows: false, bloom: false },
-  medium: { grass: 34000, flowers: 1800, shadow: 2048, shadows: true, bloom: true },
-  high: { grass: 62000, flowers: 2800, shadow: 2048, shadows: true, bloom: true },
+  low: { grass: 16000, flowers: 1000, shadow: 1024, shadows: false, bloom: false, msaa: 0, bushes: 60 },
+  medium: { grass: 40000, flowers: 2200, shadow: 2048, shadows: true, bloom: true, msaa: 4, bushes: 140 },
+  high: { grass: 75000, flowers: 3600, shadow: 4096, shadows: true, bloom: true, msaa: 4, bushes: 240 },
+  ultra: { grass: 120000, flowers: 5200, shadow: 4096, shadows: true, bloom: true, msaa: 8, ao: true, bushes: 340 },
 };
 
 export class GameMap {
@@ -32,9 +33,9 @@ export class GameMap {
     this.sun.castShadow = Q.shadows;
     if (Q.shadows) {
       const sc = this.sun.shadow.camera;
-      sc.left = -36; sc.right = 36; sc.top = 36; sc.bottom = -36; sc.near = 1; sc.far = 220;
+      sc.left = -32; sc.right = 32; sc.top = 32; sc.bottom = -32; sc.near = 1; sc.far = 220;
       this.sun.shadow.mapSize.set(Q.shadow, Q.shadow);
-      this.sun.shadow.bias = -0.0006; this.sun.shadow.normalBias = 0.04;
+      this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.03; this.sun.shadow.radius = 3;
     }
     s.add(this.sun); s.add(this.sun.target);
 
@@ -46,8 +47,8 @@ export class GameMap {
     const avoid = this.props.userData.avoid;
     this.grass = buildGrass(Q.grass, avoid); s.add(this.grass);
     this.flowers = buildFlowers(Q.flowers, avoid); s.add(this.flowers);
+    this.bushes = buildBushes(Q.bushes, this.props.userData.anchors, avoid); s.add(this.bushes);
     this.altar = this.props.userData.altar;
-    this.pollen = this._pollen(); s.add(this.pollen);
     this.spawns = this._spawns();
     this.time = 0;
   }
@@ -110,8 +111,6 @@ export class GameMap {
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);
     this.water.material.uniforms.uTime.value = this.time;
-    this.pollen.material.uniforms.uTime.value = this.time;
-    this.pollen.material.uniforms.uCenter.value.copy(camera.position);
     if (focus) {
       // snap the shadow camera to texels to avoid shimmering
       const f = this.sun.shadow.mapSize.x / 72;

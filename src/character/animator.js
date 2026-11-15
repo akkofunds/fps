@@ -81,7 +81,8 @@ export class Animator {
       this.dipV -= Math.min(2.4, impact * 0.16);
       return;
     }
-    if (kind === 'hit') { this.flinch = 1; this.flinchSide = Math.random() < 0.5 ? -1 : 1; return; }
+    if (kind === 'hit') { this.flinch = 1; this.flinchSide = data.side || (Math.random() < 0.5 ? -1 : 1); return; }
+    if (kind === 'jumpStart') { this.dipV -= 0.9; this.jumpKick = 1; return; }
     if (kind === 'dash' || kind === 'roll') {
       // data.dir = local angle (rad, 0 = forward, + = toward the character's left)
       const a = data.dir || 0;
@@ -138,6 +139,12 @@ export class Animator {
     // yaw offset (body turns into a dash/roll, then back to the aim)
     if (this.action && !this.busy) this.yawOffsetTarget = 0;
     this.yawOffset = damp(this.yawOffset, this.yawOffsetTarget, 18, dt);
+    // turn rate → banking into turns / head leading the turn
+    if (this.lastYaw === undefined) this.lastYaw = s.yaw;
+    let dy = s.yaw - this.lastYaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    this.lastYaw = s.yaw;
+    this.yawRate = damp(this.yawRate || 0, clamp(dy / Math.max(dt, 1e-3), -6, 6), 8, dt);
+    this.jumpKick = Math.max(0, (this.jumpKick || 0) - dt * 3);
 
     // ---- 1. locomotion
     this._locomotion(dt, s);
@@ -179,6 +186,12 @@ export class Animator {
     if (this.lobby) {
       sampleClip(rig.hasProp ? C.M_SHOWCASE : C.SHOWCASE, 0, this.cast);
       blend(out, out, this.cast, 1, UPPER_MASK);
+    }
+    // ---- landing recovery: arms flare and the torso folds with the dip spring
+    if (this.dip < -0.01 && !this.dead) {
+      const d = Math.min(1, -this.dip / 0.2);
+      addE(out, B.upperArmL, -8 * d, 0, 14 * d); addE(out, B.upperArmR, -8 * d, 0, -14 * d);
+      addE(out, B.spine, 10 * d, 0, 0); addE(out, B.head, -8 * d, 0, 0);
     }
     // ---- 5. additive
     const aimW = this.dead ? 0 : 1 - (this.action && this.action.def.aimOff ? this.action.w : 0);
@@ -246,18 +259,27 @@ export class Animator {
         pitch = lerp(40, -14, sstep(0, 0.9, k2)) * wRun;
       }
       feet[side] = { along, lift, pitch, sg };
+      const inStance = u < beta;
+      const key = 'st' + side;
+      if (inStance && !this[key] && speed > 3 && this.onFootPlant) this.onFootPlant(side, speed);
+      this[key] = inStance;
     }
     // pelvis/torso motion from the stride
     const stride = Ls > 1e-3 ? (feet.L.along - feet.R.along) / Ls : 0; // + when L foot ahead
     const lean = (3 + 9 * wFast) * Math.max(0, fwdness) - 4 * wFast * Math.max(0, -fwdness) + clamp(this.az * 1.4, -8, 10) * wRun;
-    const bank = clamp(-this.ax * 1.2, -8, 8) * wRun;
-    setE(P, B.hips, lean * 0.25, hipYawD - 9 * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * Math.sin(2 * Math.PI * this.phase) * wRun);
+    const bank = clamp(-this.ax * 1.2 + this.yawRate * 3.2 * Math.min(1, speed / 3), -14, 14) * wRun;
+    // idle: slow weight shift between the feet, occasional glance around
+    const idleW = 1 - wRun;
+    const shift = Math.sin(this.t * 0.55) * idleW;
+    P.hip[0] += shift * 0.018;
+    const glance = (Math.sin(this.t * 0.31) * 0.6 + Math.sin(this.t * 0.83 + 1) * 0.4) * idleW;
+    setE(P, B.hips, lean * 0.25, hipYawD - 9 * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * Math.sin(2 * Math.PI * this.phase) * wRun - shift * 2.5);
     const counter = -hipYawD + 9 * stride * wRun;
     setE(P, B.spine, 2 + lean * 0.45, counter * 0.35, bank * 0.3);
     setE(P, B.chest, lean * 0.25, counter * 0.35 + 6 * stride * wRun, 0);
     setE(P, B.upperChest, 0, counter * 0.2, 0);
     setE(P, B.neck, -lean * 0.4, counter * 0.06, -bank * 0.3);
-    setE(P, B.head, -lean * 0.35, counter * 0.04, -bank * 0.4);
+    setE(P, B.head, -lean * 0.35, counter * 0.04 + glance * 14 + this.yawRate * 4 * wRun, -bank * 0.4 + shift * 2);
 
     // arms: counter-swing to the legs; idle = guard stance with the casting hand raised
     const swingAmt = (34 + 14 * wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness));
@@ -388,6 +410,11 @@ export class Animator {
     addE(P, B.upperArmL, flail, 0, 0); addE(P, B.upperArmR, -flail, 0, 0);
     setE(P, B.hips, 8 * fwd, this.hipYaw * R2D * 0.5, 0);
     P.hip[1] = 0.02;
+    const kk = this.jumpKick || 0;
+    if (kk > 0) { addE(P, B.upperArmL, -40 * kk, 0, 10 * kk); addE(P, B.upperArmR, -40 * kk, 0, -10 * kk); addE(P, B.spine, -6 * kk, 0, 0); }
+    // tuck at the apex (|vy| small) for a floatier read
+    const apex = Math.max(0, 1 - Math.abs(vy) / 3);
+    addE(P, B.upperLegL, -10 * apex, 0, 0); addE(P, B.lowerLegL, 14 * apex, 0, 0);
   }
 
   _stabilizeStaff(out, actionW) {

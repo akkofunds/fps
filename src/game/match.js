@@ -10,6 +10,7 @@ import { ShoulderCamera } from './camera.js';
 import { Projectiles, hitCharacter } from './projectiles.js';
 import { mageOf } from './mages.js';
 import { NOVA } from './meteora.js';
+import { BAL, applyBalance } from './balance.js';
 import { Rules } from './rules.js';
 
 // One match: world, entities, local control, network sync, abilities and rendering.
@@ -27,7 +28,7 @@ class Ent {
     this.n = p.n; this.id = p.id; this.name = p.name; this.tag = p.tag || '';
     this.isLocal = isLocal; this.dummy = !!p.dummy;
     this.mage = p.mage && !p.dummy ? p.mage : 'pyro';
-    this.alive = false; this.hp = MAX_HP;
+    this.alive = false; this.hp = BAL.hp;
     this.kills = 0; this.deaths = 0; this.dmg = 0;
     this.pos = new THREE.Vector3(0, -50, 0); this.vel = new THREE.Vector3();
     this.yaw = 0; this.pitch = 0; this.grounded = true;
@@ -47,6 +48,8 @@ export class Match {
   }
 
   constructor(app, { cfg, net, isHost, localId, players }) {
+    // admin balance only applies to Custom/Practice lobbies (the host's numbers)
+    applyBalance(cfg.mode === 'custom' || cfg.mode === 'practice' ? cfg.balance : null);
     this.app = app; this.cfg = cfg; this.net = net; this.isHost = isHost; this.localId = localId;
     this.players = players;
     this.mode = MODES[cfg.mode] || MODES.ffa;
@@ -99,6 +102,11 @@ export class Match {
       if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
       e.view.setVisible(false);
       this.scene.add(e.view.root);
+      // footfall dust puffs (close to the camera only)
+      e.view.anim.onFootPlant = (side, speed) => {
+        const f = e.view.rig.bones[side === 'L' ? 16 : 20].getWorldPosition(tmpV2);
+        if (f.distanceToSquared(this.camera.position) < 900 && this.world.inWater(f.x, f.z) <= 0) this.fx.dust(f, Math.min(1, speed / 6));
+      };
       this.ents.set(e.n, e); this.byId.set(e.id, e);
     }
     this.local = this.byId.get(this.localId);
@@ -157,7 +165,7 @@ export class Match {
     this.app.hud.hitMarker(extra.head, dmg);
     this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
     Audio.play(extra.head ? 'head' : 'hit', 0.6);
-    this.kit.addUlt(dmg * (target.dummy ? 0.12 : 0.22));
+    if (ab !== 'nova' && ab !== 'meteor') this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
   }
 
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
@@ -442,7 +450,7 @@ export class Match {
       case 'spawn': {
         const e = this.ents.get(msg.n);
         if (!e) return;
-        e.alive = true; e.hp = MAX_HP; e.burnT = 0; e.hideAt = 0;
+        e.alive = true; e.hp = BAL.hp; e.burnT = 0; e.hideAt = 0;
         e.pos.set(msg.x, msg.y, msg.z); e.vel.set(0, 0, 0); e.yaw = msg.yaw; e.snaps.length = 0;
         e.view.anim.play('respawn');
         e.view.setVisible(true);
@@ -537,6 +545,7 @@ export class Match {
       // remote land/jump inferred from state
       if (!e.isLocal) {
         if (e.grounded && !e.prevGrounded) v.anim.play('land', { vy: e.prevVy });
+        if (!e.grounded && e.prevGrounded && e.vel.y > 3) v.anim.play('jumpStart');
         e.prevGrounded = e.grounded; e.prevVy = e.vel.y;
       }
       e.flash = Math.max(0, e.flash - dt * 6);
@@ -643,6 +652,7 @@ export class Match {
     for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);
     Audio.stopLoop('brazier');
     for (const list of this.sigils.values()) for (const h of list) h.remove();
+    applyBalance(null);
     this.fx.dispose();
     this.proj.clear();
     // the map is shared with the lobby: only remove what the match added

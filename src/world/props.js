@@ -117,7 +117,7 @@ function oakGeometry(seed) {
   for (let i = 0; i < blobs; i++) {
     const a = (i / blobs) * 6.28 + r(), d = i === 0 ? 0 : 1.1 + r() * 0.9;
     const s = i === 0 ? 2.0 : 1.2 + r() * 0.7;
-    const lg = jitter(new THREE.IcosahedronGeometry(s, 1), 0.35, seed + i);
+    const lg = jitter(new THREE.IcosahedronGeometry(s, 2), 0.28, seed + i);
     lg.scale(1, 0.78, 1);
     lg.translate(Math.cos(a) * d, 3.9 + r() * 1.3 + (i === 0 ? 0.9 : 0), Math.sin(a) * d);
     leaves.push(lg);
@@ -165,7 +165,7 @@ function treeColors(def, kind) {
 }
 
 function leafMaterial() {
-  const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
   // canopy sway: scale the wind by height (position.y in tree space, ~0-9 m)
   m.onBeforeCompile = (sh) => {
     const parent = windPatch;
@@ -193,7 +193,7 @@ function rockGeometry(seed) {
   g.scale(1, 0.62, 0.85);
   const ng = ni(g);
   colorize(ng, (x, y, z, c) => {
-    c.setRGB(0.5, 0.5, 0.47).multiplyScalar(0.82 + N.n2(x * 2 + seed, z * 2) * 0.18);
+    c.setRGB(0.56, 0.52, 0.45).multiplyScalar(0.82 + N.n2(x * 2 + seed, z * 2) * 0.18);
     if (y > 0.25 + N.n2(x * 3, z * 3) * 0.2) c.lerp(new THREE.Color(0.33, 0.47, 0.17), 0.65);
   });
   ng.computeVertexNormals();
@@ -378,5 +378,10 @@ export function buildProps(world, quality = 'high') {
   root.add(logMesh);
 
   root.userData.avoid = avoidFn;
+  // anchors for undergrowth: trees inside/near the arena, rocks and ruin walls
+  root.userData.anchors = [
+    ...placements.filter((p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 25).map((p) => ({ x: p.x, z: p.z })),
+    ...rocks.flat().filter((p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 10).map((p) => ({ x: p.x, z: p.z })),
+  ];
   return root;
 }

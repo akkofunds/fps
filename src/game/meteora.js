@@ -1,3 +1,4 @@
+import { BAL } from './balance.js';
 import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ } from './projectiles.js';
@@ -24,6 +25,8 @@ export const METEORA = {
 
 export const NOVA = { radius: 18, channel: 2.35, maxDmg: 400, minDmg: 160, range: 85, exhausted: 3.3 };
 const COOLDOWN = { spark: 0.45, starfall: 8, sigil: 11, blink: 9 };
+// bolt-type fire rates are not shortened below 60% even with admin cooldown tweaks
+const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
 export class MeteoraKit {
@@ -50,7 +53,8 @@ export class MeteoraKit {
     const m = this.m;
     for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
     this.busy = Math.max(0, this.busy - dt);
-    this.addUlt(dt * 0.35);
+    this.addUlt(dt * 0.35 * BAL.ult);
+    if (BAL.infiniteUlt) this.ult = Math.max(this.ult, 100);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const p = this.pending[i];
       p.t -= dt;
@@ -67,7 +71,7 @@ export class MeteoraKit {
 
   _ready(id) {
     if (this.busy > 0) return false;
-    if (this.cd[id] > 0) { if (id !== 'spark') this.m.hud.denied(id); return false; }
+    if (this.cd[id] > 0) { if (id !== 'spark') this.m.app.hud.denied(id); return false; }
     return true;
   }
 
@@ -84,7 +88,7 @@ export class MeteoraKit {
   spark() {
     if (!this._ready('spark')) return;
     const m = this.m;
-    this.cd.spark = COOLDOWN.spark;
+    this.cd.spark = cdOf(COOLDOWN.spark);
     m.playAnim('cast', { anim: 'mBolt' });
     this.pending.push({ t: 0.07, fn: () => {
       const o = m.view.staffTip(tmp);
@@ -101,7 +105,7 @@ export class MeteoraKit {
   starfall() {
     if (!this._ready('starfall')) return;
     const m = this.m;
-    this.cd.starfall = COOLDOWN.starfall; this.busy = 0.4;
+    this.cd.starfall = cdOf(COOLDOWN.starfall); this.busy = 0.4;
     m.playAnim('cast', { anim: 'mRaise' });
     const target = this._groundTarget(38);
     this.pending.push({ t: 0.36, fn: () => m.castAbility({ ab: 'starfall', c: [target.x, target.y, target.z] }) });
@@ -110,7 +114,7 @@ export class MeteoraKit {
   sigil() {
     if (!this._ready('sigil')) return;
     const m = this.m;
-    this.cd.sigil = COOLDOWN.sigil; this.busy = 0.55;
+    this.cd.sigil = cdOf(COOLDOWN.sigil); this.busy = 0.55;
     const target = this._groundTarget(16);
     m.body.locked = 0.4;
     m.playAnim('plant');
@@ -120,7 +124,7 @@ export class MeteoraKit {
   blink() {
     if (!this._ready('blink')) return;
     const m = this.m, b = m.body;
-    this.cd.blink = COOLDOWN.blink; this.busy = 0.15;
+    this.cd.blink = cdOf(COOLDOWN.blink); this.busy = 0.15;
     const inp = m.app.input.state;
     const sy = Math.sin(b.yaw), cy = Math.cos(b.yaw);
     tmp.set(sy * inp.fwd - cy * inp.side, 0, cy * inp.fwd + sy * inp.side);
@@ -139,7 +143,7 @@ export class MeteoraKit {
 
   nova() {
     const m = this.m;
-    if (this.ult < ULT_COST) { m.hud.denied('nova'); return; }
+    if (this.ult < ULT_COST) { m.app.hud.denied('nova'); return; }
     if (this.busy > 0) return;
     const target = this._groundTarget(NOVA.range);
     this.ult = 0; this.ultReadyAnnounced = false;
@@ -152,7 +156,7 @@ export class MeteoraKit {
     this.pending.push({ t: NOVA.channel + 0.15, fn: () => {
       m.playAnim('exhausted');
       m.body.locked = NOVA.exhausted;
-      m.hud.banner('EXHAUSTED', 'YOU CANNOT MOVE', 2.5, 'kill');
+      m.app.hud.banner('EXHAUSTED', 'YOU CANNOT MOVE', 2.5, 'kill');
     } });
   }
 }

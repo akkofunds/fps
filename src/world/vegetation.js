@@ -187,3 +187,108 @@ export function buildFlowers(count, avoid) {
 }
 
 export { windPatch };
+
+// leafy bushes + fern clumps around trees, rocks and ruins (instanced, wind-swayed)
+function bushGeometry(seed) {
+  const r = mulberry32(seed);
+  const parts = [];
+  const n = 5 + Math.floor(r() * 3);
+  for (let i = 0; i < n; i++) {
+    const g = new THREE.IcosahedronGeometry(0.35 + r() * 0.3, 2);
+    const p = g.attributes.position;
+    for (let k = 0; k < p.count; k++) { const s = 1 + (r() - 0.5) * 0.25; p.setXYZ(k, p.getX(k) * s, p.getY(k) * s * 0.8, p.getZ(k) * s); }
+    const a = r() * 6.28, d = i === 0 ? 0 : 0.25 + r() * 0.35;
+    g.translate(Math.cos(a) * d, 0.32 + r() * 0.35, Math.sin(a) * d);
+    parts.push(g.toNonIndexed());
+  }
+  let pos = [], nrm = [], col = [];
+  for (const g of parts) { pos.push(...g.attributes.position.array); nrm.push(...g.attributes.normal.array); }
+  for (let i = 0; i < pos.length / 3; i++) {
+    const y = pos[i * 3 + 1];
+    const t = Math.min(1, Math.max(0, y / 1.0));
+    const v = 0.85 + r() * 0.2;
+    col.push((0.1 + 0.22 * t) * v, (0.26 + 0.36 * t) * v, (0.06 + 0.08 * t) * v);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return g;
+}
+
+function fernGeometry() {
+  const pos = [], col = [], nrm = [], idx = [];
+  const fronds = 7;
+  for (let f = 0; f < fronds; f++) {
+    const a = (f / fronds) * Math.PI * 2;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const base = pos.length / 3;
+    const segs = 5;
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs;
+      const out = t * 0.7, up = Math.sin(t * Math.PI * 0.8) * 0.45;
+      const w = 0.09 * Math.sin(t * Math.PI) + 0.01;
+      for (const sg of [-1, 1]) {
+        pos.push(ca * out - sa * w * sg, up, sa * out + ca * w * sg);
+        const sh = 0.5 + 0.5 * t;
+        col.push(0.12 * sh + 0.05, 0.36 * sh + 0.08, 0.08 * sh);
+        nrm.push(0, 1, 0);
+      }
+    }
+    for (let i = 0; i < segs; i++) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setIndex(idx);
+  return g;
+}
+
+export function buildBushes(count, anchors, avoid) {
+  const group = new THREE.Group(); group.name = 'bushes';
+  const rnd = mulberry32(909);
+  const bushMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  windPatch(bushMat, 0.35, false);
+  const fernMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  windPatch(fernMat, 0.7, true);
+  const defs = [bushGeometry(1), bushGeometry(2), bushGeometry(3)];
+  const lists = defs.map(() => []), ferns = [];
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  let placed = 0, tries = 0;
+  while (placed < count && tries < count * 20) {
+    tries++;
+    // cluster around anchors (tree trunks, rocks, ruins) — that's where undergrowth lives
+    const a = anchors[Math.floor(rnd() * anchors.length)];
+    if (!a) break;
+    const ang = rnd() * 6.283, d = 0.8 + rnd() * 3.2;
+    const x = a.x + Math.cos(ang) * d, z = a.z + Math.sin(ang) * d;
+    if (!grassAllowed(x, z, avoid) || pathDist(x, z) < 1.8) continue;
+    const y = groundH(x, z);
+    q.setFromAxisAngle(up, rnd() * 6.28);
+    if (rnd() < 0.45) {
+      const sc = 0.7 + rnd() * 0.7;
+      m4.compose(new THREE.Vector3(x, y - 0.05, z), q, new THREE.Vector3(sc, sc * (0.8 + rnd() * 0.4), sc));
+      ferns.push(m4.clone());
+    } else {
+      const sc = 0.8 + rnd() * 0.9;
+      m4.compose(new THREE.Vector3(x, y - 0.12, z), q, new THREE.Vector3(sc, sc * (0.7 + rnd() * 0.4), sc));
+      lists[Math.floor(rnd() * defs.length)].push(m4.clone());
+    }
+    placed++;
+  }
+  defs.forEach((g, i) => {
+    if (!lists[i].length) return;
+    const im = new THREE.InstancedMesh(g, bushMat, lists[i].length);
+    lists[i].forEach((mm, k) => im.setMatrixAt(k, mm));
+    im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere();
+    group.add(im);
+  });
+  if (ferns.length) {
+    const im = new THREE.InstancedMesh(fernGeometry(), fernMat, ferns.length);
+    ferns.forEach((mm, k) => im.setMatrixAt(k, mm));
+    im.receiveShadow = true; im.computeBoundingSphere();
+    group.add(im);
+  }
+  return group;
+}

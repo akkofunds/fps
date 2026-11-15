@@ -29,7 +29,9 @@
         <div class="qp-sub" id="qpSub">SEARCHING</div>
       </div>
       <div class="top-right">
+        <span class="admin-badge hidden" id="adminBadge">ADMIN</span>
         <div class="status-dot" id="netStatus" title="Matchmaking status"></div>
+        <button class="icon-btn social-toggle" id="btnSocial" title="Party &amp; friends"><svg viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm7 1a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM1 20c0-3.3 3.6-6 8-6s8 2.7 8 6v1H1zm16.5-6.9c3 .3 5.5 2.4 5.5 4.9V20h-4.5c0-2.6-.4-4.9-1-6.9z"/></svg></button>
         <button class="icon-btn" id="btnSettings" title="Settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.4 4.6.1-1.1-.1-1.1 2-1.6-2-3.4-2.4 1a8 8 0 0 0-1.9-1.1L15.7 3h-3.9l-.4 2.7a8 8 0 0 0-1.9 1.1l-2.4-1-2 3.4 2 1.6-.1 1.1.1 1.1-2 1.6 2 3.4 2.4-1c.6.5 1.2.8 1.9 1.1l.4 2.7h3.9l.4-2.7a8 8 0 0 0 1.9-1.1l2.4 1 2-3.4z"/></svg></button>
       </div>
     </header>
@@ -103,6 +105,7 @@
     <div id="xhair"><i class="d"></i><i class="l t"></i><i class="l b"></i><i class="l le"></i><i class="l r"></i></div>
     <div id="hitmark"><i></i><i></i><i></i><i></i></div>
     <div id="hurtVig"></div>
+    <div id="flash"></div>
     <div id="hurtDir"></div>
     <div class="top-center" id="topCenter">
       <div class="tc-box tc-me"><span class="tc-lbl">YOU</span><span class="tc-val" id="tcMe">0</span></div>
@@ -147,7 +150,8 @@
         <label>Mouse sensitivity <span id="vSens"></span><input type="range" id="sSens" min="0.2" max="3" step="0.05" /></label>
         <label>Field of view <span id="vFov"></span><input type="range" id="sFov" min="65" max="100" step="1" /></label>
         <label>Master volume <span id="vVol"></span><input type="range" id="sVol" min="0" max="1" step="0.05" /></label>
-        <label>Graphics quality <select id="sQuality"><option value="low">Low (laptops / Chromebooks)</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+        <label>Graphics quality <select id="sQuality"><option value="low">Low (laptops / phones)</option><option value="medium">Medium</option><option value="high">High</option><option value="ultra">Ultra (4K supersampling + AO)</option></select></label>
+        <label>Render resolution <select id="sScale"><option value="0">Auto</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200% (4K on 1080p)</option></select></label>
         <label>Camera shoulder <select id="sShoulder"><option value="1">Right</option><option value="-1">Left</option></select></label>
         <label class="row"><input type="checkbox" id="sInvert" /> Invert mouse Y</label>
       </div>
@@ -176,6 +180,8 @@
   </div>
 
   <div id="toasts"></div>
+  <div id="fpsMeter" class="hidden"></div>
+  <div id="rotateHint"><div>ROTATE YOUR PHONE<br /><span class="muted">Magebreak plays in landscape</span></div></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

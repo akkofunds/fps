@@ -1,6 +1,7 @@
 import { Emitter } from '../core/emitter.js';
 import { HostSession, ClientSession } from '../network/matchNet.js';
 import { MODES, QUEUE_START_SECONDS, PEER_PREFIX } from '../config.js';
+import { loadBalance } from './balance.js';
 
 // Serverless matchmaking over the PeerJS broker. FFA has a few well-known queue-slot IDs:
 // a searching player first tries to JOIN a slot; if nobody holds it they CLAIM it and host.
@@ -24,7 +25,7 @@ export class SessionController extends Emitter {
   }
 
   get busy() { return this.state !== 'idle'; }
-  hello() { const me = this.pm.me; return { t: 'hello', id: me.id, name: me.name, tag: me.tag }; }
+  hello() { const me = this.pm.me; return { t: 'hello', id: me.id, name: me.name, tag: me.tag, mage: me.mage }; }
 
   // ---------------- FFA queue
   async startQueue() {
@@ -67,7 +68,7 @@ export class SessionController extends Emitter {
     const host = this.host = new HostSession();
     const me = pm.me;
     const partyIds = new Set(pm.party.members.map((m) => m.id));
-    this.humans = [{ id: me.id, name: me.name, tag: me.tag }];
+    this.humans = [{ id: me.id, name: me.name, tag: me.tag, mage: me.mage }];
     if (mmPeer) mmPeer.on('connection', (conn) => { if (conn.metadata && conn.metadata.kind === 'match') host.attach(conn); else conn.close(); });
     host.on('hello', (conn, msg) => {
       if (this.state !== 'hostQueue' || token !== this.token) { host.reject(conn, 'closed'); return; }
@@ -75,7 +76,7 @@ export class SessionController extends Emitter {
       if (!isParty && msg.mode !== this.mode) { host.reject(conn, 'mode'); return; }
       if (this.humans.length >= M.size || this.humans.some((h) => h.id === msg.id)) { host.reject(conn, 'full'); return; }
       host.accept(conn, msg.id, { mode: this.mode });
-      this.humans.push({ id: msg.id, name: String(msg.name).slice(0, 14), tag: String(msg.tag).slice(0, 4) });
+      this.humans.push({ id: msg.id, name: String(msg.name).slice(0, 14), tag: String(msg.tag).slice(0, 4), mage: String(msg.mage || 'pyro').slice(0, 16) });
       if (!isParty) this.emit('playerFound');
       this._broadcastQueue();
     });
@@ -134,9 +135,9 @@ export class SessionController extends Emitter {
     if (pm.inParty && !pm.isLeader) { this.emit('toast', 'Only the party leader can start a custom game.'); return; }
     const token = ++this.token;
     this.mode = 'custom';
-    this.cfg = { mode: 'custom', map: 'sunvale', killsToWin: opts.killsToWin, timeLimit: opts.timeLimit };
+    this.cfg = { mode: 'custom', map: 'sunvale', killsToWin: opts.killsToWin, timeLimit: opts.timeLimit, balance: loadBalance() };
     const me = pm.me;
-    this.humans = [{ id: me.id, name: me.name, tag: me.tag }];
+    this.humans = [{ id: me.id, name: me.name, tag: me.tag, mage: me.mage }];
     this.host = new HostSession();
     if (!pm.inParty || pm.status !== 'online') { this._beginHost(); return; }
     this.state = 'customWait';
@@ -144,7 +145,7 @@ export class SessionController extends Emitter {
     this.host.on('hello', (conn, msg) => {
       if (this.state !== 'customWait' || !expected.has(msg.id)) { this.host.reject(conn, 'closed'); return; }
       this.host.accept(conn, msg.id, { mode: 'custom' });
-      this.humans.push({ id: msg.id, name: msg.name, tag: msg.tag });
+      this.humans.push({ id: msg.id, name: msg.name, tag: msg.tag, mage: String(msg.mage || 'pyro').slice(0, 16) });
       expected.delete(msg.id);
       if (!expected.size) this._beginHost();
     });
@@ -156,9 +157,9 @@ export class SessionController extends Emitter {
   startPractice() {
     if (this.busy) return;
     this.mode = 'practice';
-    this.cfg = { mode: 'practice', map: 'sunvale', killsToWin: 0, timeLimit: 0 };
+    this.cfg = { mode: 'practice', map: 'sunvale', killsToWin: 0, timeLimit: 0, balance: loadBalance() };
     const me = this.pm.me;
-    this.humans = [{ id: me.id, name: me.name, tag: me.tag }];
+    this.humans = [{ id: me.id, name: me.name, tag: me.tag, mage: me.mage }];
     this.host = new HostSession();
     this._beginHost();
   }
@@ -167,7 +168,7 @@ export class SessionController extends Emitter {
     const cfg = this.cfg;
     if (!this.host) this.host = new HostSession();
     if (this.mmPeer) { try { this.mmPeer.disconnect(); } catch { /* ignore */ } }
-    const players = this.humans.map((h, i) => ({ id: h.id, name: h.name, tag: h.tag, n: i }));
+    const players = this.humans.map((h, i) => ({ id: h.id, name: h.name, tag: h.tag, mage: h.mage || 'pyro', n: i }));
     for (const p of players) if (p.id !== this.pm.id) this.host.send(p.id, { t: 'start', cfg, players, you: p.id });
     this.state = 'match';
     this.emit('joining', false);

@@ -181,7 +181,7 @@ Object.assign(Fx.prototype, {
   // E — a small star falls on the target
   starfall(target, radius, delay, onImpact) {
     const tex = circleTexture(7, 512);
-    const tele = groundCircle(tex, radius, target.x, target.z, new THREE.Color(2.2, 0.4, 0.3), this.world);
+    const tele = groundCircle(tex, radius, target.x, target.z, new THREE.Color(1.8, 0.3, 0.12), this.world);
     this.scene.add(tele);
     const star = new THREE.Mesh(new THREE.IcosahedronGeometry(0.55, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 1.6, 0.9) }));
     this.scene.add(star);
@@ -208,7 +208,7 @@ Object.assign(Fx.prototype, {
   // C — persistent rune on the ground. returns a handle with detonate()/remove()
   sigil(p, radius, armTime) {
     const tex = circleTexture(11, 512);
-    const m = groundCircle(tex, radius, p.x, p.z, new THREE.Color(1.6, 0.25, 0.2), this.world);
+    const m = groundCircle(tex, radius, p.x, p.z, new THREE.Color(1.5, 0.18, 0.1), this.world);
     this.scene.add(m);
     let t = 0, alive = true;
     const h = {
@@ -249,18 +249,18 @@ Object.assign(Fx.prototype, {
     const sizes = [radius * 0.95, radius * 0.78, radius * 0.62, radius * 0.48, radius * 0.36];
     const heights = [9, 17, 25, 33, 41];
     sizes.forEach((s, i) => {
-      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(3.2, 0.9 - i * 0.08, 0.25));
+      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(1.9, 0.42 - i * 0.03, 0.06));
       m.position.set(target.x, target.y + heights[i], target.z);
       m.scale.setScalar(0.001);
       scene.add(m);
       layers.push({ m, at: 0.12 + i * 0.32, dir: i % 2 ? -1 : 1 });
     });
     // ground warning (huge, so everyone knows to run)
-    const warn = groundCircle(circleTexture(5, 1024), radius, target.x, target.z, new THREE.Color(2.6, 0.35, 0.2), this.world);
+    const warn = groundCircle(circleTexture(5, 1024), radius, target.x, target.z, new THREE.Color(1.8, 0.16, 0.06), this.world);
     warn.material.opacity = 0;
     scene.add(warn);
     // caster's circle under her feet
-    const own = groundCircle(circleTexture(3, 512), 2.6, caster.x, caster.z, new THREE.Color(3, 0.6, 0.3), this.world);
+    const own = groundCircle(circleTexture(3, 512), 2.6, caster.x, caster.z, new THREE.Color(1.9, 0.4, 0.1), this.world);
     scene.add(own);
     // light column
     const colGeo = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true);

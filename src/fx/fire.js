@@ -179,6 +179,14 @@ export class Fx {
   dashTrail(p) {
     for (let i = 0; i < 4; i++) this.fire.emit(p.x + (R() - 0.5) * 0.4, p.y + 0.2 + R() * 1.4, p.z + (R() - 0.5) * 0.4, (R() - 0.5) * 0.4, 0.4 + R() * 0.6, (R() - 0.5) * 0.4, 0.3 + R() * 0.2, 0.3, 0.04, FLAME, DARK, 2, 1);
   }
+  // footfall dust: a couple of soft earthy puffs at the sole
+  dust(p, k = 1) {
+    for (let i = 0; i < 2 + k * 2; i++) {
+      const a = R() * 6.283;
+      this.smoke.emit(p.x + Math.cos(a) * 0.1, p.y - 0.08, p.z + Math.sin(a) * 0.1, Math.cos(a) * 0.6, 0.25 + R() * 0.3, Math.sin(a) * 0.6, 0.5 + R() * 0.3, 0.12, 0.45 * k + 0.1, [0.55, 0.5, 0.38, 0.22 * k], [0.6, 0.56, 0.45, 0], 2.5, 0.2);
+    }
+  }
+
   burn(p) {
     if (R() < 0.5) this.fire.emit(p.x + (R() - 0.5) * 0.45, p.y + R() * 1.5, p.z + (R() - 0.5) * 0.45, (R() - 0.5) * 0.3, 1 + R(), (R() - 0.5) * 0.3, 0.35 + R() * 0.25, 0.32, 0.05, FLAME, DARK, 1, 1.5);
   }
