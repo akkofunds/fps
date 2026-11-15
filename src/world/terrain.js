@@ -85,10 +85,10 @@ export function groundNormal(x, z, out) {
 }
 
 // ---------------------------------------------------------------- mesh
-function axisCoords() {
+function axisCoords(step = HF_STEP) {
   const xs = [];
-  for (let i = -HF_HALF; i <= HF_HALF; i += HF_STEP) xs.push(i);
-  let s = HF_STEP, x = HF_HALF;
+  for (let i = -HF_HALF; i <= HF_HALF; i += step) xs.push(i);
+  let s = step, x = HF_HALF;
   const outer = [];
   while (x < 900) { s *= 1.16; x += s; outer.push(x); }
   return [...outer.map((v) => -v).reverse(), ...xs, ...outer];
@@ -122,8 +122,8 @@ export function grassColorAt(x, z, out) {
   return out;
 }
 
-export function buildTerrain() {
-  const xs = axisCoords();
+export function buildTerrain(step = 1) {
+  const xs = axisCoords(step);
   const nx = xs.length;
   const pos = new Float32Array(nx * nx * 3), col = new Float32Array(nx * nx * 3), uv = new Float32Array(nx * nx * 2);
   const c = new THREE.Color(), tmp = new THREE.Color(), nrm = new THREE.Vector3();

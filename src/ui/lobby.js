@@ -90,6 +90,8 @@ export class Lobby {
     $('sShoulder').onchange = () => { s.shoulder = Number($('sShoulder').value); app.saveSettings(); app.applySettings(); };
     $('sInvert').checked = !!s.invertY;
     $('sInvert').onchange = () => { s.invertY = $('sInvert').checked; app.saveSettings(); };
+    $('sDyn').checked = s.dynamicRes !== false;
+    $('sDyn').onchange = () => { s.dynamicRes = $('sDyn').checked; if (!s.dynamicRes) app.dynScale = 1; app.saveSettings(); app.resize(); };
     $('btnSettingsClose').onclick = () => { show('settings', false); };
   }
 

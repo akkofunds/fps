@@ -103,6 +103,7 @@ class Builder {
 }
 
 // ---------------------------------------------------------------- trees
+let LEAF_DETAIL = 2;
 function oakGeometry(seed) {
   const r = mulberry32(seed);
   const trunk = [], leaves = [];
@@ -117,7 +118,7 @@ function oakGeometry(seed) {
   for (let i = 0; i < blobs; i++) {
     const a = (i / blobs) * 6.28 + r(), d = i === 0 ? 0 : 1.1 + r() * 0.9;
     const s = i === 0 ? 2.0 : 1.2 + r() * 0.7;
-    const lg = jitter(new THREE.IcosahedronGeometry(s, 2), 0.28, seed + i);
+    const lg = jitter(new THREE.IcosahedronGeometry(s, LEAF_DETAIL), 0.28, seed + i);
     lg.scale(1, 0.78, 1);
     lg.translate(Math.cos(a) * d, 3.9 + r() * 1.3 + (i === 0 ? 0.9 : 0), Math.sin(a) * d);
     leaves.push(lg);
@@ -201,7 +202,8 @@ function rockGeometry(seed) {
 }
 
 // ---------------------------------------------------------------- assemble
-export function buildProps(world, quality = 'high') {
+export function buildProps(world, quality = 'high', Q = {}) {
+  LEAF_DETAIL = Q.leafDetail || 2;
   const root = new THREE.Group(); root.name = 'props';
   const B = new Builder(world);
   const plazaY = groundH(0, 0);
@@ -314,7 +316,7 @@ export function buildProps(world, quality = 'high') {
     if (tryTree(Math.cos(a) * r, Math.sin(a) * r, rnd() < 0.6 ? 'oak' : 'birch', R(0.8, 1.2), true)) i++;
   }
   // forest on the surrounding hills (scenery)
-  const scenery = quality === 'low' ? 160 : quality === 'medium' ? 280 : 420;
+  const scenery = Q.scenery || 300;
   for (let i = 0, t = 0; i < scenery && t < scenery * 8; t++) {
     const a = rnd() * 6.28, r = R(PLAY_RADIUS + 2, 230);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
@@ -322,17 +324,22 @@ export function buildProps(world, quality = 'high') {
     if (tryTree(x, z, rnd() < 0.55 ? 'pine' : rnd() < 0.7 ? 'oak' : 'birch', R(1.0, 1.6), r < PLAY_RADIUS + 12)) i++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  // arena trees cast shadows; the forest on the surrounding hills doesn't (it's outside the shadow
+  // camera anyway, but splitting them keeps the shadow pass from even considering them)
   for (const [kind, defs] of Object.entries(kinds)) defs.forEach((def, v) => {
-    const list = placements.filter((p) => p.kind === kind && p.v === v);
-    if (!list.length) return;
-    const tm = new THREE.InstancedMesh(def.trunk, trunkMat, list.length);
-    const lm = new THREE.InstancedMesh(def.leaves, leafMat, list.length);
-    list.forEach((p, i) => {
-      q.setFromAxisAngle(up, p.rot);
-      m4.compose(new THREE.Vector3(p.x, groundH(p.x, p.z) - 0.15, p.z), q, new THREE.Vector3(p.scale, p.scale * R(0.9, 1.15), p.scale));
-      tm.setMatrixAt(i, m4); lm.setMatrixAt(i, m4);
-    });
-    for (const m of [tm, lm]) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); root.add(m); }
+    const all = placements.filter((p) => p.kind === kind && p.v === v);
+    for (const near of [true, false]) {
+      const list = all.filter((p) => (Math.hypot(p.x, p.z) < PLAY_RADIUS + 14) === near);
+      if (!list.length) continue;
+      const tm = new THREE.InstancedMesh(def.trunk, trunkMat, list.length);
+      const lm = new THREE.InstancedMesh(def.leaves, leafMat, list.length);
+      list.forEach((p, i) => {
+        q.setFromAxisAngle(up, p.rot);
+        m4.compose(new THREE.Vector3(p.x, groundH(p.x, p.z) - 0.15, p.z), q, new THREE.Vector3(p.scale, p.scale * R(0.9, 1.15), p.scale));
+        tm.setMatrixAt(i, m4); lm.setMatrixAt(i, m4);
+      });
+      for (const m of [tm, lm]) { m.castShadow = near; m.receiveShadow = near; m.computeBoundingSphere(); root.add(m); }
+    }
   });
 
   // ---------------- rocks

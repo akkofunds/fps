@@ -200,13 +200,13 @@ svg { fill: currentColor; }
 /* ===================================================== HUD */
 #hud { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
 #tags, #dmgNums { position: absolute; inset: 0; overflow: hidden; }
-.ntag { position: absolute; transform: translate(-50%, -100%); text-align: center; white-space: nowrap; transition: opacity .12s; }
+.ntag { position: absolute; left: 0; top: 0; will-change: transform; text-align: center; white-space: nowrap; transition: opacity .12s; }
 .ntag b { display: block; font-family: var(--font-d); font-weight: 600; font-size: 13px; letter-spacing: 0.06em; color: #ffd6d6; text-shadow: 0 1px 2px #000; }
 .ntag .hb { width: 64px; height: 5px; margin: 2px auto 0; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.15); }
 .ntag .hb i { display: block; height: 100%; background: var(--red); }
 .ntag.dummy b { color: #e8dcc0; }
 .ntag.dummy .hb i { background: #e8c070; }
-.dnum { position: absolute; font-family: var(--font-d); font-weight: 700; font-size: 20px; color: #fff; text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 2px #000; transform: translate(-50%, -50%); }
+.dnum { position: absolute; left: 0; top: 0; will-change: transform, opacity; font-family: var(--font-d); font-weight: 700; font-size: 20px; color: #fff; text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 2px #000; }
 .dnum.head { color: var(--yellow); font-size: 25px; }
 #xhair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --c: #fff; }
 #xhair i { position: absolute; background: var(--c); box-shadow: 0 0 2px rgba(0,0,0,0.9); }

@@ -163,14 +163,19 @@ export class Hud {
         proj.project(cam);
         vis = proj.z < 1 && d < 48 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1;
         if (vis) {
-          // occlusion check (cheap: world only)
-          const c = cam.position;
-          const dx = e.pos.x - c.x, dy = e.pos.y + 1.6 - c.y, dz = e.pos.z - c.z, l = Math.hypot(dx, dy, dz);
-          const hit = m.world.raycast(c.x, c.y, c.z, dx / l, dy / l, dz / l, l - 0.5, 0);
-          vis = hit === Infinity;
+          // occlusion check, ~8 Hz per tag (raycasts are the costliest HUD work on slow CPUs)
+          const now = performance.now();
+          if (!t._occT || now - t._occT > 120) {
+            t._occT = now;
+            const c = cam.position;
+            const dx = e.pos.x - c.x, dy = e.pos.y + 1.6 - c.y, dz = e.pos.z - c.z, l = Math.hypot(dx, dy, dz);
+            t._occ = m.world.raycast(c.x, c.y, c.z, dx / l, dy / l, dz / l, l - 0.5, 0) !== Infinity;
+          }
+          vis = !t._occ;
         }
         if (vis) {
-          t.style.left = `${((proj.x + 1) / 2) * W}px`; t.style.top = `${((1 - proj.y) / 2) * H}px`;
+          // transform-only updates stay on the compositor (no layout per frame)
+          t.style.transform = `translate3d(${(((proj.x + 1) / 2) * W).toFixed(1)}px, ${(((1 - proj.y) / 2) * H).toFixed(1)}px, 0) translate(-50%, -100%)`;
           const hp = Math.round(e.hp);
           if (t._hp !== hp) { t._hp = hp; t._fill.style.width = `${(hp / BAL.hp) * 100}%`; }
         }
@@ -195,7 +200,7 @@ export class Hud {
       proj.project(m.camera);
       if (proj.z > 1) { n.d.style.display = 'none'; continue; }
       n.d.style.display = '';
-      n.d.style.left = `${((proj.x + 1) / 2) * W}px`; n.d.style.top = `${((1 - proj.y) / 2) * H}px`;
+      n.d.style.transform = `translate3d(${(((proj.x + 1) / 2) * W).toFixed(1)}px, ${(((1 - proj.y) / 2) * H).toFixed(1)}px, 0) translate(-50%, -50%)`;
       n.d.style.opacity = String(Math.min(1, (0.9 - n.t) * 3));
     }
   }

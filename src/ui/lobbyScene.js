@@ -25,7 +25,7 @@ export class LobbyScene {
     this.scene = map.scene;
     const P = this.P;
     P.y = map.world.groundAt(P.x, P.z, 50);
-    this.fx = new Fx(this.scene, map.world, 1);
+    this.fx = new Fx(this.scene, map.world, map.Q.lights > 1 ? 1 : 0, 1500);
     await this.setMage(this.app.settings.mage || 'pyro');
     // face the camera
     this.baseYaw = Math.atan2(-this.lakeDir.x, -this.lakeDir.z);
@@ -41,7 +41,7 @@ export class LobbyScene {
     if (this.mageId !== md.id) return; // a newer pick won
     const vis = this.inst ? this.inst.root.visible : true;
     if (this.inst) this.scene.remove(this.inst.root);
-    this.inst = new MageInstance(tmpl, { lobby: true, groundAt: (x, z) => this.map.world.groundAt(x, z, 50) });
+    this.inst = new MageInstance(tmpl, { lobby: true, outlines: this.map.Q.outlines, groundAt: (x, z) => this.map.world.groundAt(x, z, 50) });
     this.inst.root.position.copy(this.P);
     this.inst.root.visible = vis;
     this.scene.add(this.inst.root);

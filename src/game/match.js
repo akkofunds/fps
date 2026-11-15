@@ -84,7 +84,8 @@ export class Match {
     this.map = app.map;
     this.scene = this.map.scene; this.world = this.map.world;
     this.camera = new THREE.PerspectiveCamera(app.settings.fov, app.aspect, 0.08, 3000);
-    this.fx = new Fx(this.scene, this.world);
+    const Q = this.map.Q;
+    this.fx = new Fx(this.scene, this.world, Q.lights, Q.particles);
     // without bloom, additive HDR fire saturates to white; tone it down
     if (!app.composer) this.fx.fire.mat.uniforms.uGain.value = 0.55;
     this.proj = new Projectiles(this);
@@ -98,7 +99,7 @@ export class Match {
     }
     for (const p of list) {
       const e = new Ent(p, p.id === this.localId);
-      e.view = new MageInstance(templates[mageOf(e.mage).id] || templates.pyro, { groundAt }).uniqueMaterials();
+      e.view = new MageInstance(templates[mageOf(e.mage).id] || templates.pyro, { groundAt, outlines: Q.outlines, lowPoly: !Q.outlines }).uniqueMaterials();
       if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
       e.view.setVisible(false);
       this.scene.add(e.view.root);
@@ -347,6 +348,20 @@ export class Match {
     }
   }
 
+  _inView(p) {
+    if (this._frustumFrame !== this.time) {
+      this._frustumFrame = this.time;
+      this._frustum = this._frustum || new THREE.Frustum();
+      this._pm = this._pm || new THREE.Matrix4();
+      this.camera.updateMatrixWorld();
+      this._pm.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+      this._frustum.setFromProjectionMatrix(this._pm);
+      this._sph = this._sph || new THREE.Sphere(new THREE.Vector3(), 1.4);
+    }
+    this._sph.center.set(p.x, p.y + 0.9, p.z);
+    return this._frustum.intersectsSphere(this._sph);
+  }
+
   _checkSigils() {
     const mine = this.sigils.get(this.local.n);
     if (!mine || !this.local.alive) return;
@@ -535,12 +550,23 @@ export class Match {
 
     // ---- animation + visuals
     const pushers = [];
+    const Q = this.map.Q;
     for (const e of this.ents.values()) {
       const v = e.view;
       if (e.hideAt && this.time > e.hideAt && !e.alive) { v.setVisible(false); e.hideAt = 0; }
       if (!v.root.visible) continue;
       v.root.position.copy(e.pos);
-      v.anim.update(dt, { pos: e.pos, yaw: e.yaw, pitch: e.pitch, vel: e.vel, grounded: e.grounded });
+      // animation LOD: full rate up close, every 2nd/4th frame far away or off-screen
+      e.animAcc = (e.animAcc || 0) + dt;
+      const d2 = e.isLocal ? 0 : e.pos.distanceToSquared(this.camera.position);
+      let every = d2 < 625 ? 1 : d2 < 2500 ? 2 : 4;
+      if (!e.isLocal && !this._inView(e.pos)) every = 6;
+      e.animTick = ((e.animTick || 0) + 1) % every;
+      if (Q.outlines) v.setLod(d2 > 900); // beyond 30 m use the low-poly meshes
+      if (e.animTick === 0) {
+        v.anim.update(e.animAcc, { pos: e.pos, yaw: e.yaw, pitch: e.pitch, vel: e.vel, grounded: e.grounded });
+        e.animAcc = 0;
+      }
       v.root.rotation.y = e.yaw + v.anim.yawOffset;
       // remote land/jump inferred from state
       if (!e.isLocal) {

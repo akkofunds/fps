@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { Rig, B } from './rig.js';
 import { Animator } from './animator.js';
+import { MeshoptSimplifier } from 'meshoptimizer/meshopt_simplifier.module.js';
 
 // Loads a rigged mage GLB once and hands out independent instances (own skeleton + animator).
 const cache = new Map();
@@ -11,13 +12,37 @@ export function loadMageModel(url) {
   if (!/^(\/|https?:)/.test(url)) url = (import.meta.env.BASE_URL || '/') + url;
   if (!cache.has(url)) {
     cache.set(url, new Promise((resolve, reject) => {
-      new GLTFLoader().load(url, (g) => {
+      new GLTFLoader().load(url, async (g) => {
         prepareMaterials(g.scene);
+        try { await buildLods(g.scene); } catch (e) { console.warn('LOD build failed', e); }
         resolve(g.scene);
       }, undefined, reject);
     }));
   }
   return cache.get(url);
+}
+
+// Low-poly LOD per mesh (meshoptimizer keeps the original vertices, only the index buffer changes,
+// so skinning attributes stay valid). Shared by every instance; swapped in by distance / on Low.
+const LOD = new WeakMap();
+async function buildLods(root) {
+  await MeshoptSimplifier.ready;
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry.index) return;
+    const g = o.geometry;
+    const idx = new Uint32Array(g.index.array);
+    if (idx.length < 3000) return;
+    const pos = g.attributes.position;
+    const P = pos.array instanceof Float32Array && pos.itemSize === 3 && !pos.isInterleavedBufferAttribute ? pos.array : Float32Array.from({ length: pos.count * 3 }, (_, i) => pos.getComponent(Math.floor(i / 3), i % 3));
+    const ratio = /hair|outline|stroke/i.test(o.name) ? 0.22 : 0.3;
+    const [lo] = MeshoptSimplifier.simplify(idx, P, 3, Math.floor((idx.length * ratio) / 3) * 3, 0.03, ['LockBorder']);
+    if (!lo.length || lo.length > idx.length * 0.85) return;
+    const lg = new THREE.BufferGeometry();
+    for (const [k, v] of Object.entries(g.attributes)) lg.setAttribute(k, v);
+    lg.setIndex(new THREE.BufferAttribute(lo, 1));
+    lg.boundingSphere = g.boundingSphere; lg.boundingBox = g.boundingBox;
+    LOD.set(g, lg);
+  });
 }
 
 function prepareMaterials(root) {
@@ -65,7 +90,10 @@ export class MageInstance {
     this.rig = new Rig(this.model);
     this.anim = new Animator(this.rig, opts);
     this.meshes = [];
-    this.model.traverse((o) => { if (o.isMesh) { this.meshes.push(o); o.receiveShadow = false; } });
+    this.model.traverse((o) => { if (o.isMesh) { this.meshes.push(o); o.receiveShadow = false; if (o.userData.outline && opts.outlines === false) o.visible = false; } });
+    this.baseGeo = this.meshes.map((m) => m.geometry);
+    this.lod = false;
+    if (opts.lowPoly) this.setLod(true);
     this.handR = this.rig.bones[B.handR];
     this.handL = this.rig.bones[B.handL];
     this.head = this.rig.bones[B.head];
@@ -81,6 +109,13 @@ export class MageInstance {
   }
 
   setVisible(v) { this.root.visible = v; }
+
+  // swap to the simplified meshes (far away, or always on Low)
+  setLod(on) {
+    if (on === this.lod) return;
+    this.lod = on;
+    this.meshes.forEach((m, i) => { const b = this.baseGeo[i]; m.geometry = on ? (LOD.get(b) || b) : b; });
+  }
 
   // own (non-shared) materials so per-player flashes don't leak
   uniqueMaterials() {

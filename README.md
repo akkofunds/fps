@@ -44,10 +44,17 @@ host, an animation viewer, an FPS/draw-call meter, a custom PeerJS server settin
 **This check runs in the browser, so it is not real security.** Anyone who reads the JavaScript can find the
 code and the answer. It only keeps casual visitors out.
 
-## Graphics
-Presets: Low, Medium, High and **Ultra** (2× supersampling, so 4K on a 1080p screen, 8× MSAA, ambient
-occlusion, 4096 px shadows). The Render resolution setting goes up to 200%. Medium and higher add bloom,
-MSAA and colour grading.
+## Graphics & performance
+Every preset uses **dynamic resolution**: the game measures its frame rate and lowers or raises the render
+resolution to hold 60 FPS. You can turn this off in Settings.
+- **Low** is tuned for Chromebooks such as the Lenovo 500e: no shadows or post-processing, a coarse terrain
+  mesh, a short grass draw distance, low-poly character LODs, no outlines, a capped particle size and 1
+  dynamic light.
+- **Medium** and **High** add shadows, bloom, colour grading and MSAA.
+- **Ultra** adds supersampling (up to 4K on a 1080p screen), ambient occlusion and 4096 px shadows.
+
+On every preset, grass, flower and bush chunks are culled by distance, and characters past 30 m switch to
+meshoptimizer-simplified meshes. Distant or off-screen characters also animate at a lower rate.
 
 ## Animation
 Both models came as static meshes. `tools/characters/rig_pyro.py` auto-rigs Pyro (22 bones, per-part

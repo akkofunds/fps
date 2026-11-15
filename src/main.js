@@ -35,7 +35,7 @@ function detectQuality() {
     const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
     const r = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
     if (/swiftshader|llvmpipe|software|mali|adreno|powervr|apple gpu/i.test(r) || /Android|iPhone|iPad|CrOS/i.test(navigator.userAgent)) return 'low';
-    if (/intel|iris|uhd|hd graphics/i.test(r)) return 'medium';
+    if (/intel|iris|uhd|hd graphics|radeon\(tm\) graphics|vega/i.test(r)) return 'medium';
     return 'high';
   } catch { return 'medium'; }
 }
@@ -63,7 +63,9 @@ class App {
     this.settings = loadSettings();
     if (!QUALITY[this.settings.quality]) this.settings.quality = detectQuality();
     const Q = QUALITY[this.settings.quality];
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance', stencil: false });
+    // low (Chromebooks): no MSAA on the default framebuffer — it's a big fill-rate cost on iGPUs
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: this.settings.quality !== 'low', powerPreference: 'high-performance', stencil: false });
+    this.dynScale = 1; this._perf = { t: 0, n: 0, good: 0, cool: 0 };
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -148,7 +150,8 @@ class App {
       this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 12 });
       this.composer.addPass(this.gtao);
     }
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(this.width / 2, this.height / 2), 0.55, 0.5, 0.9);
+    this.bloomDiv = this.settings.quality === 'medium' ? 4 : 2;
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(this.width / this.bloomDiv, this.height / this.bloomDiv), 0.55, 0.5, 0.9);
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GRADE);
     this.composer.addPass(this.grade);
@@ -191,7 +194,7 @@ class App {
     this.width = w; this.height = h; this.aspect = w / h;
     this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.setSize(w, h, true);
-    if (this.composer) { this.composer.setPixelRatio(this.renderer.getPixelRatio()); this.composer.setSize(w, h); this.bloom.resolution.set(w / 2, h / 2); }
+    if (this.composer) { this.composer.setPixelRatio(this.renderer.getPixelRatio()); this.composer.setSize(w, h); this.bloom.resolution.set(w / this.bloomDiv, h / this.bloomDiv); }
     this.touch && this.touch.setActive(!!this.match && this.input.mode === 'touch' && !this.paused);
     // keep the 3D mage centred in the visible lobby area (social sidebar may be hidden)
     const soc = document.getElementById('social');
@@ -218,14 +221,37 @@ class App {
   // supersamples up to 2× — a 1080p screen renders at 4K and downsamples, so nothing looks pixelated
   pixelRatio() {
     const dpr = window.devicePixelRatio || 1;
-    const q = this.settings.quality;
+    const Q = QUALITY[this.settings.quality] || QUALITY.medium;
     const scale = Number(this.settings.renderScale) || 0;
-    if (scale > 0) return Math.min(3, scale * dpr);
-    if (q === 'ultra') return Math.min(2.5, Math.max(2, dpr));
-    if (q === 'high') return Math.min(dpr, 2);
-    if (q === 'medium') return Math.min(dpr, 1.5);
-    // phones: crisp but bounded (their GPUs fill-rate limit hard above ~1.5×)
-    return Math.min(dpr, this.input.mode === 'touch' ? 1.5 : 1.25);
+    // base: native resolution up to the preset's cap (manual "Render resolution" overrides it)
+    let base = scale > 0 ? scale * dpr : Math.min(dpr, Q.dpr);
+    if (this.settings.quality === 'ultra' && !scale) base = Math.max(base, 2);
+    // dynamic resolution: drops when the GPU can't hold 60 FPS, climbs back when it can
+    return Math.max(0.5, Math.min(3, base * this.dynScale));
+  }
+
+  // Dynamic resolution scaling. Measures real frame rate over ~0.7 s windows; below 55 FPS the
+  // render resolution steps down (to the preset's floor), sustained 59+ FPS steps it back up.
+  _dynRes(dt) {
+    if (this.settings.dynamicRes === false) return;
+    const p = this._perf;
+    p.t += dt; p.n++;
+    if (p.t < 0.7) return;
+    const fps = p.n / p.t; p.t = 0; p.n = 0;
+    if (document.hidden) return;
+    const Q = QUALITY[this.settings.quality] || QUALITY.medium;
+    p.cool = Math.max(0, p.cool - 1);
+    let next = this.dynScale;
+    if (fps < 55 && this.dynScale > Q.minScale) { next = Math.max(Q.minScale, this.dynScale * (fps < 40 ? 0.8 : 0.9)); p.good = 0; p.cool = 6; }
+    else if (fps >= 59) { p.good++; if (p.good >= 4 && p.cool === 0 && this.dynScale < 1) { next = Math.min(1, this.dynScale * 1.06); p.good = 0; } }
+    else p.good = 0;
+    if (Math.abs(next - this.dynScale) > 0.005) { this.dynScale = next; this.resize(); }
+    // still slow at the resolution floor → suggest a lighter preset (once per session)
+    if (fps < 45 && this.dynScale <= Q.minScale + 0.01) {
+      p.slow = (p.slow || 0) + 1;
+      if (p.slow === 4 && !this._slowHint && this.settings.quality !== 'low') { this._slowHint = true; toast('Running slow — try a lower Graphics quality in Settings (Low is tuned for Chromebooks).', 6000); }
+    } else p.slow = 0;
+    this.lastFps = fps;
   }
 
   pause(on) {
@@ -299,6 +325,7 @@ class App {
     const t = tMs / 1000;
     const dt = Math.min(0.05, Math.max(0.001, t - this.lastT));
     this.lastT = t;
+    this._dynRes(dt);
     if (this.match) {
       this.match.update(dt);
       if (this.match) { this.touch.update(this.match); this.match.render(); }

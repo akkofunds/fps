@@ -7,7 +7,7 @@ import { mulberry32, smoothstep } from './noise.js';
 
 export const WIND = { uTime: { value: 0 }, uPush: { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, -999, 0, 0.9)) } };
 
-function windPatch(material, strength = 1, push = true) {
+function windPatch(material, strength = 1, push = true, pushers = 8) {
   material.onBeforeCompile = (sh) => {
     // blades are lit like the ground on both faces (no dark back faces)
     sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
@@ -31,7 +31,7 @@ function windPatch(material, strength = 1, push = true) {
         float w = sin(uTime * 1.7 + root.x * 0.23 + root.z * 0.17) * 0.5 + sin(uTime * 2.9 + root.x * 0.61 - root.z * 0.43) * 0.25;
         float gust = smoothstep(0.1, 1.0, sin(uTime * 0.37 + root.x * 0.045 + root.z * 0.03));
         vec2 bend = vec2(0.82, 0.5) * (w * 0.1 + gust * 0.22) * ${strength.toFixed(2)};
-        ${push ? `for (int i = 0; i < 8; i++) {
+        ${push ? `for (int i = 0; i < ${pushers}; i++) {
           vec3 d = root - uPush[i].xyz; float dd = length(d.xz);
           float infl = (1.0 - smoothstep(0.0, uPush[i].w, dd)) * step(abs(d.y), 1.6);
           bend += (d.xz / max(dd, 0.001)) * infl * 0.75;
@@ -107,14 +107,14 @@ export function grassAllowed(x, z, avoid) {
   return d;
 }
 
-export function buildGrass(count, avoid) {
+export function buildGrass(count, avoid, Q = {}) {
   const group = new THREE.Group();
   group.name = 'grass';
-  const geo = tuftGeometry(4);
+  const geo = tuftGeometry(Q.blades || 4);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  windPatch(mat, 1, true);
+  windPatch(mat, 1, true, Q.pushers || 8);
   const R = PLAY_RADIUS + 26;
-  const CH = 22;
+  const CH = 14; // small chunks → tight frustum + distance culling
   const chunks = new Map();
   const rnd = mulberry32(42);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), nrm = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
@@ -152,7 +152,7 @@ export function buildGrass(count, avoid) {
   return group;
 }
 
-export function buildFlowers(count, avoid) {
+export function buildFlowers(count, avoid, Q = {}) {
   const group = new THREE.Group();
   group.name = 'flowers';
   const tints = [new THREE.Color(1, 1, 0.96), new THREE.Color(1, 0.84, 0.2), new THREE.Color(0.66, 0.46, 1), new THREE.Color(1, 0.36, 0.3), new THREE.Color(0.45, 0.65, 1)];
@@ -174,14 +174,24 @@ export function buildFlowers(count, avoid) {
     per[t].push(m4.clone());
     n++;
   }
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  windPatch(mat, 0.8, true, Q.pushers || 8);
+  const pos = new THREE.Vector3();
   per.forEach((list, i) => {
     if (!list.length) return;
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-    windPatch(mat, 0.8, true);
-    const im = new THREE.InstancedMesh(flowerGeometry(tints[i]), mat, list.length);
-    list.forEach((mm, k) => im.setMatrixAt(k, mm));
-    im.computeBoundingSphere();
-    group.add(im);
+    const geo = flowerGeometry(tints[i]);
+    const chunks = new Map();
+    for (const mm of list) {
+      pos.setFromMatrixPosition(mm);
+      const key = Math.floor(pos.x / 24) + ',' + Math.floor(pos.z / 24);
+      let c = chunks.get(key); if (!c) chunks.set(key, c = []); c.push(mm);
+    }
+    for (const c of chunks.values()) {
+      const im = new THREE.InstancedMesh(geo, mat, c.length);
+      c.forEach((mm, k) => im.setMatrixAt(k, mm));
+      im.computeBoundingSphere();
+      group.add(im);
+    }
   });
   return group;
 }

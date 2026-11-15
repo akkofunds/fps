@@ -51,10 +51,13 @@ function drape(mesh, x, z, lift = 0.06, world = null) {
 }
 
 export class Fx {
-  constructor(scene, world, nLights = 4) {
+  constructor(scene, world, nLights = 4, maxParticles = 9000) {
     this.scene = scene; this.world = world;
-    this.fire = new ParticlePool(9000, true);
-    this.smoke = new ParticlePool(1800, false);
+    this.fire = new ParticlePool(maxParticles, true);
+    this.smoke = new ParticlePool(Math.round(maxParticles / 5), false);
+    // cheap GPUs: cap sprite size (overdraw from huge additive sprites is the real cost)
+    const cap = maxParticles <= 3000 ? 70 : maxParticles <= 5000 ? 140 : 400;
+    this.fire.mat.uniforms.uMax.value = cap; this.smoke.mat.uniforms.uMax.value = cap;
     scene.add(this.smoke.points); scene.add(this.fire.points);
     this.t = 0;
     this.shakeAmt = 0;
@@ -77,6 +80,7 @@ export class Fx {
 
   // ---------------------------------------------------------------- primitives
   light(pos, intensity, dist, life, color = 0xff7a2a) {
+    if (!this.lights.length) return this._noLight || (this._noLight = { position: new THREE.Vector3(), color: new THREE.Color(), distance: 0, intensity: 0, userData: { life: 0, max: 1, peak: 0 } });
     let l = this.lights.find((x) => x.userData.life <= 0) || this.lights.reduce((a, b) => (a.userData.life < b.userData.life ? a : b));
     l.position.copy(pos); l.color.set(color); l.distance = dist;
     l.userData.life = life; l.userData.max = life; l.userData.peak = intensity; l.intensity = intensity;
