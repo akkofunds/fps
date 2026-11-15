@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeNoise, smoothstep } from './noise.js';
+import { stylize } from './stylize.js';
 
 // Sunvale Meadow heightfield: gentle rolling meadow inside a ring of grassy hills, a shallow
 // lake, a hill with a ruined watchtower and a flattened stone plaza in the middle.
@@ -166,7 +167,7 @@ export function buildTerrain(step = 1) {
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   g.computeVertexNormals();
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: detailTexture() });
+  const mat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, map: detailTexture() }), { wrap: 0.35, band: 0.1 });
   const mesh = new THREE.Mesh(g, mat);
   mesh.receiveShadow = true;
   mesh.name = 'terrain';

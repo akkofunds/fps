@@ -5,6 +5,8 @@ import { buildWater } from './water.js';
 import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
 import { buildProps, treeTime } from './props.js';
 import { CollisionWorld } from './collision.js';
+import { buildVillage } from './village.js';
+import { STYLE } from './stylize.js';
 
 // Sunvale Meadow: assembles the scene, lighting and collision for a quality level.
 // Budgets per preset. "low" is tuned for Chromebooks (Lenovo 500e: Celeron + UHD 600) at 60 FPS:
@@ -47,6 +49,7 @@ export class GameMap {
     this.Q = Q;
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
+    this.village = buildVillage(); s.add(this.village);
     this.props = buildProps(this.world, quality, Q); s.add(this.props);
     const avoid = this.props.userData.avoid;
     this.grass = buildGrass(Q.grass, avoid, Q); s.add(this.grass);
@@ -113,7 +116,8 @@ export class GameMap {
   // focus = camera target (shadows follow it)
   update(dt, camera, focus, pushers) {
     this.time += dt;
-    WIND.uTime.value = this.time; treeTime.value = this.time;
+    WIND.uTime.value = this.time; treeTime.value = this.time; STYLE.uTime.value = this.time;
+    this.village.userData.update(this.time);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);
     this.water.material.uniforms.uTime.value = this.time;

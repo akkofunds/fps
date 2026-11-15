@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeNoise } from './noise.js';
+import { stylize } from './stylize.js';
 
 // Golden-hour sky dome: gradient, sun disc + glow, two layers of drifting fBm clouds.
 // Also the distant mountain ring that sits in the haze behind the meadow hills.
@@ -88,7 +89,7 @@ export function buildMountains() {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx); g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  const m = new THREE.Mesh(g, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.5, band: 0.1 }));
   m.name = 'mountains';
   return m;
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { groundH, groundNormal, grassColorAt, pathDist, PLAZA, lakeWaterDepth, PLAY_RADIUS, HILL, terrainNoise as N } from './terrain.js';
 import { mulberry32, smoothstep } from './noise.js';
+import { stylize } from './stylize.js';
 
 // Instanced grass tufts and wildflowers with a shared wind + trample shader patch.
 // Grass is split into chunks so the renderer frustum-culls most of it.
@@ -113,6 +114,7 @@ export function buildGrass(count, avoid, Q = {}) {
   const geo = tuftGeometry(Q.blades || 4);
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   windPatch(mat, 1, true, Q.pushers || 8);
+  stylize(mat, { wrap: 0.5, translucency: 0.2, band: 0.12 });
   const R = PLAY_RADIUS + 26;
   const CH = 14; // small chunks → tight frustum + distance culling
   const chunks = new Map();
@@ -176,6 +178,7 @@ export function buildFlowers(count, avoid, Q = {}) {
   }
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   windPatch(mat, 0.8, true, Q.pushers || 8);
+  stylize(mat, { wrap: 0.5, translucency: 0.2 });
   const pos = new THREE.Vector3();
   per.forEach((list, i) => {
     if (!list.length) return;
@@ -209,7 +212,7 @@ function bushGeometry(seed) {
     for (let k = 0; k < p.count; k++) { const s = 1 + (r() - 0.5) * 0.25; p.setXYZ(k, p.getX(k) * s, p.getY(k) * s * 0.8, p.getZ(k) * s); }
     const a = r() * 6.28, d = i === 0 ? 0 : 0.25 + r() * 0.35;
     g.translate(Math.cos(a) * d, 0.32 + r() * 0.35, Math.sin(a) * d);
-    parts.push(g.toNonIndexed());
+    parts.push(g.index ? g.toNonIndexed() : g);
   }
   let pos = [], nrm = [], col = [];
   for (const g of parts) { pos.push(...g.attributes.position.array); nrm.push(...g.attributes.normal.array); }
@@ -260,8 +263,10 @@ export function buildBushes(count, anchors, avoid) {
   const rnd = mulberry32(909);
   const bushMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   windPatch(bushMat, 0.35, false);
+  stylize(bushMat, { wrap: 0.5, translucency: 0.2, band: 0.14 });
   const fernMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   windPatch(fernMat, 0.7, true);
+  stylize(fernMat, { wrap: 0.5, translucency: 0.2 });
   const defs = [bushGeometry(1), bushGeometry(2), bushGeometry(3)];
   const lists = defs.map(() => []), ferns = [];
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);

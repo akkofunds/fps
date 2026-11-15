@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { groundH, PLAZA, HILL, LAKE, PLAY_RADIUS, pathDist, terrainNoise as N } from './terrain.js';
 import { mulberry32 } from './noise.js';
 import { windPatch } from './vegetation.js';
+import { stylize } from './stylize.js';
+import { VILLAGE_FOOTPRINTS } from './village.js';
 
 // Ruins (stone plaza, broken pillars, watchtower, arches, walls), trees, rocks and logs.
 // Everything is merged / instanced and registers simple colliders in the CollisionWorld.
@@ -96,7 +98,7 @@ class Builder {
   finish() {
     const g = mergeGeometries(this.stone, false);
     g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: stoneTexture() }));
+    const m = new THREE.Mesh(g, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: stoneTexture() }), { wrap: 0.3, band: 0.14 }));
     m.castShadow = true; m.receiveShadow = true; m.name = 'ruins';
     return m;
   }
@@ -162,7 +164,25 @@ function treeColors(def, kind) {
     c.multiplyScalar(0.9 + N.n2(x * 1.5 + y, z * 1.5) * 0.14);
   });
   def.trunk.computeVertexNormals(); def.leaves.computeVertexNormals();
+  canopyNormals(def.leaves, kind === 'pine' ? 0.35 : 0.72);
   return def;
+}
+
+// "fluffy" stylized canopies: bend the faceted leaf normals toward the direction from the canopy
+// center, so each tree shades like one soft, round volume (light side / shadow side) instead of a
+// pile of facets. Pines keep more of their own normals so the tiers still read.
+function canopyNormals(g, k) {
+  g.computeBoundingBox();
+  const c = g.boundingBox.getCenter(new THREE.Vector3());
+  const ext = g.boundingBox.getSize(new THREE.Vector3());
+  const p = g.attributes.position, n = g.attributes.normal, v = new THREE.Vector3(), f = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.set((p.getX(i) - c.x) / ext.x, (p.getY(i) - c.y) / ext.y * 0.8 + 0.12, (p.getZ(i) - c.z) / ext.z).normalize();
+    f.set(n.getX(i), n.getY(i), n.getZ(i));
+    f.lerp(v, k).normalize();
+    n.setXYZ(i, f.x, f.y, f.z);
+  }
+  n.needsUpdate = true;
 }
 
 function leafMaterial() {
@@ -278,6 +298,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
     }
   }
   const ruins = B.finish();
+  B.avoid.push(...VILLAGE_FOOTPRINTS);
   root.add(ruins);
 
   // ---------------- trees
@@ -288,8 +309,8 @@ export function buildProps(world, quality = 'high', Q = {}) {
   const kinds = { oak: [oakGeometry(11), oakGeometry(23)], pine: [pineGeometry(5), pineGeometry(8)], birch: [birchGeometry(3)] };
   for (const [k, defs] of Object.entries(kinds)) defs.forEach((d) => treeColors(d, k));
   const placements = [];
-  const trunkMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const leafMat = leafMaterial();
+  const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 });
+  const leafMat = stylize(leafMaterial(), { wrap: 0.55, translucency: 0.25, band: 0.16 });
   const tryTree = (x, z, kind, scale, collide) => {
     if (Math.hypot(x, z) < PLAZA.r + 3) return false;
     if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 1.5) return false;
@@ -344,7 +365,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
 
   // ---------------- rocks
   const rockDefs = [rockGeometry(1), rockGeometry(2), rockGeometry(3)];
-  const rockMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const rockMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.3, band: 0.12 });
   const rocks = rockDefs.map(() => []);
   const addRock = (x, z, s, collide) => {
     if (Math.hypot(x, z) < PLAZA.r + 1.5 || avoidFn(x, z) || pathDist(x, z) < 1.5) return;
@@ -380,7 +401,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
     B.avoid.push({ x, z, r: len * 0.5 });
   }
   const lg = mergeGeometries(logGeo); lg.computeVertexNormals();
-  const logMesh = new THREE.Mesh(lg, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  const logMesh = new THREE.Mesh(lg, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 }));
   logMesh.castShadow = true; logMesh.receiveShadow = true;
   root.add(logMesh);
 
