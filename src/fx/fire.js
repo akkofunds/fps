@@ -175,7 +175,7 @@ export class Fx {
     this.shake(0.15);
   }
   // feet flame jets while flying from a leap
-  jet(p) { this.fire.emit(p.x + (R() - 0.5) * 0.1, p.y, p.z + (R() - 0.5) * 0.1, (R() - 0.5) * 0.6, -4 - R() * 2, (R() - 0.5) * 0.6, 0.2 + R() * 0.15, 0.35, 0.08, HOT, EMBER, 2, 0); }
+  jet(p) { if (R() < 0.5) this.fire.emit(p.x + (R() - 0.5) * 0.1, p.y, p.z + (R() - 0.5) * 0.1, (R() - 0.5) * 0.6, -4 - R() * 2, (R() - 0.5) * 0.6, 0.18 + R() * 0.12, 0.2, 0.05, FLAME, EMBER, 2, 0); }
   dashTrail(p) {
     for (let i = 0; i < 4; i++) this.fire.emit(p.x + (R() - 0.5) * 0.4, p.y + 0.2 + R() * 1.4, p.z + (R() - 0.5) * 0.4, (R() - 0.5) * 0.4, 0.4 + R() * 0.6, (R() - 0.5) * 0.4, 0.3 + R() * 0.2, 0.3, 0.04, FLAME, DARK, 2, 1);
   }

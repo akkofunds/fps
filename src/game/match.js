@@ -80,6 +80,8 @@ export class Match {
     this.scene = this.map.scene; this.world = this.map.world;
     this.camera = new THREE.PerspectiveCamera(app.settings.fov, app.aspect, 0.08, 3000);
     this.fx = new Fx(this.scene, this.world);
+    // without bloom, additive HDR fire saturates to white; tone it down
+    if (!app.composer) this.fx.fire.mat.uniforms.uGain.value = 0.55;
     this.proj = new Projectiles(this);
     const template = await loadMageModel(PYRO.model);
     const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);

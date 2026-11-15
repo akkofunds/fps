@@ -16,11 +16,12 @@ const VERT = /* glsl */`
   }`;
 const FRAG_ADD = /* glsl */`
   varying vec4 vColor; varying float vSeed;
+  uniform float uGain;
   void main(){
     vec2 p = gl_PointCoord - 0.5;
     float d = length(p);
     float core = smoothstep(0.5, 0.0, d);
-    float a = core * core * vColor.a;
+    float a = core * core * vColor.a * uGain;
     gl_FragColor = vec4(vColor.rgb * a, a);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -54,7 +55,7 @@ export class ParticlePool {
     g.setAttribute('position', this.aPos); g.setAttribute('acolor', this.aCol); g.setAttribute('asize', this.aSize); g.setAttribute('aseed', this.aSeed);
     g.setDrawRange(0, 0);
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { uScale: { value: 400 } },
+      uniforms: { uScale: { value: 400 }, uGain: { value: 1 } },
       vertexShader: VERT, fragmentShader: additive ? FRAG_ADD : FRAG_SMOKE,
       transparent: true, depthWrite: false,
       blending: additive ? THREE.CustomBlending : THREE.NormalBlending,
