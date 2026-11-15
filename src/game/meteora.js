@@ -1,4 +1,4 @@
-import { BAL } from './balance.js';
+import { BAL, ADMIN } from './balance.js';
 import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ } from './projectiles.js';
@@ -54,7 +54,7 @@ export class MeteoraKit {
     for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
     this.busy = Math.max(0, this.busy - dt);
     this.addUlt(dt * 0.35 * BAL.ult);
-    if (BAL.infiniteUlt) this.ult = Math.max(this.ult, 100);
+    if (BAL.infiniteUlt || ADMIN.ult) this.ult = Math.max(this.ult, 100);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const p = this.pending[i];
       p.t -= dt;
@@ -147,13 +147,13 @@ export class MeteoraKit {
     if (this.busy > 0) return;
     const target = this._groundTarget(NOVA.range);
     this.ult = 0; this.ultReadyAnnounced = false;
-    this.busy = NOVA.channel + NOVA.exhausted;
+    this.busy = ADMIN.ult ? NOVA.channel : NOVA.channel + NOVA.exhausted;
     m.body.locked = NOVA.channel + 0.2;
     m.playAnim('nova');
     const me = m.local.pos;
     m.castAbility({ ab: 'nova', c: [target.x, target.y, target.z], o: [me.x, me.y, me.z] });
     // the price of the spell
-    this.pending.push({ t: NOVA.channel + 0.15, fn: () => {
+    if (!ADMIN.ult) this.pending.push({ t: NOVA.channel + 0.15, fn: () => {
       m.playAnim('exhausted');
       m.body.locked = NOVA.exhausted;
       m.app.hud.banner('EXHAUSTED', 'YOU CANNOT MOVE', 2.5, 'kill');

@@ -1,5 +1,5 @@
 import { $, el, show, toast } from './dom.js';
-import { DEFAULT_BALANCE, loadBalance, saveBalance } from '../game/balance.js';
+import { DEFAULT_BALANCE, loadBalance, saveBalance, ADMIN } from '../game/balance.js';
 import { MAGE_LIST } from '../game/mages.js';
 import { Audio } from '../core/audio.js';
 
@@ -19,6 +19,12 @@ export function isAdminRoute() {
   return /\/admin\/?$/.test(location.pathname) || location.hash === '#admin' || new URLSearchParams(location.search).has('admin');
 }
 export function isAdmin() { try { return sessionStorage.getItem(SESSION_KEY) === '1'; } catch { return false; } }
+// admin perk: ultimate always ready (on by default once unlocked; toggle in the panel)
+export function syncAdminPerks() {
+  let pref = '1';
+  try { pref = localStorage.getItem('magebreak.adminUlt') ?? '1'; } catch { /* ignore */ }
+  ADMIN.ult = isAdmin() && pref !== '0';
+}
 
 export class AdminPanel {
   constructor(app) {
@@ -68,6 +74,7 @@ export class AdminPanel {
       Audio.play('ui');
       if (step === 1) { this.renderGate(2); return; }
       try { sessionStorage.setItem(SESSION_KEY, '1'); } catch { /* ignore */ }
+      syncAdminPerks();
       toast('Admin unlocked for this tab.');
       this.renderPanel();
     });
@@ -115,6 +122,11 @@ export class AdminPanel {
       i.onchange = () => { bal[key] = i.checked; saveBalance(bal); };
       l.appendChild(i); l.appendChild(document.createTextNode(' ' + label)); s1.appendChild(l);
     };
+    // admin perk (all modes, this browser tab only)
+    const au = el('label', 'ap-chk'); const ai = el('input'); ai.type = 'checkbox'; ai.checked = ADMIN.ult;
+    ai.onchange = () => { try { localStorage.setItem('magebreak.adminUlt', ai.checked ? '1' : '0'); } catch { /* ignore */ } syncAdminPerks(); toast(ai.checked ? 'Admin: X ultimate always ready.' : 'Admin ultimate perk off.'); };
+    au.appendChild(ai); au.appendChild(document.createTextNode(' ADMIN: X ultimate always ready — no charge, no cooldown (every mode)'));
+    s1.appendChild(au);
     chk('noCooldowns', 'No cooldowns');
     chk('infiniteUlt', 'Infinite ultimate');
     chk('godMode', 'God mode (Practice only)');
@@ -169,7 +181,7 @@ export class AdminPanel {
     tool('START PRACTICE', () => { this.close(); app.session.startPractice(); });
     tool('CLEAR MATCH HISTORY', () => { localStorage.removeItem('magebreak.history'); app.lobby.renderCareer(); toast('History cleared.'); });
     tool('CLEAR RECENT PLAYERS', () => { localStorage.removeItem('magebreak.recent'); app.lobby.renderSocial(); toast('Recent players cleared.'); });
-    tool('LOCK ADMIN', () => { try { sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } this.close(); toast('Admin locked.'); });
+    tool('LOCK ADMIN', () => { try { sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } syncAdminPerks(); this.close(); toast('Admin locked.'); });
     s5.appendChild(trow);
 
     r.appendChild(p);

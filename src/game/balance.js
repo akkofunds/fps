@@ -17,6 +17,10 @@ export const DEFAULT_BALANCE = {
 
 export const BAL = { ...DEFAULT_BALANCE };
 
+// Admin perks for the unlocked admin client (set from main/admin panel). ult: ultimate always
+// ready — no charge, no cooldown, no exhaustion — in every mode.
+export const ADMIN = { ult: false };
+
 const KEY = 'magebreak.balance';
 export function loadBalance() {
   try { return { ...DEFAULT_BALANCE, ...(JSON.parse(localStorage.getItem(KEY) || '{}')) }; } catch { return { ...DEFAULT_BALANCE }; }
