@@ -31,6 +31,7 @@ function segSeg(p1, q1, p2, q2) {
 export const PROJ = {
   bolt: { speed: 58, grav: 0, radius: 0.16, life: 1.3, dmg: 18, head: 1.5 },
   orb: { speed: 33, grav: 7, radius: 0.38, life: 3, dmg: 20, head: 1 },
+  spark: { speed: 46, grav: 0, radius: 0.2, life: 1.6, dmg: 16, head: 1.5 },
 };
 
 // character hit test: body capsule + head sphere. returns {s, head} or null
@@ -89,11 +90,13 @@ export class Projectiles {
       }
       p.pos.copy(end);
       if (p.age > p.def.life) {
-        if (p.kind === 'orb') this._impact(p, p.pos, null, false); else m.fx.hitSpark(p.pos);
+        if (p.kind === 'orb' || p.kind === 'spark') this._impact(p, p.pos, null, false); else m.fx.hitSpark(p.pos);
         this.list.splice(i, 1); continue;
       }
       // trail
-      if (p.kind === 'bolt') m.fx.boltTrail(p.pos, p.vel); else m.fx.orbTrail(p.pos, p.vel, p.age);
+      if (p.kind === 'bolt') m.fx.boltTrail(p.pos, p.vel);
+      else if (p.kind === 'spark') m.fx.sparkTrail(p.pos, p.vel);
+      else m.fx.orbTrail(p.pos, p.vel, p.age);
     }
   }
 
@@ -103,12 +106,19 @@ export class Projectiles {
       m.fx.hitSpark(pos);
       m.sound('boltHit', pos, 0.7, 22);
       if (p.local && target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'bolt', { head, at: pos });
+    } else if (p.kind === 'spark') {
+      m.fx.sparkBurst(pos, 2.2);
+      m.sound('boltHit', pos, 0.8, 24);
+      if (p.local) {
+        if (target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'spark', { head, at: pos });
+        m.areaDamage(pos, 2.2, 10, 5, 'spark', { skip: target });
+      }
     } else {
       m.fx.explosion(pos, 4.2, 1);
       m.sound('explode', pos, 1, 40);
       if (p.local) {
         if (target) m.reportHit(target, p.def.dmg, 'orb', { at: pos, direct: true });
-        m.areaDamage(pos, 4.2, 40, 12, 'orb', { burn: [5, 3], kb: 5, skip: null });
+        m.areaDamage(pos, 4.2, 40, 12, 'orb', { burn: [5, 3], kb: 5 });
       }
     }
   }

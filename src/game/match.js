@@ -3,12 +3,13 @@ import { MODES, MAX_HP, NET_HZ, INTERP_DELAY } from '../config.js';
 import { Audio } from '../core/audio.js';
 import { addRecent } from '../core/storage.js';
 import { groundH } from '../world/terrain.js';
-import { Fx } from '../fx/fire.js';
+import { Fx } from '../fx/arcane.js';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
 import { Body, stepMovement } from './movement.js';
 import { ShoulderCamera } from './camera.js';
 import { Projectiles, hitCharacter } from './projectiles.js';
-import { PyroKit, PYRO } from './pyro.js';
+import { mageOf } from './mages.js';
+import { NOVA } from './meteora.js';
 import { Rules } from './rules.js';
 
 // One match: world, entities, local control, network sync, abilities and rendering.
@@ -25,6 +26,7 @@ class Ent {
   constructor(p, isLocal) {
     this.n = p.n; this.id = p.id; this.name = p.name; this.tag = p.tag || '';
     this.isLocal = isLocal; this.dummy = !!p.dummy;
+    this.mage = p.mage && !p.dummy ? p.mage : 'pyro';
     this.alive = false; this.hp = MAX_HP;
     this.kills = 0; this.deaths = 0; this.dmg = 0;
     this.pos = new THREE.Vector3(0, -50, 0); this.vel = new THREE.Vector3();
@@ -83,7 +85,9 @@ export class Match {
     // without bloom, additive HDR fire saturates to white; tone it down
     if (!app.composer) this.fx.fire.mat.uniforms.uGain.value = 0.55;
     this.proj = new Projectiles(this);
-    const template = await loadMageModel(PYRO.model);
+    const templates = {};
+    for (const p of this.players) { const md = mageOf(p.mage); if (!templates[md.id]) templates[md.id] = await loadMageModel(md.model); }
+    if (!templates.pyro) templates.pyro = await loadMageModel(mageOf('pyro').model);
     const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);
     const list = [...this.players];
     if (this.cfg.mode === 'practice') {
@@ -91,7 +95,7 @@ export class Match {
     }
     for (const p of list) {
       const e = new Ent(p, p.id === this.localId);
-      e.view = new MageInstance(template, { groundAt }).uniqueMaterials();
+      e.view = new MageInstance(templates[mageOf(e.mage).id] || templates.pyro, { groundAt }).uniqueMaterials();
       if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
       e.view.setVisible(false);
       this.scene.add(e.view.root);
@@ -103,7 +107,9 @@ export class Match {
     this.cam = new ShoulderCamera(this.camera, this.world);
     this.cam.side = app.settings.shoulder || 1;
     this.cam.baseFov = app.settings.fov;
-    this.kit = new PyroKit(this);
+    this.mageDef = mageOf(this.local.mage);
+    this.kit = new this.mageDef.Kit(this);
+    this.sigils = new Map(); // owner n → [handles]
 
     if (this.isHost) this.rules = new Rules(this);
     addRecent(this.players.filter((p) => p.id !== this.localId && !p.dummy));
@@ -157,13 +163,15 @@ export class Match {
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
   areaDamage(c, radius, maxD, minD, ab, opts = {}) {
     for (const e of this.ents.values()) {
-      if (e === this.local || !e.alive) continue;
+      if (e === this.local || !e.alive || e === opts.skip) continue;
       const d = tmpV.set(e.pos.x - c.x, e.pos.y + 0.9 - c.y, e.pos.z - c.z).length();
       if (d > radius + 0.4) continue;
-      // line of sight from the blast to the body (walls/rocks shelter)
-      const dir = tmpV2.copy(tmpV).normalize();
-      const block = this.world.raycast(c.x, c.y + 0.3, c.z, dir.x, dir.y, dir.z, Math.max(0, d - 0.5), 0, null, true);
-      if (block < d - 0.6) continue;
+      // line of sight from the blast to the body (walls/rocks shelter) — the nova ignores cover
+      if (!opts.noCover) {
+        const dir = tmpV2.copy(tmpV).normalize();
+        const block = this.world.raycast(c.x, c.y + 0.3, c.z, dir.x, dir.y, dir.z, Math.max(0, d - 0.5), 0, null, true);
+        if (block < d - 0.6) continue;
+      }
       const k = Math.min(1, Math.max(0, d / radius));
       const dmg = Math.round(maxD + (minD - maxD) * k);
       const extra = { at: new THREE.Vector3(e.pos.x, e.pos.y + 1.4, e.pos.z) };
@@ -186,6 +194,72 @@ export class Match {
       case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
+      case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
+      case 'starfall': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.sound('meteorFall', c, 0.5, 40);
+        this.fx.starfall(c, 3.8, 0.75, () => {
+          this.sound('explode', c, 0.9, 40);
+          if (local) this.areaDamage(c, 3.8, 55, 20, 'starfall', { kb: 6 });
+        });
+        break;
+      }
+      case 'sigil': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        const h = this.fx.sigil(c, 1.9, 0.7);
+        h.id = d.id; h.owner = e.n; h.local = local;
+        const list = this.sigils.get(e.n) || [];
+        list.push(h);
+        while (list.length > 2) { const old = list.shift(); old.remove(); }
+        this.sigils.set(e.n, list);
+        this.sound('sigil', c, 0.7, 25);
+        break;
+      }
+      case 'sigilBoom': {
+        const list = this.sigils.get(e.n) || [];
+        const i = list.findIndex((h) => h.id === d.id);
+        const h = i >= 0 ? list.splice(i, 1)[0] : null;
+        const c = h ? h.pos : new THREE.Vector3().fromArray(d.c);
+        if (h) h.remove();
+        this.fx.explosion(c, 3.4, 1.3);
+        this.fx.sparkBurst(c, 3.4);
+        this.sound('explode', c, 1, 40);
+        if (local) this.areaDamage(c, 3.4, 65, 25, 'sigil', { kb: 4, up: 9 });
+        break;
+      }
+      case 'blink': {
+        const a = new THREE.Vector3().fromArray(d.o), b = new THREE.Vector3().fromArray(d.t);
+        this.fx.blinkFx(a, b);
+        this.fx.sparkBurst(new THREE.Vector3(a.x, a.y + 0.6, a.z), 3);
+        this.sound('blink', b, 0.8, 30);
+        if (local) this.areaDamage(new THREE.Vector3(a.x, a.y + 0.6, a.z), 3, 30, 15, 'blink', {});
+        if (!local) e.snaps.length = 0;
+        break;
+      }
+      case 'nova': {
+        const c = new THREE.Vector3().fromArray(d.c), o = new THREE.Vector3().fromArray(d.o);
+        this.sound('novaChant', o, 1.2, 120);
+        this.app.hud.novaWarning(c, NOVA.radius, e === this.local);
+        this.fx.nova(c, o, {
+          radius: NOVA.radius, channel: NOVA.channel,
+          onFlash: () => {
+            // everyone who can see it gets blinded for a moment
+            const dist = this.camera.position.distanceTo(c);
+            this.app.hud.flash(Math.max(0, Math.min(1, 1.3 - dist / 140)));
+            this.sound('novaBoom', c, 1.5, 300);
+          },
+          onImpact: () => {
+            if (local) this.areaDamage(c, NOVA.radius, NOVA.maxDmg, NOVA.minDmg, 'nova', { kb: 16, up: 12, noCover: true, burn: [8, 3] });
+            // the shockwave shoves the local player even outside the kill radius
+            const me = this.local;
+            if (me.alive && e !== me) {
+              const dx = me.pos.x - c.x, dz = me.pos.z - c.z, dl = Math.hypot(dx, dz);
+              if (dl < NOVA.radius * 2.2 && dl > 0.1) { const k = (1 - dl / (NOVA.radius * 2.2)) * 14; this.body.vel.x += dx / dl * k; this.body.vel.z += dz / dl * k; this.body.vel.y = Math.max(this.body.vel.y, k * 0.5); this.body.grounded = false; }
+            }
+          },
+        });
+        break;
+      }
       case 'leap': {
         const o = new THREE.Vector3().fromArray(d.o);
         this.fx.leapBlast(o);
@@ -261,6 +335,22 @@ export class Match {
           }
         }
         if (ar.t >= ar.life) this.areas.splice(i, 1);
+      }
+    }
+  }
+
+  _checkSigils() {
+    const mine = this.sigils.get(this.local.n);
+    if (!mine || !this.local.alive) return;
+    for (const h of mine) {
+      if (!h.armed || h.fired) continue;
+      for (const e of this.ents.values()) {
+        if (e === this.local || !e.alive) continue;
+        if (Math.hypot(e.pos.x - h.pos.x, e.pos.z - h.pos.z) < 2.0 && Math.abs(e.pos.y - h.pos.y) < 2) {
+          h.fired = true;
+          this.castAbility({ ab: 'sigilBoom', id: h.id, c: [h.pos.x, h.pos.y, h.pos.z] });
+          break;
+        }
       }
     }
   }
@@ -456,7 +546,8 @@ export class Match {
       // idle palm flame (+ leap jets)
       if (e.alive) {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
-        if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
+        if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
+        else if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
         if (this.body.dashT > 0 && e === this.local) this.fx.dashTrail(e.pos);
       }
     }
@@ -465,6 +556,7 @@ export class Match {
 
     this.proj.update(dt);
     this._updateAreas(dt);
+    this._checkSigils();
     // altar brazier
     this.fx.brazier(this.map.altar);
     const dA = this.camera.position.distanceTo(this.map.altar);
@@ -550,6 +642,7 @@ export class Match {
     for (const off of this._offs || []) off();
     for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);
     Audio.stopLoop('brazier');
+    for (const list of this.sigils.values()) for (const h of list) h.remove();
     this.fx.dispose();
     this.proj.clear();
     // the map is shared with the lobby: only remove what the match added

@@ -26,7 +26,9 @@ const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 export class PyroKit {
   constructor(match) {
     this.m = match;
+    this.def = PYRO;
     this.cd = { bolt: 0, orb: 0, wall: 0, leap: 0 };
+    this.max = { orb: 7, wall: 15, leap: 10 };
     this.ult = 0;
     this.side = 1; // alternating punch hand
     this.pending = [];
@@ -35,6 +37,7 @@ export class PyroKit {
   }
 
   reset() { this.cd = { bolt: 0, orb: 0, wall: 0, leap: 0 }; this.pending.length = 0; this.busy = 0; }
+  slots() { return [['orb', 'E'], ['wall', 'C'], ['leap', 'V'], ['meteor', 'X']]; }
   addUlt(v) {
     this.ult = Math.min(ULT_COST, this.ult + v);
     if (this.ult >= ULT_COST && !this.ultReadyAnnounced) { this.ultReadyAnnounced = true; this.m.onUltReady(); }

@@ -2,7 +2,7 @@ import { MAX_HP, REGEN_DELAY, REGEN_RATE, MODES } from '../config.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100 };
+const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, spark: 30, starfall: 60, sigil: 70, blink: 35, nova: 400 };
 
 export class Rules {
   constructor(match) {

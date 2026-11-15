@@ -32,12 +32,18 @@ const ACTIONS = {
   slam: { clip: C.SLAM, in: 0.06, out: 0.18 },
   leap: { clip: C.LEAP, in: 0.04, out: 0.25, airBlendOut: true },
   death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true },
+  plant: { clip: C.M_PLANT, in: 0.06, out: 0.18 },
+  nova: { clip: C.M_NOVA, in: 0.1, out: 0.2 },
+  exhausted: { clip: C.M_EXHAUSTED, in: 0.05, out: 0.25, aimOff: true },
 };
 const CASTS = {
   boltR: { clip: C.BOLT_R, in: 0.035, out: 0.12 },
   boltL: { clip: C.BOLT_L, in: 0.035, out: 0.12 },
   orb: { clip: C.ORB, in: 0.05, out: 0.16 },
   ult: { clip: C.ULT, in: 0.08, out: 0.2 },
+  mBolt: { clip: C.M_BOLT, in: 0.04, out: 0.16 },
+  mRaise: { clip: C.M_RAISE, in: 0.06, out: 0.2 },
+  mBlink: { clip: C.M_BLINK, in: 0.04, out: 0.15 },
 };
 
 export class Animator {
@@ -84,7 +90,7 @@ export class Animator {
       this._startAction(name, back ? wrapPi(a + Math.PI) : a);
       return;
     }
-    if (kind === 'slam' || kind === 'leap') { this._startAction(kind, 0); return; }
+    if (ACTIONS[kind] && !ACTIONS[kind].turn) { this._startAction(kind, 0); return; }
     if (kind === 'cast') {
       const def = CASTS[data.anim];
       if (!def) return;
@@ -153,6 +159,8 @@ export class Animator {
         blend(out, out, this.act, a.w);
       }
     }
+    // ---- staff: stays upright in world space unless a clip drives it
+    if (rig.hasProp) this._stabilizeStaff(out, a ? a.w : 0);
     // ---- 4. upper-body cast
     const ca = this.castA;
     if (ca && !this.dead) {
@@ -167,8 +175,9 @@ export class Animator {
         blend(out, out, this.cast, ca.w * (1 - rollW), UPPER_MASK);
       }
     }
+    if (rig.hasCape) this._cape(dt, out, s);
     if (this.lobby) {
-      sampleClip(C.SHOWCASE, 0, this.cast);
+      sampleClip(rig.hasProp ? C.M_SHOWCASE : C.SHOWCASE, 0, this.cast);
       blend(out, out, this.cast, 1, UPPER_MASK);
     }
     // ---- 5. additive
@@ -270,7 +279,8 @@ export class Animator {
     const tgt = {};
     for (const side of ['L', 'R']) {
       const f = feet[side];
-      const width = lerp(0.135, 0.12, wFast);
+      const hw = Math.max(0.085, Math.abs(rig.legs.L.hipOff.x) + 0.008);
+      const width = lerp(hw, hw * 0.9, wFast);
       // base under the hip, turned with the pelvis
       const bx = f.sg * width * cyaw, bz = -f.sg * width * syaw;
       tgt[side] = tmpV.set(bx + mx * f.along, ankleH + f.lift, bz + mz * f.along).clone();
@@ -306,7 +316,8 @@ export class Animator {
     const toWorld = (x, z, out) => out.set(s.pos.x + x * cy + z * sy, s.pos.y, s.pos.z - x * sy + z * cy);
     const toLocal = (w, out) => { const dx = w.x - s.pos.x, dz = w.z - s.pos.z; return out.set(dx * cy - dz * sy, 0, dx * sy + dz * cy); };
     // rest stance (combat: left foot a touch forward)
-    const rest = { L: [0.15, 0.07, 9], R: [-0.15, -0.07, -12] };
+    const hw = Math.max(0.09, Math.abs(this.rig.legs.L.hipOff.x) + 0.025);
+    const rest = { L: [hw, 0.07, 9], R: [-hw, -0.07, -12] };
     if (this.lobby) { rest.L = [0.13, 0.03, 8]; rest.R = [-0.13, -0.02, -8]; }
     const ankleH = this.rig.ankleHeight;
     for (const side of ['L', 'R']) {
@@ -377,6 +388,33 @@ export class Animator {
     addE(P, B.upperArmL, flail, 0, 0); addE(P, B.upperArmR, -flail, 0, 0);
     setE(P, B.hips, 8 * fwd, this.hipYaw * R2D * 0.5, 0);
     P.hip[1] = 0.02;
+  }
+
+  _stabilizeStaff(out, actionW) {
+    // canonical world rotation of the right hand = product down the chain
+    const chain = [B.hips, B.spine, B.chest, B.upperChest, B.shoulderR, B.upperArmR, B.foreArmR, B.handR];
+    const w = this._sq || (this._sq = new THREE.Quaternion());
+    const t = this._sq2 || (this._sq2 = new THREE.Quaternion());
+    w.identity();
+    for (const i of chain) w.multiply(getQ(out, i, t));
+    // desired: upright, leaning a little with speed
+    const lean = Math.min(1, this.speed / RUN_SPEED);
+    const d = this._sq3 || (this._sq3 = new THREE.Quaternion());
+    d.setFromEuler(this._se || (this._se = new THREE.Euler(lean * 0.35 + Math.sin(this.t * 1.3) * 0.03, 0, -0.08)));
+    w.invert().multiply(d);
+    getQ(out, B.propR, t);
+    w.slerp(t, actionW);
+    putQ(out, B.propR, w);
+  }
+
+  _cape(dt, out, s) {
+    // damped spring: swings back with forward speed and upward motion, flutters a little
+    const fwd = Math.max(0, this.vz);
+    const target = Math.min(55, fwd * 5.5 + Math.max(0, -this.vy) * 2.2 + (this.airW > 0.5 ? 8 : 0));
+    this.capeV = (this.capeV || 0) + ((target - (this.capeA || 0)) * 60 - this.capeV * 9) * dt;
+    this.capeA = (this.capeA || 0) + this.capeV * dt;
+    const flutter = Math.sin(this.t * 7.3) * (2 + fwd * 0.6) + Math.sin(this.t * 2.1) * 2;
+    addE(out, B.cape, this.capeA + flutter, Math.sin(this.t * 1.7) * 3, -this.vx * 1.5);
   }
 
   // clip IK (legs planted during slams / crouches)

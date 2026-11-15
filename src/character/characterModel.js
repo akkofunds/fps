@@ -73,6 +73,12 @@ export class MageInstance {
     return this;
   }
 
+  // tip of the staff (orb end) — falls back to the right palm for mages without a staff
+  staffTip(out) {
+    if (!this.rig.hasProp || !this.rig.ends.prop) return this.palmWorld('R', out);
+    return this.rig.ends.prop.getWorldPosition(out);
+  }
+
   handWorld(side, out) { return (side === 'L' ? this.handL : this.handR).getWorldPosition(out); }
   palmWorld(side, out) {
     const end = side === 'L' ? this.rig.ends.handL : this.rig.ends.handR;
