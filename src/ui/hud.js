@@ -1,267 +1,289 @@
-import { $, el, show, toast } from './dom.js';
-import { WEAPONS } from '../weapons/weaponDefs.js';
-import { MODES } from '../config.js';
+import * as THREE from 'three';
+import { $, el, show } from './dom.js';
+import { ABILITY_ICON, ICONS } from './icons.js';
+import { MAX_HP, ULT_COST, MOVE } from '../config.js';
+import { PYRO } from '../game/pyro.js';
 
-// In-match HUD. All DOM writes are diffed against the previous value so a frame where
-// nothing changed touches the DOM zero times (layout/style recalcs are expensive on Chromebooks).
-const ICONS = {
-  1: '<svg viewBox="0 0 64 20"><path d="M2 8h30l3-3h20v3h7v3h-7v2h-9l-2 6h-5l1-6h-6l-4 4h-6l2-4H2z"/></svg>',
-  2: '<svg viewBox="0 0 34 20"><path d="M2 3h28v6H14l-2 9H5l2-9H2z"/></svg>',
-  3: '<svg viewBox="0 0 80 20"><path d="M2 9h18l2-3h14V3h14v3h4v3h24v2H54v2H40l-4 5h-6l2-5H18l-4 4H6l2-4H2z"/></svg>',
-};
-const HS_ICON = '<svg class="hs" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="none" stroke="#ff4655" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="#ff4655"/><path d="M10 1v4M10 15v4M1 10h4M15 10h4" stroke="#ff4655" stroke-width="2"/></svg>';
+// In-match HUD: health, ability bar with cooldown sweeps, timer/score, kill feed, name tags,
+// damage numbers, hit markers, damage direction, death/scoreboard/end screens.
+// DOM writes only happen when a displayed value changes.
+
+const proj = new THREE.Vector3();
+const fmtTime = (s) => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export class Hud {
   constructor(app) {
     this.app = app;
-    this.c = {}; // cache
-    this.e = {
-      hud: $('hud'), hp: $('hp'), hpbar: $('hpbar').firstElementChild, hpbox: $('hpbox'), ammo: $('ammo'), wname: $('wname'),
-      spd: $('spd'), speedo: $('speedo'), scA: $('scA'), scB: $('scB'), tmr: $('tmr'), phase: $('phaseLbl'), kf: $('killfeed'),
-      xh: $('crosshair'), hit: $('hitmark'), dmg: $('dmgind'), vig: $('vignette'), scope: $('scope'), zoom: $('zoomLbl'),
-      c1: $('c1'), c2: $('c2'), center: $('center'), dead: $('dead'), deadBy: $('deadBy'), deadSub: $('deadSub'),
-      interact: $('interact'), range: $('rangePanel'), board: $('board'), buy: $('buy'), results: $('results'), net: $('netinfo'),
-      slots: $('slots'), tags: $('tags'),
-    };
-    this.xhParts = [...this.e.xh.children];
-    this.hitT = 0; this.dmgT = 0; this.centerT = 0; this.boardOn = false;
-    this.fps = 0; this.fpsAcc = 0; this.fpsN = 0;
-    app.input.on('scoreboard', (on) => { this.boardOn = on; show(this.e.board, on && !!this.match); });
-    this.e.buy.addEventListener('click', (ev) => {
-      const b = ev.target.closest('[data-slot]');
-      if (b && this.match) this.match.buy(+b.dataset.slot);
-      else if (ev.target.closest('[data-close]') && this.match) this.match.closeBuy();
+    this.root = $('hud');
+    this.cache = {};
+    this.tags = new Map();
+    this.nums = [];
+    this.sbOpen = false;
+    app.input.on('scoreboard', (on) => { this.sbOpen = on; if (this.match) this.renderBoard(); show('scoreboard', on && !!this.match && !this.match.ended); });
+    this._buildAbilities();
+  }
+
+  _buildAbilities() {
+    const bar = $('abilBar');
+    bar.textContent = '';
+    this.ab = {};
+    const slots = [['dash', 'Q'], ['orb', 'E'], ['wall', 'C'], ['leap', 'V'], ['meteor', 'X']];
+    for (const [id, key] of slots) {
+      const d = el('div', 'ab' + (id === 'meteor' ? ' ult' : ''));
+      if (id === 'meteor') d.appendChild(el('div', 'ring'));
+      d.insertAdjacentHTML('beforeend', ABILITY_ICON[id]);
+      d.appendChild(el('div', 'sweep'));
+      const k = el('div', 'key' + (id === 'meteor' ? ' big' : ''), key);
+      d.appendChild(k);
+      const cdv = el('div', 'cdv hidden'); d.appendChild(cdv);
+      let pips = null, pct = null;
+      if (id === 'dash') { pips = el('div', 'pips'); for (let i = 0; i < MOVE.dashCharges; i++) pips.appendChild(el('i')); d.appendChild(pips); }
+      if (id === 'meteor') { pct = el('div', 'pct', '0%'); d.appendChild(pct); }
+      d.title = (PYRO.abilities.find((a) => a.id === id) || {}).name || id;
+      bar.appendChild(d);
+      this.ab[id] = { d, cdv, pips, pct, last: '' };
+    }
+  }
+
+  enterMatch(m) {
+    this.match = m;
+    this.cache = {};
+    show('hud', true);
+    show('deathScreen', false); show('endScreen', false); show('scoreboard', false);
+    show('practiceHint', m.cfg.mode === 'practice');
+    show('topCenter', m.cfg.mode !== 'practice');
+    $('tcGoal').textContent = m.killsToWin ? `FIRST TO ${m.killsToWin}` : 'NO KILL LIMIT';
+    $('killfeed').textContent = '';
+    $('tags').textContent = ''; this.tags.clear();
+    $('dmgNums').textContent = ''; this.nums.length = 0;
+    $('xhair').style.setProperty('--c', this.app.settings.crosshairColor);
+  }
+
+  exitMatch() { this.match = null; show('hud', false); $('tags').textContent = ''; this.tags.clear(); }
+
+  set(key, v, fn) { if (this.cache[key] !== v) { this.cache[key] = v; fn(v); } }
+
+  update(dt, m) {
+    const me = m.local;
+    const hp = Math.max(0, Math.round(me.hp));
+    this.set('hp', hp, (v) => {
+      $('hpNum').textContent = v;
+      $('hpFill').style.width = `${(v / MAX_HP) * 100}%`;
+      $('hpGhost').style.width = `${(v / MAX_HP) * 100}%`;
+      $('hpNum').parentElement.classList.toggle('low', v <= 50);
+    });
+    // abilities
+    const k = m.kit, b = m.body;
+    const cds = { orb: [k.cd.orb, 7], wall: [k.cd.wall, 15], leap: [k.cd.leap, 10] };
+    for (const [id, [cd, max]] of Object.entries(cds)) {
+      const a = this.ab[id];
+      const s = cd > 0 ? Math.ceil(cd) : 0;
+      const key = `${s}|${Math.round((cd / max) * 40)}`;
+      if (a.last !== key) {
+        a.last = key;
+        a.d.classList.toggle('cd', cd > 0); a.d.classList.toggle('ready', cd <= 0);
+        a.cdv.classList.toggle('hidden', cd <= 0); a.cdv.textContent = s;
+        a.d.querySelector('.sweep').style.setProperty('--p', `${(cd / max) * 100}%`);
+      }
+    }
+    const dash = this.ab.dash;
+    const dk = `${b.dashCharges}|${Math.round(b.dashRecharge * 10)}`;
+    if (dash.last !== dk) {
+      dash.last = dk;
+      [...dash.pips.children].forEach((p, i) => p.classList.toggle('on', i < b.dashCharges));
+      dash.d.classList.toggle('cd', b.dashCharges <= 0); dash.d.classList.toggle('ready', b.dashCharges > 0);
+      const rem = b.dashCharges < MOVE.dashCharges ? 1 - b.dashRecharge / MOVE.dashRecharge : 0;
+      dash.d.querySelector('.sweep').style.setProperty('--p', `${b.dashCharges <= 0 ? rem * 100 : 0}%`);
+      dash.cdv.classList.toggle('hidden', b.dashCharges > 0); dash.cdv.textContent = Math.ceil(rem * MOVE.dashRecharge);
+    }
+    const ult = this.ab.meteor;
+    const up = Math.floor(k.ult);
+    if (ult.last !== up) {
+      ult.last = up;
+      ult.d.querySelector('.ring').style.setProperty('--p', `${(up / ULT_COST) * 100}%`);
+      ult.pct.textContent = up >= ULT_COST ? 'READY' : `${up}%`;
+      ult.d.classList.toggle('full', up >= ULT_COST);
+    }
+    // top center
+    if (m.cfg.mode !== 'practice') {
+      const t = m.phase === 'warmup' ? m.timeLeft : m.timeLeft;
+      this.set('time', fmtTime(t), (v) => { $('tcTime').textContent = v; });
+      this.set('meK', me.kills, (v) => { $('tcMe').textContent = v; });
+      let lead = null;
+      for (const e of m.ents.values()) if (!e.dummy && e !== me && !e.left && (!lead || e.kills > lead.kills)) lead = e;
+      this.set('lead', lead ? `${lead.name}|${lead.kills}` : '-', () => { $('tcLeadName').textContent = lead ? lead.name.toUpperCase() : 'NO RIVALS'; $('tcLead').textContent = lead ? lead.kills : '-'; });
+    }
+    // crosshair on enemy
+    this.set('xt', !!m.aimEnt, (v) => $('xhair').classList.toggle('target', v));
+    // death timer
+    if (!me.alive && this.deathAt) {
+      const left = Math.max(0, this.deathAt - performance.now() / 1000);
+      this.set('dt', Math.ceil(left), (v) => { $('dsTimer').textContent = v; });
+    }
+    this._tags(m);
+    this._nums(dt, m);
+    if (this.sbOpen) { this._sbT = (this._sbT || 0) - dt; if (this._sbT <= 0) { this._sbT = 0.5; this.renderBoard(); } }
+    // fade hurt overlay
+    this.hurtV = Math.max(0, (this.hurtV || 0) - dt * 1.6);
+    this.set('hv', Math.round(this.hurtV * 50), (v) => { $('hurtVig').style.opacity = v / 50; });
+    this.hurtD = Math.max(0, (this.hurtD || 0) - dt * 1.4);
+    if (this.hurtFrom && this.hurtD > 0) {
+      const dx = this.hurtFrom.x - me.pos.x, dz = this.hurtFrom.z - me.pos.z;
+      const a = Math.atan2(dx, dz) - m.cam.yaw;
+      $('hurtDir').style.transform = `rotate(${-a}rad)`;
+    }
+    this.set('hd', Math.round(this.hurtD * 40), (v) => { $('hurtDir').style.opacity = v / 40; });
+  }
+
+  _tags(m) {
+    const cam = m.camera, W = this.app.width, H = this.app.height;
+    for (const e of m.ents.values()) {
+      if (e === m.local) continue;
+      let t = this.tags.get(e.n);
+      if (!t) {
+        t = el('div', 'ntag' + (e.dummy ? ' dummy' : ''));
+        t.innerHTML = `<b></b><div class="hb"><i></i></div>`;
+        t.querySelector('b').textContent = e.name;
+        $('tags').appendChild(t);
+        t._fill = t.querySelector('.hb i'); t._vis = null; t._hp = -1;
+        this.tags.set(e.n, t);
+      }
+      let vis = e.alive && e.view.root.visible;
+      if (vis) {
+        proj.set(e.pos.x, e.pos.y + 2.05, e.pos.z);
+        const d = proj.distanceTo(cam.position);
+        proj.project(cam);
+        vis = proj.z < 1 && d < 48 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1;
+        if (vis) {
+          // occlusion check (cheap: world only)
+          const c = cam.position;
+          const dx = e.pos.x - c.x, dy = e.pos.y + 1.6 - c.y, dz = e.pos.z - c.z, l = Math.hypot(dx, dy, dz);
+          const hit = m.world.raycast(c.x, c.y, c.z, dx / l, dy / l, dz / l, l - 0.5, 0);
+          vis = hit === Infinity;
+        }
+        if (vis) {
+          t.style.left = `${((proj.x + 1) / 2) * W}px`; t.style.top = `${((1 - proj.y) / 2) * H}px`;
+          const hp = Math.round(e.hp);
+          if (t._hp !== hp) { t._hp = hp; t._fill.style.width = `${(hp / MAX_HP) * 100}%`; }
+        }
+      }
+      if (t._vis !== vis) { t._vis = vis; t.style.display = vis ? '' : 'none'; }
+    }
+  }
+
+  damageNumber(pos, dmg, head) {
+    const d = el('div', 'dnum' + (head ? ' head' : ''), String(dmg));
+    $('dmgNums').appendChild(d);
+    this.nums.push({ d, p: new THREE.Vector3(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.2, pos.z + (Math.random() - 0.5) * 0.4), t: 0 });
+    if (this.nums.length > 24) { const o = this.nums.shift(); o.d.remove(); }
+  }
+  _nums(dt, m) {
+    const W = this.app.width, H = this.app.height;
+    for (let i = this.nums.length - 1; i >= 0; i--) {
+      const n = this.nums[i];
+      n.t += dt;
+      if (n.t > 0.9) { n.d.remove(); this.nums.splice(i, 1); continue; }
+      proj.copy(n.p); proj.y += n.t * 1.2;
+      proj.project(m.camera);
+      if (proj.z > 1) { n.d.style.display = 'none'; continue; }
+      n.d.style.display = '';
+      n.d.style.left = `${((proj.x + 1) / 2) * W}px`; n.d.style.top = `${((1 - proj.y) / 2) * H}px`;
+      n.d.style.opacity = String(Math.min(1, (0.9 - n.t) * 3));
+    }
+  }
+
+  hitMarker(head) {
+    const h = $('hitmark');
+    h.classList.remove('on'); void h.offsetWidth; h.classList.add('on');
+    h.classList.toggle('head', !!head);
+  }
+
+  hurt(amount, from) {
+    this.hurtV = Math.min(1, (this.hurtV || 0) + amount / 50);
+    if (from && from !== this.match.local) { this.hurtFrom = from.pos.clone(); this.hurtD = 1; }
+  }
+
+  denied(id) { const a = this.ab[id]; if (!a) return; a.d.classList.remove('deny'); void a.d.offsetWidth; a.d.classList.add('deny'); }
+  flashUlt() { this.banner('METEOR READY', 'PRESS X', 1.6); }
+
+  banner(t1, t2 = '', secs = 2, cls = '') {
+    const b = $('banner');
+    b.innerHTML = '';
+    b.appendChild(el('div', 'b1 ' + cls, t1));
+    if (t2) b.appendChild(el('div', 'b2', t2));
+    b.classList.add('on');
+    clearTimeout(this._bt);
+    this._bt = setTimeout(() => b.classList.remove('on'), secs * 1000);
+  }
+
+  killFeed(k, v, ab, me) {
+    const f = el('div', 'kf' + (k === me || v === me ? ' me' : ''));
+    if (k && k !== v) f.appendChild(el('span', 'k', k.name));
+    const ic = el('span'); ic.innerHTML = ABILITY_ICON[ab] || ICONS.skull; f.appendChild(ic);
+    f.appendChild(el('span', 'v', v ? v.name : '?'));
+    const feed = $('killfeed');
+    feed.appendChild(f);
+    while (feed.children.length > 5) feed.firstChild.remove();
+    setTimeout(() => f.classList.add('out'), 5000);
+    setTimeout(() => f.remove(), 5600);
+  }
+
+  killBanner(v, kills) { this.banner('ELIMINATED', `${v.name.toUpperCase()} · ${kills} KILL${kills === 1 ? '' : 'S'}`, 1.8, 'kill'); }
+
+  deathScreen(k, ab, rt) {
+    $('dsBy').innerHTML = '';
+    if (k && k !== this.match.local) { $('dsBy').append('by '); const b = el('b', '', k.name); $('dsBy').appendChild(b); }
+    this.deathAt = performance.now() / 1000 + (rt || 3);
+    show('deathScreen', true);
+  }
+  respawned() { show('deathScreen', false); this.deathAt = 0; }
+
+  phase(p, tl) {
+    if (p === 'warmup') this.banner('GET READY', `MATCH STARTS IN ${Math.ceil(tl)}`, Math.max(1, tl - 0.3));
+    if (p === 'live' && this.match && this.match.cfg.mode !== 'practice') this.banner('FIGHT', this.match.killsToWin ? `FIRST TO ${this.match.killsToWin} KILLS` : '', 1.6);
+  }
+
+  meteorWarning(c) {
+    const me = this.match && this.match.local;
+    if (me && Math.hypot(me.pos.x - c.x, me.pos.z - c.z) < 9) this.banner('INCOMING METEOR', 'MOVE!', 1.2, 'kill');
+  }
+
+  renderBoard() {
+    const m = this.match;
+    if (!m) return;
+    const sb = $('scoreboard');
+    const rows = [...m.ents.values()].filter((e) => !e.dummy && !e.left).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+    sb.innerHTML = `<div class="sb-title">SCOREBOARD <span>${m.mode.label} · SUNVALE</span></div><div class="sb-row head"><span>#</span><span>PLAYER</span><span>KILLS</span><span>DEATHS</span><span>DAMAGE</span></div>`;
+    rows.forEach((e, i) => {
+      const r = el('div', 'sb-row' + (e === m.local ? ' me' : ''));
+      r.appendChild(el('span', 'pl', String(i + 1)));
+      const nm = el('b', '', e.name); nm.appendChild(el('span', 'muted', e.tag ? ` #${e.tag}` : ''));
+      r.appendChild(nm);
+      r.appendChild(el('span', '', String(e.kills))); r.appendChild(el('span', '', String(e.deaths))); r.appendChild(el('span', '', String(e.dmg)));
+      sb.appendChild(r);
     });
   }
 
-  set(key, elx, prop, v) { if (this.c[key] === v) return; this.c[key] = v; elx[prop] = v; }
-
-  enterMatch(m) {
-    this.match = m; this.c = {};
-    show(this.e.hud, true); show(this.e.results, false); show(this.e.dead, false); show(this.e.board, false); show(this.e.buy, false);
-    show(this.e.range, !!m.map.buttons); show(this.e.scope, false);
-    this.e.kf.textContent = '';
-    this.e.c1.textContent = ''; this.e.c2.textContent = '';
-    const M = m.mode;
-    this.e.scA.parentElement.classList.toggle('hidden', !!m.map.buttons);
-    if (m.map.buttons) this.range({ mode: 'static', run: false, k: 0, hs: 0, tot: 50, time: 0 }, 0, 0);
-    this.center(m.map.buttons ? 'THE RANGE' : M.label, m.map.buttons ? 'Shoot or press E on the console buttons' : 'Good luck', 2.5);
-    this.setHP(100);
-    this.e.xh.style.setProperty('--xh', this.app.settings.crosshairColor);
-  }
-
-  exitMatch() { this.match = null; show(this.e.hud, false); show(this.e.board, false); show(this.e.buy, false); this.e.tags.textContent = ''; }
-
-  toast(msg, ms) { toast(msg, ms); }
-
-  setHP(v) {
-    v = Math.max(0, Math.round(v));
-    this.set('hp', this.e.hp, 'textContent', String(v));
-    this.e.hpbar.style.width = `${v}%`;
-    this.e.hpbox.classList.toggle('low', v <= 30);
-  }
-
-  setDead(att, sub = '') {
-    if (!att) { show(this.e.dead, false); return; }
-    this.e.deadBy.textContent = `${att.name}${att.tag ? '#' + att.tag : ''}`;
-    this.e.deadSub.textContent = sub;
-    show(this.e.dead, true);
-  }
-
-  center(t1, t2, secs = 2, color = '') {
-    this.e.c1.textContent = t1; this.e.c2.textContent = t2;
-    this.e.c1.style.color = color;
-    this.e.center.style.opacity = '1';
-    this.centerT = secs;
-  }
-
-  killfeed(a, v, w, hs, mine) {
-    const m = this.match; if (!m) return;
-    const row = el('div', `kf${mine ? ' me' : ''}`);
-    const an = el('span', 'a', a ? a.name : '?');
-    if (a && m.isEnemy(a) && !a.practice) an.classList.add('enemy');
-    const vn = el('span', 'v', v.name);
-    if (!m.isEnemy(v)) vn.classList.add('ally');
-    row.appendChild(an);
-    const ic = el('span'); ic.innerHTML = ICONS[w] || ICONS[1]; row.appendChild(ic);
-    if (hs) { const h = el('span'); h.innerHTML = HS_ICON; row.appendChild(h); }
-    row.appendChild(vn);
-    this.e.kf.appendChild(row);
-    while (this.e.kf.children.length > 6) this.e.kf.firstChild.remove();
-    setTimeout(() => { row.style.opacity = '0'; setTimeout(() => row.remove(), 600); }, 5500);
-  }
-
-  hitmarker(head, blocked, kill) {
-    const h = this.e.hit;
-    h.className = blocked ? '' : kill ? 'kill' : head ? 'hs' : '';
-    h.style.opacity = blocked ? '0.35' : '1';
-    this.hitT = kill ? 0.35 : 0.18;
-  }
-
-  damageFrom(angle) {
-    this.e.dmg.style.transform = `rotate(${-angle}rad)`;
-    this.e.dmg.style.opacity = '1';
-    this.e.vig.style.opacity = '0.8';
-    this.dmgT = 0.8;
-  }
-
-  showBuy(on, m) {
-    if (on) {
-      const b = this.e.buy;
-      b.innerHTML = '<div class="label">ARMORY — FREE LOADOUT</div><div class="title">BUY MENU</div>';
-      const cards = el('div', 'cards');
-      for (let s = 1; s <= 3; s++) {
-        const w = WEAPONS[s];
-        const c = el('button', 'wcard'); c.dataset.slot = s;
-        c.innerHTML = `<span class="k">SLOT ${s}</span><b>${w.name}</b><span class="st">${w.mag} RDS · HEAD ${w.head} · BODY ${w.body}<br>${w.desc}</span><span class="pr">EQUIP + REFILL</span>`;
-        cards.appendChild(c);
-      }
-      b.appendChild(cards);
-      const close = el('div', 'row'); close.style.marginTop = '12px';
-      close.innerHTML = '<button class="btn small ghost" data-close>CLOSE (B)</button>';
-      b.appendChild(close);
-      show(b, true);
-      this.app.input.exitLock();
-    } else {
-      show(this.e.buy, false);
-      if (this.match && this.app.input.mode === 'kbm' && !this.app.paused) this.app.input.requestLock();
-    }
-  }
-
-  range(st, hits, shots) {
-    const names = { static: 'STATIC', strafe: 'STRAFE', speed: '50-BOT SPEED TEST' };
-    const hsP = st.k ? Math.round((st.hs / st.k) * 100) : 0;
-    const acc = shots ? Math.round((hits / shots) * 100) : 0;
-    let best = null; try { best = JSON.parse(localStorage.getItem('riftline.best50') || 'null'); } catch { /* ignore */ }
-    const timeTxt = st.time ? `${st.time.toFixed(st.run ? 1 : 2)}s` : '0.0s';
-    this.e.range.innerHTML = `<div class="rp-h">${names[st.mode] || st.mode} ${st.run ? '· LIVE' : '· IDLE'}</div>`
-      + `<div class="rp-t">${timeTxt}</div>`
-      + `<div class="rp-r"><span>KILLS</span>${st.k}${st.mode === 'speed' ? ' / ' + st.tot : ''}</div>`
-      + `<div class="rp-r"><span>HEADSHOT %</span>${hsP}%</div>`
-      + `<div class="rp-r"><span>ACCURACY</span>${acc}%</div>`
-      + (best ? `<div class="rp-r"><span>BEST 50</span>${best.toFixed(2)}s</div>` : '')
-      + `<div class="rp-hint">${st.run ? 'Shoot START to stop.' : 'Pick a drill on the console, then shoot START.'}</div>`;
-  }
-
-  results(title, sub, m) {
-    this.e.c1.textContent = ''; this.e.c2.textContent = '';
-    $('r1').textContent = title; $('r1').style.color = title === 'VICTORY' ? '#4fd8ff' : title === 'DEFEAT' ? '#ff4655' : '';
-    $('r2').textContent = sub || 'Returning to lobby…';
-    show(this.e.results, true);
-    this.renderBoard(m); show(this.e.board, true);
-  }
-
-  renderBoard(m) {
-    const rows = [...m.ents.values()].filter((e) => !e.practice);
-    rows.sort((a, b) => (m.mode.teams ? (a.team - b.team) * 1000 : 0) + (b.kills - a.kills) || a.deaths - b.deaths);
-    let html = `<div class="label" style="margin-bottom:8px">${m.mode.label} · ${m.cfg.map.toUpperCase()}${m.cfg.bhop ? ' · BHOP BOOST' : ''}${m.cfg.hsOnly ? ' · HEADSHOTS ONLY' : ''}</div><table><tr><th>PLAYER</th><th>K</th><th>D</th><th>HS%</th><th>DMG</th></tr>`;
-    for (const e of rows) {
-      const cls = [m.isEnemy(e) ? 'enemy' : 'ally', e === m.me ? 'me' : '', e.alive ? '' : 'dead'].join(' ');
-      const hs = e.kills ? Math.round((e.hsKills / e.kills) * 100) : 0;
-      const nm = `${e.name}${e.tag ? '<span style="color:#9aa5ae">#' + e.tag + '</span>' : ''}${e.bot ? ' <span style="color:#9aa5ae;font-size:11px">BOT</span>' : ''}`;
-      html += `<tr class="${cls}"><td>${nm}</td><td>${e.kills}</td><td>${e.deaths}</td><td>${hs}%</td><td>${e.dmg | 0}</td></tr>`;
-    }
-    html += '</table>';
-    if (this.c.board !== html) { this.c.board = html; this.e.board.innerHTML = html; }
-  }
-
-  frame(m, now, ups, adsE) {
-    const dt = this.app.frameDt;
-    // FPS meter
-    this.fpsAcc += dt; this.fpsN++;
-    if (this.fpsAcc >= 0.5) { this.fps = Math.round(this.fpsN / this.fpsAcc); this.fpsAcc = 0; this.fpsN = 0; }
-    const s = this.app.settings;
-    const net = `${s.showFps ? this.fps + ' FPS · ' : ''}${m.isHost ? 'HOST' + (m.net.count ? ` · ${m.net.count} PEER${m.net.count > 1 ? 'S' : ''}` : ' · LOCAL') : 'PING ' + m.ping + 'ms'}`;
-    this.set('net', this.e.net, 'textContent', net);
-
-    // ammo + weapon
-    const ws = m.ws, w = ws.def, a = ws.ammo[ws.slot];
-    this.set('ammo', this.e.ammo, 'innerHTML', `${a.mag}<small>/${ws.infinite ? '∞' : a.reserve}</small>`);
-    const mode = ws.reloading ? 'RELOADING' : ws.inspectEnd ? 'INSPECT' : ws.slot === 3 ? (ws.zoom ? `SCOPE ${w.zooms[ws.zoom - 1]}x` : 'HIP') : `${ws.slot === 2 ? (ws.burstMode ? 'BURST' : 'SEMI') : 'AUTO'}${adsE > 0.5 ? ' · ADS' : ''}`;
-    this.set('wn', this.e.wname, 'innerHTML', `<b>${w.name}</b>${mode}`);
-    if (this.c.slot !== ws.slot) { this.c.slot = ws.slot; for (const d of this.e.slots.children) d.classList.toggle('on', +d.dataset.s === ws.slot); }
-
-    // speedometer
-    show(this.e.speedo, s.speedometer);
-    if (s.speedometer) {
-      const u = Math.round(ups);
-      this.set('spd', this.e.spd, 'textContent', String(u));
-      const cls = u > 600 ? 'insane' : u > 400 ? 'vfast' : u > 280 ? 'fast' : '';
-      if (this.c.spdc !== cls) { this.c.spdc = cls; this.e.speedo.className = cls; }
-    }
-
-    // round / timer
-    if (!m.map.buttons) {
-      const tl = Math.max(0, m.phaseEndLocal - now);
-      const t = `${Math.floor(tl / 60)}:${String(Math.floor(tl % 60)).padStart(2, '0')}`;
-      this.set('tmr', this.e.tmr, 'textContent', t);
-      let A, B;
-      if (m.mode.teams) { A = m.score[m.me.team] || 0; B = m.score[1 - m.me.team] || 0; }
-      else { A = m.me.kills; let best = 0; for (const e of m.ents.values()) if (e !== m.me && e.kills > best) best = e.kills; B = best; }
-      this.set('scA', this.e.scA, 'textContent', String(A));
-      this.set('scB', this.e.scB, 'textContent', String(B));
-      const ph = m.mode.teams ? (m.phase === 'buy' ? 'BUY PHASE' : m.phase === 'post' ? 'ROUND OVER' : `ROUND ${m.round}`) : `FIRST TO ${MODES.ffa.killsToWin}`;
-      this.set('ph', this.e.phase, 'textContent', ph);
-    }
-
-    // crosshair gap from current spread
-    const spread = ws.spreadNow || 0;
-    const vfov = m.camera.fov * Math.PI / 180;
-    const px = Math.min(80, Math.tan(spread * Math.PI / 180) / Math.tan(vfov / 2) * (this.app.height / 2));
-    const gap = Math.round(3 + px * 0.6);
-    if (this.c.gap !== gap) {
-      this.c.gap = gap;
-      const [, l, r, u, b] = this.xhParts;
-      l.style.left = `${-gap - 7}px`; r.style.left = `${gap}px`; u.style.top = `${-gap - 7}px`; b.style.top = `${gap}px`;
-    }
-    // crosshair fades out while aiming down sights (irons / red dot / scope take over)
-    const xhO = m.me.alive ? Math.max(0, 1 - adsE / 0.35) : 0;
-    const xhK = xhO.toFixed(2);
-    if (this.c.xh !== xhK) { this.c.xh = xhK; this.e.xh.style.opacity = xhK; this.e.xh.style.display = xhO > 0 ? '' : 'none'; }
-
-    // scope
-    // sniper scope overlay fades in as the scope reaches the eye
-    const so = ws.slot === 3 && m.me.alive ? Math.max(0, Math.min(1, (adsE - 0.82) / 0.13)) : 0;
-    const soK = so.toFixed(2);
-    if (this.c.scope !== soK) { this.c.scope = soK; show(this.e.scope, so > 0); this.e.scope.style.opacity = soK; }
-    const zl = `${ws.zoom ? WEAPONS[3].zooms[ws.zoom - 1] : ws.lastZoom}x`;
-    if (so > 0 && this.c.zl !== zl) { this.c.zl = zl; this.e.zoom.textContent = zl; }
-
-    // transient fades
-    if (this.hitT > 0) { this.hitT -= dt; if (this.hitT <= 0) this.e.hit.style.opacity = '0'; }
-    if (this.dmgT > 0) { this.dmgT -= dt; const o = Math.max(0, this.dmgT / 0.8); this.e.dmg.style.opacity = o.toFixed(2); this.e.vig.style.opacity = (o * 0.8).toFixed(2); }
-    if (this.centerT > 0) { this.centerT -= dt; if (this.centerT <= 0) this.e.center.style.opacity = '0'; }
-
-    // range console prompt
-    if (m.map.buttons) {
-      let near = false;
-      const c = m.ctrl;
-      for (const b of m.map.buttons) if (Math.abs(b.x - c.x) < 2.2 && Math.abs(b.z - c.z) < 2.6) near = true;
-      if (this.c.ip !== near) { this.c.ip = near; show(this.e.interact, near && this.app.input.mode === 'kbm'); }
-    }
-
-    if (this.boardOn) this.renderBoard(m);
-    this._tags(m);
-  }
-
-  // teammate name tags (projected; only allies, updated at most every other frame)
-  _tags(m) {
-    if (!m.mode.teams || m.map.buttons) return;
-    this._tagFlip = !this._tagFlip; if (this._tagFlip) return;
-    const cam = m.camera;
-    let i = 0;
-    for (const e of m.entList) {
-      if (e === m.me || !e.alive || m.isEnemy(e)) continue;
-      let tag = this.e.tags.children[i];
-      if (!tag) { tag = el('div', 'ptag'); this.e.tags.appendChild(tag); }
-      i++;
-      const p = this._proj || (this._proj = new cam.position.constructor());
-      p.set(e.rx, e.ry + 2.05, e.rz).project(cam);
-      if (p.z > 1 || p.z < -1) { tag.style.display = 'none'; continue; }
-      tag.style.display = '';
-      if (tag._n !== e.name) { tag._n = e.name; tag.textContent = e.name; }
-      tag.style.transform = `translate(${((p.x + 1) / 2 * this.app.width) | 0}px, ${((1 - p.y) / 2 * this.app.height) | 0}px) translate(-50%, -100%)`;
-    }
-    while (this.e.tags.children.length > i) this.e.tags.lastChild.remove();
+  endScreen(msg, m) {
+    show('deathScreen', false); show('scoreboard', false);
+    const es = $('endScreen');
+    const idx = msg.l.findIndex((r) => r[0] === m.local.n);
+    const place = idx + 1;
+    const suf = place === 1 ? 'ST' : place === 2 ? 'ND' : place === 3 ? 'RD' : 'TH';
+    es.innerHTML = '';
+    es.appendChild(el('div', 'end-place' + (place === 1 ? ' win' : ''), place === 1 ? 'VICTORY' : `${place}${suf} PLACE`));
+    es.appendChild(el('div', 'end-sub', `${m.mode.label} · ${msg.l.length} PLAYERS`));
+    const head = el('div', 'sb-row head'); head.innerHTML = '<span>#</span><span>PLAYER</span><span>KILLS</span><span>DEATHS</span><span>DAMAGE</span>'; es.appendChild(head);
+    msg.l.forEach((r, i) => {
+      const e = m.ents.get(r[0]);
+      const row = el('div', 'sb-row' + (e === m.local ? ' me' : ''));
+      row.appendChild(el('span', 'pl', String(i + 1)));
+      row.appendChild(el('b', '', e ? e.name : '?'));
+      row.appendChild(el('span', '', String(r[1]))); row.appendChild(el('span', '', String(r[2]))); row.appendChild(el('span', '', String(r[3])));
+      es.appendChild(row);
+    });
+    es.appendChild(el('div', 'end-foot', 'RETURNING TO LOBBY…'));
+    show('endScreen', true);
+    this.app.recordMatch({ place, players: msg.l.length, kills: idx >= 0 ? msg.l[idx][1] : 0, deaths: idx >= 0 ? msg.l[idx][2] : 0, dmg: idx >= 0 ? msg.l[idx][3] : 0, mode: m.mode.label, t: Date.now() });
   }
 }

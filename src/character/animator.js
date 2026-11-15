@@ -1,0 +1,399 @@
+import * as THREE from 'three';
+import { B, NB, UPPER_MASK } from './rig.js';
+import { Pose, setE, setS, addE, blend, sampleClip, legIK, getQ, putQ } from './pose.js';
+import * as C from './clips.js';
+
+// Character animation: a small layered state machine on top of a canonical rig.
+//
+//  1. ground locomotion — fully procedural and phase-synced: each foot follows a stance/swing
+//     path whose stance segment slides back at exactly the body speed, so feet never skate at
+//     any speed or in any of the 360° directions; two-bone IK places the ankles (and plants
+//     them on the terrain). Standing still, feet are world-locked and re-step when you turn.
+//  2. air — rise/apex/fall poses blended by vertical speed
+//  3. full-body actions — dash, rolls, Firewall slam, Flame Leap, death (keyframed clips)
+//  4. upper-body casts — alternating fire punches, Blaze Orb push, Meteor call (masked layer)
+//  5. additive — aim pitch spread over the spine, landing dip spring, hit flinch, breathing
+
+export const RUN_SPEED = 6.4;
+
+const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion();
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+const lerp = (a, b, t) => a + (b - a) * t;
+const damp = (cur, target, rate, dt) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
+const wrapPi = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+const R2D = 180 / Math.PI;
+
+const ACTIONS = {
+  dash: { clip: C.DASH, in: 0.05, out: 0.12, turn: true },
+  dashBack: { clip: C.DASH_BACK, in: 0.05, out: 0.12, turn: true, back: true },
+  roll: { clip: C.ROLL, in: 0.05, out: 0.1, turn: true, aimOff: true },
+  rollBack: { clip: C.ROLL_BACK, in: 0.05, out: 0.1, turn: true, back: true, aimOff: true },
+  slam: { clip: C.SLAM, in: 0.06, out: 0.18 },
+  leap: { clip: C.LEAP, in: 0.04, out: 0.25, airBlendOut: true },
+  death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true },
+};
+const CASTS = {
+  boltR: { clip: C.BOLT_R, in: 0.035, out: 0.12 },
+  boltL: { clip: C.BOLT_L, in: 0.035, out: 0.12 },
+  orb: { clip: C.ORB, in: 0.05, out: 0.16 },
+  ult: { clip: C.ULT, in: 0.08, out: 0.2 },
+};
+
+export class Animator {
+  constructor(rig, opts = {}) {
+    this.rig = rig;
+    this.groundAt = opts.groundAt || null; // (x, z) → terrain height, for foot placement
+    this.pose = new Pose();
+    this.loco = new Pose(); this.air = new Pose(); this.act = new Pose(); this.cast = new Pose(); this.tmp = new Pose(); this.ikp = new Pose();
+    this.phase = 0;
+    this.speed = 0; this.vx = 0; this.vz = 0; // smoothed local velocity
+    this.ax = 0; this.az = 0; // smoothed local accel
+    this.airW = 0; this.airT = 0; this.vy = 0;
+    this.dip = 0; this.dipV = 0;
+    this.flinch = 0; this.flinchSide = 1;
+    this.t = Math.random() * 10;
+    this.hipYaw = 0;
+    this.action = null; // { def, t, w, yaw }
+    this.castA = null;
+    this.yawOffset = 0; this.yawOffsetTarget = 0;
+    this.lobby = !!opts.lobby;
+    // world-locked idle feet
+    this.plant = { L: { p: new THREE.Vector3(), yaw: 0, step: -1, from: new THREE.Vector3(), to: new THREE.Vector3(), toYaw: 0, fromYaw: 0 }, R: { p: new THREE.Vector3(), yaw: 0, step: -1, from: new THREE.Vector3(), to: new THREE.Vector3(), toYaw: 0, fromYaw: 0 } };
+    this.planted = false;
+    this.lastStep = 'R';
+    this.dead = false;
+  }
+
+  // ---------------------------------------------------------------- events
+  play(kind, data = {}) {
+    if (kind === 'die') { this.dead = true; this._startAction('death', 0); this.castA = null; return; }
+    if (kind === 'respawn') { this.dead = false; this.action = null; this.castA = null; this.planted = false; this.dip = 0; this.dipV = 0; this.airW = 0; this.yawOffset = this.yawOffsetTarget = 0; return; }
+    if (this.dead) return;
+    if (kind === 'land') {
+      const impact = Math.max(0, -(data.vy || 0));
+      this.dipV -= Math.min(2.4, impact * 0.16);
+      return;
+    }
+    if (kind === 'hit') { this.flinch = 1; this.flinchSide = Math.random() < 0.5 ? -1 : 1; return; }
+    if (kind === 'dash' || kind === 'roll') {
+      // data.dir = local angle (rad, 0 = forward, + = toward the character's left)
+      const a = data.dir || 0;
+      const back = Math.abs(a) > 1.95;
+      const name = kind + (back ? 'Back' : '');
+      this._startAction(name, back ? wrapPi(a + Math.PI) : a);
+      return;
+    }
+    if (kind === 'slam' || kind === 'leap') { this._startAction(kind, 0); return; }
+    if (kind === 'cast') {
+      const def = CASTS[data.anim];
+      if (!def) return;
+      const keep = this.castA && this.castA.def === def && this.castA.t < 0.05;
+      if (!keep) this.castA = { def, t: 0, w: this.castA ? this.castA.w : 0 };
+    }
+  }
+  _startAction(name, yaw) {
+    const def = ACTIONS[name];
+    this.action = { def, t: 0, w: this.action ? this.action.w : 0, yaw };
+    this.yawOffsetTarget = def.turn ? yaw : 0;
+  }
+  get busy() { return !!(this.action && this.action.t < this.action.def.clip.duration); }
+
+  // ---------------------------------------------------------------- per-frame
+  // s: { pos: Vector3 (feet, world), yaw, pitch (rad, + up), vel: Vector3 world, grounded }
+  update(dt, s) {
+    dt = Math.min(dt, 0.05);
+    this.t += dt;
+    const rig = this.rig;
+    const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);
+    // local velocity (x = character left, z = forward)
+    const lx = s.vel.x * cy - s.vel.z * sy, lz = s.vel.x * sy + s.vel.z * cy;
+    const pvx = this.vx, pvz = this.vz;
+    this.vx = damp(this.vx, s.grounded ? lx : this.vx, 14, dt);
+    this.vz = damp(this.vz, s.grounded ? lz : this.vz, 14, dt);
+    this.ax = damp(this.ax, (this.vx - pvx) / Math.max(dt, 1e-3), 6, dt);
+    this.az = damp(this.az, (this.vz - pvz) / Math.max(dt, 1e-3), 6, dt);
+    const speed = Math.hypot(this.vx, this.vz);
+    this.speed = speed;
+    this.vy = s.vel.y;
+
+    // air weight (small grace so slopes and steps don't flicker into the fall pose)
+    if (s.grounded) this.airT = 0; else this.airT += dt;
+    const airTarget = this.airT > 0.07 ? 1 : 0;
+    this.airW = damp(this.airW, airTarget, airTarget ? 10 : 22, dt);
+
+    // landing dip spring
+    const k = 170, c = 2 * Math.sqrt(k) * 0.72;
+    this.dipV += (-k * this.dip - c * this.dipV) * dt;
+    this.dip += this.dipV * dt;
+    if (this.dip < -0.32) { this.dip = -0.32; this.dipV = Math.max(0, this.dipV); }
+    this.flinch = Math.max(0, this.flinch - dt * 4.5);
+
+    // yaw offset (body turns into a dash/roll, then back to the aim)
+    if (this.action && !this.busy) this.yawOffsetTarget = 0;
+    this.yawOffset = damp(this.yawOffset, this.yawOffsetTarget, 18, dt);
+
+    // ---- 1. locomotion
+    this._locomotion(dt, s);
+    const out = this.pose.copy(this.loco);
+    // ---- 2. air
+    if (this.airW > 0.001) { this._airPose(s); blend(out, out, this.air, this.airW); }
+    // ---- 3. full-body action
+    const a = this.action;
+    if (a) {
+      a.t += dt;
+      const def = a.def, dur = def.clip.duration;
+      const ending = !def.hold && a.t > dur;
+      a.w = ending ? Math.max(0, a.w - dt / Math.max(def.out, 1e-3)) : Math.min(1, a.w + dt / def.in);
+      if (def.airBlendOut && a.t > 0.3 && s.grounded === false) a.w = Math.min(a.w, Math.max(0, 1 - (a.t - 0.3) / 0.3));
+      if (a.w <= 0 && ending) this.action = null;
+      else {
+        sampleClip(def.clip, Math.min(a.t, dur), this.act);
+        if (this.act.ikW > 0.001) this._clipIK(s);
+        blend(out, out, this.act, a.w);
+      }
+    }
+    // ---- 4. upper-body cast
+    const ca = this.castA;
+    if (ca && !this.dead) {
+      ca.t += dt;
+      const dur = ca.def.clip.duration;
+      const ending = ca.t > dur - ca.def.out;
+      ca.w = ending ? Math.max(0, ca.w - dt / ca.def.out) : Math.min(1, ca.w + dt / ca.def.in);
+      if (ca.t > dur && ca.w <= 0) this.castA = null;
+      else {
+        sampleClip(ca.def.clip, Math.min(ca.t, dur), this.cast);
+        const rollW = this.action && this.action.def.aimOff ? this.action.w : 0;
+        blend(out, out, this.cast, ca.w * (1 - rollW), UPPER_MASK);
+      }
+    }
+    if (this.lobby) {
+      sampleClip(C.SHOWCASE, 0, this.cast);
+      blend(out, out, this.cast, 1, UPPER_MASK);
+    }
+    // ---- 5. additive
+    const aimW = this.dead ? 0 : 1 - (this.action && this.action.def.aimOff ? this.action.w : 0);
+    const p = clamp(s.pitch || 0, -1.3, 1.3) * R2D * aimW;
+    if (p) {
+      addE(out, B.spine, -p * 0.22, 0, 0); addE(out, B.chest, -p * 0.24, 0, 0); addE(out, B.upperChest, -p * 0.18, 0, 0);
+      addE(out, B.neck, -p * 0.14, 0, 0); addE(out, B.head, -p * 0.22, 0, 0);
+    }
+    if (this.flinch > 0) {
+      const f = this.flinch * this.flinch;
+      addE(out, B.spine, -10 * f, 6 * f * this.flinchSide, 4 * f * this.flinchSide); addE(out, B.head, -14 * f, -8 * f * this.flinchSide, 0);
+    }
+    const br = Math.sin(this.t * 1.9) * (1 - Math.min(1, speed / 3)) * aimW;
+    addE(out, B.chest, br * 1.2, 0, 0); addE(out, B.upperChest, br * 0.8, 0, 0);
+    addE(out, B.shoulderL, 0, 0, br * 1.2); addE(out, B.shoulderR, 0, 0, -br * 1.2);
+    rig.apply(out);
+  }
+
+  // ---------------------------------------------------------------- locomotion (procedural)
+  _locomotion(dt, s) {
+    const P = this.loco.reset();
+    const rig = this.rig;
+    const speed = this.speed;
+    const wRun = sstep(0.15, 1.8, speed);
+    const wFast = sstep(2.5, RUN_SPEED, speed);
+    // gait timing: cadence rises with speed; stance length is exactly speed*stanceTime
+    const T = lerp(0.95, 0.56, clamp((speed - 1) / (RUN_SPEED - 1), 0, 1)) * (this.lobby ? 1.05 : 1);
+    let beta = clamp(0.62 / Math.max(speed * T, 1e-3), 0.17, 0.66);
+    const Ls = speed * beta * T;
+    if (speed > 0.05) this.phase = (this.phase + dt / T) % 1;
+    else this.phase = damp(this.phase, Math.round(this.phase * 2) / 2, 3, dt) % 1;
+
+    // direction (local)
+    const mx = speed > 1e-3 ? this.vx / speed : 0, mz = speed > 1e-3 ? this.vz / speed : 1;
+    const theta = Math.atan2(mx, mz); // 0 fwd, + left
+    let hy;
+    if (Math.abs(theta) <= 1.85) hy = clamp(theta * 0.5, -0.75, 0.75);
+    else hy = clamp(wrapPi(theta - Math.PI) * 0.35, -0.6, 0.6);
+    this.hipYaw = damp(this.hipYaw, hy * wRun, 10, dt);
+    const fwdness = mz; // 1 forward, -1 back
+
+    // hips
+    const bob = 0.026 * wFast * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) + 0.012 * (wRun - wFast) * Math.cos(4 * Math.PI * (this.phase - 0.15));
+    const idleSink = this.lobby ? -0.012 : -0.03;
+    P.hip[1] = lerp(idleSink, -0.035, wFast) - bob + this.dip;
+    const hipYawD = this.hipYaw * R2D;
+    // feet paths
+    const feet = {};
+    const ankleH = rig.ankleHeight;
+    for (const side of ['L', 'R']) {
+      const sg = side === 'L' ? 1 : -1;
+      const u = (this.phase + (side === 'R' ? 0.5 : 0)) % 1;
+      let along, lift = 0, pitch = 0;
+      if (u < beta) {
+        const k2 = u / beta;
+        along = Ls * (0.5 - k2);
+        if (k2 > 0.65) { pitch = 34 * sstep(0.65, 1, k2) * wRun; lift = 0.09 * Math.sin(pitch / 57.3); }
+        pitch -= 10 * (1 - sstep(0, 0.3, k2)) * wRun;
+      } else {
+        const k2 = (u - beta) / (1 - beta);
+        const e = k2 * k2 * k2 * (k2 * (k2 * 6 - 15) + 10);
+        along = Ls * (-0.5 + e) - 0.22 * wFast * Math.sin(Math.PI * k2) * (1 - k2) * 1.6;
+        const H = lerp(0.08, 0.3, wFast);
+        lift = H * Math.pow(Math.sin(Math.PI * Math.pow(k2, 0.8)), 1.2) * wRun;
+        pitch = lerp(40, -14, sstep(0, 0.9, k2)) * wRun;
+      }
+      feet[side] = { along, lift, pitch, sg };
+    }
+    // pelvis/torso motion from the stride
+    const stride = Ls > 1e-3 ? (feet.L.along - feet.R.along) / Ls : 0; // + when L foot ahead
+    const lean = (3 + 9 * wFast) * Math.max(0, fwdness) - 4 * wFast * Math.max(0, -fwdness) + clamp(this.az * 1.4, -8, 10) * wRun;
+    const bank = clamp(-this.ax * 1.2, -8, 8) * wRun;
+    setE(P, B.hips, lean * 0.25, hipYawD - 9 * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * Math.sin(2 * Math.PI * this.phase) * wRun);
+    const counter = -hipYawD + 9 * stride * wRun;
+    setE(P, B.spine, 2 + lean * 0.45, counter * 0.35, bank * 0.3);
+    setE(P, B.chest, lean * 0.25, counter * 0.35 + 6 * stride * wRun, 0);
+    setE(P, B.upperChest, 0, counter * 0.2, 0);
+    setE(P, B.neck, -lean * 0.4, counter * 0.06, -bank * 0.3);
+    setE(P, B.head, -lean * 0.35, counter * 0.04, -bank * 0.4);
+
+    // arms: counter-swing to the legs; idle = guard stance with the casting hand raised
+    const swingAmt = (34 + 14 * wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness));
+    for (const side of ['L', 'R']) {
+      const sg = side === 'L' ? 1 : -1;
+      const sw = (Ls > 1e-3 ? feet[side].along / (Ls * 0.5) : 0) * swingAmt * 0.5;
+      const idleX = side === 'R' ? -14 : -8, idleZ = side === 'R' ? 16 : 11, idleE = side === 'R' ? -72 : -36;
+      const ax = lerp(idleX, 8 + sw, wRun);
+      const az = lerp(idleZ, 10 + 4 * wFast, wRun);
+      const ex = lerp(idleE, -(48 + 42 * wFast) - Math.max(0, -sw) * 0.5, wRun);
+      setS(P, B['upperArm' + side], sg, ax, 0, az);
+      setS(P, B['foreArm' + side], sg, ex, -10 * wRun, 0);
+      setS(P, B['hand' + side], sg, -6, 0, -4);
+      setS(P, B['shoulder' + side], sg, 0, 0, -2 * wFast);
+    }
+
+    // ---- feet targets (root space)
+    const cyaw = Math.cos(this.hipYaw), syaw = Math.sin(this.hipYaw);
+    const tgt = {};
+    for (const side of ['L', 'R']) {
+      const f = feet[side];
+      const width = lerp(0.135, 0.12, wFast);
+      // base under the hip, turned with the pelvis
+      const bx = f.sg * width * cyaw, bz = -f.sg * width * syaw;
+      tgt[side] = tmpV.set(bx + mx * f.along, ankleH + f.lift, bz + mz * f.along).clone();
+      tgt[side].pitch = f.pitch;
+      tgt[side].yaw = (hipYawD * 0.7 + f.sg * 7);
+    }
+    // idle: world-locked feet that re-step when the body turns or drifts away
+    const idleTgt = this._plantedFeet(dt, s, wRun, tgt);
+    for (const side of ['L', 'R']) {
+      const g = tgt[side], it = idleTgt[side];
+      const w = wRun;
+      const x = lerp(it.x, g.x, w), y = lerp(it.y, g.y, w), z = lerp(it.z, g.z, w);
+      let gy = 0;
+      if (this.groundAt && s.grounded) {
+        // root → world for terrain query
+        const wx = s.pos.x + x * Math.cos(s.yaw) + z * Math.sin(s.yaw);
+        const wz = s.pos.z - x * Math.sin(s.yaw) + z * Math.cos(s.yaw);
+        gy = clamp(this.groundAt(wx, wz) - s.pos.y, -0.25, 0.25);
+      }
+      g.set(x, y + gy, z); g.pitch = lerp(it.pitch, g.pitch, w); g.yaw = lerp(it.yaw, g.yaw, w); g.gy = gy;
+    }
+    // lower the pelvis if a foot needs to reach down a slope
+    const drop = Math.min(0, Math.min(tgt.L.gy, tgt.R.gy));
+    P.hip[1] += drop;
+    legIK(P, rig, 'L', tgt.L, tgt.L.pitch, tgt.L.yaw);
+    legIK(P, rig, 'R', tgt.R, tgt.R.pitch, tgt.R.yaw);
+    for (const side of ['L', 'R']) setE(P, B['toes' + side], -Math.max(0, tgt[side].pitch) * 0.7, 0, 0);
+  }
+
+  _plantedFeet(dt, s, wRun, gait) {
+    const res = { L: null, R: null };
+    const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);
+    const toWorld = (x, z, out) => out.set(s.pos.x + x * cy + z * sy, s.pos.y, s.pos.z - x * sy + z * cy);
+    const toLocal = (w, out) => { const dx = w.x - s.pos.x, dz = w.z - s.pos.z; return out.set(dx * cy - dz * sy, 0, dx * sy + dz * cy); };
+    // rest stance (combat: left foot a touch forward)
+    const rest = { L: [0.15, 0.07, 9], R: [-0.15, -0.07, -12] };
+    if (this.lobby) { rest.L = [0.13, 0.03, 8]; rest.R = [-0.13, -0.02, -8]; }
+    const ankleH = this.rig.ankleHeight;
+    for (const side of ['L', 'R']) {
+      const pl = this.plant[side];
+      if (!this.planted || wRun > 0.6 || !s.grounded) {
+        // follow the gait so the hand-off back to idle starts where the feet actually are
+        toWorld(gait[side].x, gait[side].z, pl.p); pl.yaw = s.yaw + (gait[side].yaw || 0) / R2D; pl.step = -1;
+      }
+    }
+    this.planted = s.grounded && wRun <= 0.6;
+    // stepping logic
+    const stepDur = 0.2;
+    const err = {};
+    for (const side of ['L', 'R']) {
+      const pl = this.plant[side];
+      const r = rest[side];
+      const want = toWorld(r[0], r[1], tmpV2).clone();
+      const wantYaw = s.yaw + r[2] / R2D;
+      err[side] = { want, wantYaw, d: Math.hypot(want.x - pl.p.x, want.z - pl.p.z) + Math.abs(wrapPi(wantYaw - pl.yaw)) * 0.22 };
+      if (pl.step >= 0) {
+        pl.step += dt / stepDur;
+        if (pl.step >= 1) { pl.step = -1; pl.p.copy(pl.to); pl.yaw = pl.toYaw; }
+      }
+    }
+    const anyStep = this.plant.L.step >= 0 || this.plant.R.step >= 0;
+    if (this.planted && !anyStep && !this.dead) {
+      const worst = err.L.d > err.R.d ? 'L' : 'R';
+      if (err[worst].d > 0.17) {
+        const side = err.L.d > 0.17 && err.R.d > 0.17 ? (this.lastStep === 'L' ? 'R' : 'L') : worst;
+        const pl = this.plant[side];
+        pl.step = 0; pl.from.copy(pl.p); pl.to.copy(err[side].want); pl.fromYaw = pl.yaw; pl.toYaw = err[side].wantYaw;
+        this.lastStep = side;
+      }
+    }
+    for (const side of ['L', 'R']) {
+      const pl = this.plant[side];
+      let lift = 0, pitch = 0;
+      const wpos = tmpV2;
+      let yaw = pl.yaw;
+      if (pl.step >= 0) {
+        const u = pl.step, e = u * u * (3 - 2 * u);
+        wpos.lerpVectors(pl.from, pl.to, e);
+        yaw = pl.fromYaw + wrapPi(pl.toYaw - pl.fromYaw) * e;
+        lift = Math.sin(Math.PI * u) * 0.07; pitch = Math.sin(Math.PI * u) * 12;
+      } else wpos.copy(pl.p);
+      const loc = toLocal(wpos, new THREE.Vector3());
+      loc.y = ankleH + lift;
+      loc.pitch = pitch; loc.yaw = wrapPi(yaw - s.yaw) * R2D;
+      res[side] = loc;
+    }
+    return res;
+  }
+
+  // ---------------------------------------------------------------- air
+  _airPose(s) {
+    const P = this.air.reset();
+    const vy = s.vel.y;
+    const fall = sstep(2.5, -5, vy);
+    const fwd = clamp(this.vz / RUN_SPEED, -1, 1);
+    const R = { spine: [6, 0, 0], upperLegL: [-62, 0, 6], lowerLegL: [84, 0, 0], footL: [22, 0, 0], upperLegR: [12, 0, 6], lowerLegR: [46, 0, 0], footR: [28, 0, 0], upperArmL: [-34, 0, 24], foreArmL: [-44, 0, 0], upperArmR: [26, 0, 26], foreArmR: [-52, 0, 0], head: [-6, 0, 0] };
+    const F = { spine: [2, 0, 0], upperLegL: [-34, 0, 8], lowerLegL: [44, 0, 0], footL: [10, 0, 0], upperLegR: [-12, 0, 8], lowerLegR: [30, 0, 0], footR: [16, 0, 0], upperArmL: [-14, 0, 52], foreArmL: [-28, 0, 0], upperArmR: [-8, 0, 56], foreArmR: [-30, 0, 0], head: [6, 0, 0] };
+    for (const key of Object.keys(R)) {
+      const a = R[key], b = F[key];
+      const side = /[a-z]R$/.test(key) ? -1 : 1;
+      setE(P, B[key], lerp(a[0], b[0], fall), lerp(a[1], b[1], fall) * side, lerp(a[2], b[2], fall) * side);
+    }
+    const flail = Math.sin(this.t * 5) * 4 * fall;
+    addE(P, B.upperArmL, flail, 0, 0); addE(P, B.upperArmR, -flail, 0, 0);
+    setE(P, B.hips, 8 * fwd, this.hipYaw * R2D * 0.5, 0);
+    P.hip[1] = 0.02;
+  }
+
+  // clip IK (legs planted during slams / crouches)
+  _clipIK(s) {
+    const A = this.act;
+    const ik = this.ikp.copy(A);
+    const ankleH = this.rig.ankleHeight;
+    for (const side of ['L', 'R']) {
+      const t = A.ik[side];
+      tmpV.set(t[0], ankleH + t[1], t[2]);
+      legIK(ik, this.rig, side, tmpV, t[3], side === 'L' ? 8 : -8);
+    }
+    const w = A.ikW;
+    for (const side of ['L', 'R']) for (const b of ['upperLeg', 'lowerLeg', 'foot']) {
+      const i = B[b + side];
+      getQ(A, i, tmpQ); const qb = new THREE.Quaternion(); getQ(ik, i, qb);
+      tmpQ.slerp(qb, w); putQ(A, i, tmpQ);
+    }
+  }
+}

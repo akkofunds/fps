@@ -1,16 +1,15 @@
 {
-  "name": "riftline",
+  "name": "magebreak",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Browser tactical FPS: Three.js + PeerJS P2P multiplayer, Source-style bhop, 60 FPS on Chromebooks and phones.",
+  "description": "Magebreak: elemental third-person arena brawler in the browser. Three.js + PeerJS P2P multiplayer, free-for-all matchmaking, customs and practice.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "meshoptimizer": "^1.3.0",
     "peerjs": "1.5.5",
     "three": "0.170.0"
   },

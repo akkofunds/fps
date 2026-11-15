@@ -1,184 +1,181 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#0F1923" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>RIFTLINE — Tactical FPS</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#0f1923" />
+  <title>Magebreak</title>
+  <meta name="description" content="Magebreak — an elemental third-person arena brawler. Free-for-all matchmaking, customs and practice in your browser." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2c2 6 9 9 9 17a9 9 0 0 1-18 0c0-5 3-7 4-11 1 3 3 4 3 4 0-4 1-7 2-10z' fill='%23ff5a1f'/%3E%3C/svg%3E" />
 </head>
 <body>
   <canvas id="game"></canvas>
 
-  <!-- ============ LOBBY ============ -->
+  <!-- ===================== LOBBY ===================== -->
   <div id="lobby" class="hidden">
+    <div class="lobby-shade"></div>
     <header class="topbar">
-      <div class="logo"><i></i>RIFTLINE</div>
+      <div class="brand"><svg viewBox="0 0 32 32"><path d="M16 2c2 6 9 9 9 17a9 9 0 0 1-18 0c0-5 3-7 4-11 1 3 3 4 3 4 0-4 1-7 2-10z"/></svg><span>MAGEBREAK</span></div>
       <nav class="nav">
-        <button class="btn red play" id="btnPlay">PLAY</button>
-        <button class="btn" id="btnCustom">CUSTOM</button>
-        <button class="btn" id="btnRange">RANGE</button>
-        <button class="btn" id="btnSettings">SETTINGS</button>
+        <button class="nav-btn active" data-tab="play">PLAY</button>
+        <button class="nav-btn" data-tab="mages">MAGES</button>
+        <button class="nav-btn" data-tab="career">CAREER</button>
       </nav>
-      <div class="me"><span class="dot" id="netDot"></span><span class="tagchip" id="meTag"></span></div>
+      <div class="queue-pill hidden" id="queuePill">
+        <div class="qp-time" id="qpTime">0:00</div>
+        <div class="qp-sub" id="qpSub">SEARCHING</div>
+      </div>
+      <div class="top-right">
+        <div class="status-dot" id="netStatus" title="Matchmaking status"></div>
+        <button class="icon-btn" id="btnSettings" title="Settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm8.4 4.6.1-1.1-.1-1.1 2-1.6-2-3.4-2.4 1a8 8 0 0 0-1.9-1.1L15.7 3h-3.9l-.4 2.7a8 8 0 0 0-1.9 1.1l-2.4-1-2 3.4 2 1.6-.1 1.1.1 1.1-2 1.6 2 3.4 2.4-1c.6.5 1.2.8 1.9 1.1l.4 2.7h3.9l.4-2.7a8 8 0 0 0 1.9-1.1l2.4 1 2-3.4z"/></svg></button>
+      </div>
     </header>
-    <div class="hero-copy">
-      <h1>TACTICAL<br /><span>FPS</span></h1>
-      <p>Source-style bhop. One-tap AK. Peer-to-peer matches with friends — no server, no install.</p>
-    </div>
-    <div id="plates"></div>
-    <aside id="social" class="panel">
-      <h3>SOCIAL <span class="dot" id="socialDot"></span></h3>
-      <div class="mytag" id="myTagBox" title="Click to copy your tag">
-        <div><small>YOUR TAG — SHARE IT</small><div class="tagchip" id="myTagText"></div></div>
-        <span class="label">COPY</span>
+
+    <!-- PLAY -->
+    <section class="tab" id="tabPlay">
+      <div class="mode-tabs" id="modeTabs">
+        <button class="mode-tab active" data-mode="ffa">FREE-FOR-ALL</button>
+        <button class="mode-tab" data-mode="custom">CUSTOM</button>
+        <button class="mode-tab" data-mode="practice">PRACTICE</button>
       </div>
-      <div class="label">ADD FRIEND</div>
-      <div class="addrow">
-        <input class="field" id="friendTag" placeholder="Name#1234" maxlength="20" autocomplete="off" spellcheck="false" />
-        <button class="btn red small" id="btnInvite">INVITE</button>
+      <div class="cards" id="partyCards"></div>
+      <div class="custom-panel hidden" id="customPanel">
+        <label>KILLS TO WIN <select id="cKills"><option>10</option><option>15</option><option selected>20</option><option>30</option><option>50</option></select></label>
+        <label>TIME LIMIT <select id="cTime"><option value="300">5 MIN</option><option value="480">8 MIN</option><option value="600" selected>10 MIN</option><option value="900">15 MIN</option><option value="0">NONE</option></select></label>
+        <span class="cp-note">Invite friends to your party, then start. Everyone in the party joins.</span>
       </div>
-      <div id="invites" class="list"></div>
-      <h3>PARTY <span id="partyCount" class="label"></span></h3>
-      <div id="party" class="list"></div>
-      <button class="btn small ghost" id="btnLeaveParty">LEAVE PARTY</button>
-      <p class="hint" id="socialHint">Party members appear next to you in the lobby. Anyone in the party can pick the map; the leader starts queues and custom games. Press Enter to chat.</p>
+      <div class="mode-desc" id="modeDesc"></div>
+      <div class="actions">
+        <button class="btn-side" id="btnPractice">PRACTICE <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2"/></svg></button>
+        <button class="btn-start" id="btnStart"><span id="btnStartLabel">START</span><i></i></button>
+        <button class="btn-side" id="btnLeaveParty">LEAVE PARTY</button>
+      </div>
+    </section>
+
+    <!-- MAGES -->
+    <section class="tab hidden" id="tabMages">
+      <div class="mages-wrap">
+        <div class="mage-roster" id="mageRoster"></div>
+        <div class="mage-detail" id="mageDetail"></div>
+      </div>
+    </section>
+
+    <!-- CAREER -->
+    <section class="tab hidden" id="tabCareer">
+      <div class="career" id="career"></div>
+    </section>
+
+    <!-- SOCIAL SIDEBAR -->
+    <aside class="social" id="social">
+      <div class="me-card">
+        <div class="me-avatar"><svg viewBox="0 0 32 32"><path d="M16 2c2 6 9 9 9 17a9 9 0 0 1-18 0c0-5 3-7 4-11 1 3 3 4 3 4 0-4 1-7 2-10z"/></svg></div>
+        <div class="me-info"><div class="me-name" id="meName">—</div><div class="me-tag" id="meTag" title="Click to copy">#0000</div></div>
+        <button class="icon-btn small" id="btnRename" title="Change name">✎</button>
+      </div>
+      <div class="soc-head">PARTY <span id="partyCount">1/8</span></div>
+      <div class="soc-list" id="partyList"></div>
+      <div class="soc-head">INVITE</div>
+      <form class="invite-form" id="inviteForm" autocomplete="off">
+        <input id="inviteInput" placeholder="Name#1234" maxlength="20" spellcheck="false" />
+        <button type="submit">+</button>
+      </form>
+      <div class="soc-head">RECENT PLAYERS</div>
+      <div class="soc-list" id="recentList"></div>
+      <div class="soc-foot" id="socFoot">Share your tag so friends can invite you.</div>
     </aside>
-    <section id="maps"></section>
+
+    <div class="invites" id="invites"></div>
   </div>
 
-  <!-- queue timer (top center) -->
-  <div id="queueTimer" class="hidden">
-    <div class="spin"></div>
-    <div><div class="q1"><span id="qText">SEARCHING FOR MATCH...</span><b id="qTime">00:00</b></div><div class="q2" id="qSub"></div></div>
-    <button class="btn small" id="btnCancelQ">CANCEL</button>
+  <!-- party chat (lobby) / match chat -->
+  <div id="chat" class="chat">
+    <div class="chat-feed" id="chatFeed"></div>
+    <div class="chat-input hidden" id="chatInputWrap"><span id="chatChan">[ALL]</span><input id="chatInput" maxlength="120" autocomplete="off" /></div>
   </div>
 
-  <!-- ============ MODALS ============ -->
-  <div id="namePrompt" class="modal hidden">
-    <div class="panel">
-      <div class="label">WELCOME, AGENT</div>
-      <h2>CHOOSE YOUR NAME</h2>
-      <p>You'll get a unique 4-digit tag (like <b>Player#4821</b>). Friends invite you with it.</p>
-      <input class="field" id="nameInput" maxlength="14" placeholder="Username (letters, numbers, _)" autocomplete="off" spellcheck="false" />
-      <div class="row"><button class="btn red" id="btnName">CONTINUE</button></div>
-    </div>
-  </div>
-
-  <div id="modeModal" class="modal hidden">
-    <div class="panel">
-      <div class="label">MATCHMAKING</div>
-      <h2>SELECT MODE</h2>
-      <p>Pairs you with live players. Empty slots are filled with combat bots after 15 seconds.</p>
-      <div class="modes">
-        <button class="modecard" data-mode="duel"><b>1V1 DUEL</b><span>First to 5 rounds · one life per round</span></button>
-        <button class="modecard" data-mode="wingman"><b>2V2 WINGMAN</b><span>First to 5 rounds · bring a friend</span></button>
-        <button class="modecard" data-mode="ffa"><b>FREE-FOR-ALL</b><span>First to 20 kills · instant respawn</span></button>
-      </div>
-      <div class="row"><button class="btn ghost" data-close>BACK</button></div>
-    </div>
-  </div>
-
-  <div id="customModal" class="modal hidden">
-    <div class="panel">
-      <div class="label">PRIVATE MATCH</div>
-      <h2>CUSTOM GAME</h2>
-      <p id="customHint">Host a private match for your party.</p>
-      <div class="opt"><div>MODE</div><div class="seg" id="cMode">
-        <button data-v="duel" class="on">1V1</button><button data-v="wingman">2V2</button><button data-v="ffa">FFA</button><button data-v="range">RANGE</button>
-      </div></div>
-      <div class="opt"><div>MAP</div><div class="seg" id="cMap"></div></div>
-      <div class="opt"><div>BHOP SPEED BOOST<small>Air-accelerate 150 — easy 450+ UPS</small></div><button class="toggle" id="cBhop"></button></div>
-      <div class="opt"><div>HEADSHOTS ONLY<small>Body shots deal no damage</small></div><button class="toggle" id="cHs"></button></div>
-      <div class="opt"><div>BOT FILL<small>Fill empty slots with combat bots</small></div><button class="toggle on" id="cBots"></button></div>
-      <div class="row"><button class="btn ghost" data-close>BACK</button><button class="btn red" id="btnStartCustom">START MATCH</button></div>
-    </div>
-  </div>
-
-  <div id="settingsModal" class="modal hidden">
-    <div class="panel">
-      <div class="label">OPTIONS</div>
-      <h2>SETTINGS</h2>
-      <div class="opt"><div>MOUSE SENSITIVITY<small id="sSensV"></small></div><input type="range" id="sSens" min="0.1" max="4" step="0.05" /></div>
-      <div class="opt"><div>TOUCH SENSITIVITY<small id="sTSensV"></small></div><input type="range" id="sTSens" min="0.2" max="3" step="0.05" /></div>
-      <div class="opt"><div>FIELD OF VIEW<small id="sFovV"></small></div><input type="range" id="sFov" min="70" max="110" step="1" /></div>
-      <div class="opt"><div>RENDER SCALE<small id="sScaleV">Lower = faster on old Chromebooks</small></div><div class="seg" id="sScale"><button data-v="1">100%</button><button data-v="0.75">75%</button><button data-v="0.5">50%</button></div></div>
-      <div class="opt"><div>VOLUME<small id="sVolV"></small></div><input type="range" id="sVol" min="0" max="1" step="0.05" /></div>
-      <div class="opt"><div>TOGGLE ADS<small>Off = hold right-click to aim (sniper always cycles zoom)</small></div><button class="toggle" id="sAds"></button></div>
-      <div class="opt"><div>SPEEDOMETER<small>Live UPS readout in the HUD</small></div><button class="toggle" id="sSpeedo"></button></div>
-      <div class="opt"><div>SHOW FPS</div><button class="toggle" id="sFps"></button></div>
-      <div class="opt"><div>CROSSHAIR COLOR</div><div class="seg" id="sXh"><button data-v="#00ffaa">GREEN</button><button data-v="#ffffff">WHITE</button><button data-v="#ffe14f">YELLOW</button><button data-v="#ff4fd8">PINK</button></div></div>
-      <div class="opt"><div>CHANGE NAME<small>Generates a new tag</small></div><button class="btn small" id="btnRename">RENAME</button></div>
-      <p class="hint" style="margin-top:14px;font-size:12px">Weapon models: AK-47 by Billy Jackman (CC BY 4.0), Glock 17 DEVGRU by xlisov (CC BY-NC 4.0), Sniper by DJMaesen (CC BY 4.0) — via Sketchfab, modified. See CREDITS.md.</p>
-      <div class="row"><button class="btn red" data-close>DONE</button></div>
-    </div>
-  </div>
-
-  <!-- ============ HUD ============ -->
+  <!-- ===================== HUD ===================== -->
   <div id="hud" class="hidden">
-    <div class="tl" id="netinfo"></div>
-    <div id="scorebox"><div class="sa" id="scA">0</div><div class="tm"><span id="tmr">0:00</span><small id="phaseLbl"></small></div><div class="sb" id="scB">0</div></div>
-    <div id="killfeed"></div>
-    <div id="crosshair"><i class="d"></i><i class="l"></i><i class="r"></i><i class="u"></i><i class="b"></i></div>
-    <div id="hitmark"><i style="transform:rotate(45deg) translateY(-9px)"></i><i style="transform:rotate(135deg) translateY(-9px)"></i><i style="transform:rotate(225deg) translateY(-9px)"></i><i style="transform:rotate(315deg) translateY(-9px)"></i></div>
-    <div id="dmgind"></div>
-    <div id="vignette"></div>
-    <div id="scope" class="hidden"><i></i><b id="zoomLbl">1.5x</b></div>
-    <div id="center"><div class="c1" id="c1"></div><div class="c2" id="c2"></div></div>
-    <div id="dead" class="hidden"><b>ELIMINATED BY <span id="deadBy"></span></b><small id="deadSub"></small></div>
-    <div id="interact" class="hidden">[E] PRESS</div>
-    <div id="rangePanel" class="panel hidden"></div>
-    <div id="hpbox"><div id="hp">100</div><div id="hpbar"><i style="width:100%"></i></div></div>
-    <div id="speedo"><div class="v" id="spd">0</div><div class="u">UPS</div></div>
-    <div id="ammobox"><div id="wname"><b>AK-47</b><span id="wmode"></span></div><div id="ammo">30<small>/90</small></div></div>
-    <div id="slots"><div data-s="1">1 AK-47</div><div data-s="2">2 GLOCK-17</div><div data-s="3">3 SNIPER</div></div>
     <div id="tags"></div>
-    <div id="board" class="panel hidden"></div>
-    <div id="buy" class="panel hidden"></div>
-    <div id="results" class="hidden"><div class="r1" id="r1"></div><div class="r2" id="r2"></div></div>
+    <div id="dmgNums"></div>
+    <div id="xhair"><i class="d"></i><i class="l t"></i><i class="l b"></i><i class="l le"></i><i class="l r"></i></div>
+    <div id="hitmark"><i></i><i></i><i></i><i></i></div>
+    <div id="hurtVig"></div>
+    <div id="hurtDir"></div>
+    <div class="top-center" id="topCenter">
+      <div class="tc-box tc-me"><span class="tc-lbl">YOU</span><span class="tc-val" id="tcMe">0</span></div>
+      <div class="tc-timer"><span id="tcTime">0:00</span><span class="tc-goal" id="tcGoal">FIRST TO 20</span></div>
+      <div class="tc-box tc-lead"><span class="tc-lbl" id="tcLeadName">LEADER</span><span class="tc-val" id="tcLead">0</span></div>
+    </div>
+    <div id="killfeed"></div>
+    <div id="banner"></div>
+    <div id="practiceHint" class="hidden">PRACTICE RANGE · Training dummies regenerate · Press <b>Esc</b> to leave</div>
+    <div class="bottom-hud">
+      <div class="hp-box">
+        <div class="hp-num" id="hpNum">150</div>
+        <div class="hp-bar"><div class="hp-ghost" id="hpGhost"></div><div class="hp-fill" id="hpFill"></div></div>
+        <div class="hp-name" id="hpName">PYRO</div>
+      </div>
+      <div class="abil" id="abilBar"></div>
+    </div>
+    <div id="deathScreen" class="hidden">
+      <div class="ds-title">ELIMINATED</div>
+      <div class="ds-by" id="dsBy"></div>
+      <div class="ds-timer">RESPAWN IN <b id="dsTimer">3</b></div>
+    </div>
+    <div id="scoreboard" class="hidden"></div>
+    <div id="endScreen" class="hidden"></div>
   </div>
 
-  <div id="pause" class="hidden">
+  <!-- ===================== MODALS ===================== -->
+  <div id="pause" class="modal hidden">
     <div class="panel">
-      <div class="title">PAUSED</div>
-      <p class="hint" id="pauseHint">Click Resume to lock the mouse. Esc to release.</p>
-      <button class="btn red" id="btnResume">RESUME</button>
-      <button class="btn" id="btnPauseSettings">SETTINGS</button>
-      <button class="btn ghost" id="btnLeave">LEAVE MATCH</button>
+      <h2>MENU</h2>
+      <p id="pauseHint" class="muted"></p>
+      <button class="btn-wide primary" id="btnResume">RESUME</button>
+      <button class="btn-wide" id="btnPauseSettings">SETTINGS</button>
+      <button class="btn-wide danger" id="btnLeave">LEAVE MATCH</button>
     </div>
   </div>
 
-  <!-- ============ CHAT ============ -->
-  <div id="chat" class="lobby">
-    <div id="chatFeed"></div>
-    <div id="chatInputWrap" class="hidden"><span id="chatChan">[ALL]</span><input id="chatInput" maxlength="120" autocomplete="off" spellcheck="false" /></div>
+  <div id="settings" class="modal hidden">
+    <div class="panel wide">
+      <h2>SETTINGS</h2>
+      <div class="set-grid">
+        <label>Mouse sensitivity <span id="vSens"></span><input type="range" id="sSens" min="0.2" max="3" step="0.05" /></label>
+        <label>Field of view <span id="vFov"></span><input type="range" id="sFov" min="65" max="100" step="1" /></label>
+        <label>Master volume <span id="vVol"></span><input type="range" id="sVol" min="0" max="1" step="0.05" /></label>
+        <label>Graphics quality <select id="sQuality"><option value="low">Low (laptops / Chromebooks)</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+        <label>Camera shoulder <select id="sShoulder"><option value="1">Right</option><option value="-1">Left</option></select></label>
+        <label class="row"><input type="checkbox" id="sInvert" /> Invert mouse Y</label>
+      </div>
+      <div class="keys">
+        <div><b>WASD</b> Move</div><div><b>SPACE</b> Jump</div><div><b>Q</b> Dash</div><div><b>LMB</b> Ember Bolt</div>
+        <div><b>E</b> Blaze Orb</div><div><b>C</b> Firewall</div><div><b>V</b> Flame Leap</div><div><b>X</b> Meteor (ult)</div>
+        <div><b>RMB</b> Focus aim</div><div><b>TAB</b> Scoreboard</div><div><b>ENTER</b> Chat</div><div><b>ESC</b> Menu</div>
+      </div>
+      <button class="btn-wide primary" id="btnSettingsClose">DONE</button>
+    </div>
   </div>
 
-  <!-- ============ TOUCH ============ -->
-  <div id="touch" class="hidden">
-    <div class="zone" id="tzL"></div>
-    <div class="zone" id="tzR"></div>
-    <div id="joy" class="hidden"><i></i></div>
-    <button class="tb big" id="tFire">FIRE</button>
-    <button class="tb" id="tFireL">FIRE</button>
-    <button class="tb" id="tJump">JUMP</button>
-    <button class="tb" id="tCrouch">DUCK</button>
-    <button class="tb" id="tScope">ADS</button>
-    <button class="tb" id="tMode">MODE</button>
-    <button class="tb" id="tReload">R</button>
-    <button class="tb" id="tSwap">SWAP</button>
-    <button class="tb sq" id="tBuy">BUY</button>
-    <button class="tb sq" id="tChat">CHAT</button>
-    <button class="tb sq" id="tBoard">TAB</button>
-    <button class="tb sq" id="tPause">II</button>
-    <button class="tb sq" id="tAuto">AUTO-FIRE</button>
+  <div id="nameDialog" class="modal hidden">
+    <div class="panel">
+      <div class="brand big"><svg viewBox="0 0 32 32"><path d="M16 2c2 6 9 9 9 17a9 9 0 0 1-18 0c0-5 3-7 4-11 1 3 3 4 3 4 0-4 1-7 2-10z"/></svg><span>MAGEBREAK</span></div>
+      <p class="muted">Choose your mage name. Friends invite you with <b>Name#1234</b>.</p>
+      <form id="nameForm" autocomplete="off">
+        <input id="nameInput" maxlength="14" placeholder="Your name" spellcheck="false" />
+        <button class="btn-wide primary" type="submit">ENTER</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="loading" class="modal">
+    <div class="loader"><div class="brand big"><svg viewBox="0 0 32 32"><path d="M16 2c2 6 9 9 9 17a9 9 0 0 1-18 0c0-5 3-7 4-11 1 3 3 4 3 4 0-4 1-7 2-10z"/></svg><span>MAGEBREAK</span></div><div class="load-bar"><i id="loadFill"></i></div><div class="muted" id="loadText">Kindling…</div></div>
   </div>
 
   <div id="toasts"></div>
-  <script type="module" src="./src/main.js"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
