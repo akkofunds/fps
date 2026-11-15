@@ -1,660 +1,570 @@
 import * as THREE from 'three';
-import { TICK, NET_HZ, INTERP_DELAY, PHYS, PHYS_BOOST, MAX_HP, MODES, toUPS } from '../config.js';
-import { buildMap } from '../maps/index.js';
-import { CharacterRenderer } from '../entities/characterModel.js';
-import { TrailPool, TRAIL_STYLE, DecalPool, SparkPool } from '../effects/pools.js';
-import { BhopController } from '../physics/bhopController.js';
-import { WeaponSystem, traceShot, dirFromAngles } from '../weapons/weaponSystem.js';
-import { WEAPONS } from '../weapons/weaponDefs.js';
-import { Rules } from './rules.js';
+import { MODES, MAX_HP, NET_HZ, INTERP_DELAY } from '../config.js';
 import { Audio } from '../core/audio.js';
+import { addRecent } from '../core/storage.js';
+import { groundH } from '../world/terrain.js';
+import { Fx } from '../fx/fire.js';
+import { loadMageModel, MageInstance } from '../character/characterModel.js';
+import { Body, stepMovement } from './movement.js';
+import { ShoulderCamera } from './camera.js';
+import { Projectiles, hitCharacter } from './projectiles.js';
+import { PyroKit, PYRO } from './pyro.js';
+import { Rules } from './rules.js';
 
-const BUF = 16; // interpolation ring size
-const ALLY = 0x4fd8ff, ENEMY = 0xff4655, TARGET = 0xffb03a;
-const _hitOut = { t: 0, ent: null, zone: '' };
+// One match: world, entities, local control, network sync, abilities and rendering.
+//
+// Network (star around the host, JSON over WebRTC):
+//   client → host   s (own state 20 Hz) · ev (ability / animation events) · hit (shooter-side hits) · chat
+//   host → all      S (all states) · ev (relayed) · hp · kill · spawn · kb · board · phase · end · chat
+// The host runs Rules (HP, kills, respawns, burning, scoring) and also plays as a normal client.
 
-function rayBox(ox, oy, oz, idx, idy, idz, minX, minY, minZ, maxX, maxY, maxZ) {
-  let t1 = (minX - ox) * idx, t2 = (maxX - ox) * idx;
-  let tmin = Math.min(t1, t2), tmax = Math.max(t1, t2);
-  t1 = (minY - oy) * idy; t2 = (maxY - oy) * idy;
-  tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2));
-  t1 = (minZ - oz) * idz; t2 = (maxZ - oz) * idz;
-  tmin = Math.max(tmin, Math.min(t1, t2)); tmax = Math.min(tmax, Math.max(t1, t2));
-  return tmax >= Math.max(tmin, 0) ? Math.max(tmin, 0) : Infinity;
-}
-function lerpAngle(a, b, t) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * t; }
+const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), rayHit = { t: 0 };
+const wrapPi = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
-function makeEnt(p) {
-  return {
-    pid: p.id, n: p.n, name: p.name, tag: p.tag || '', team: p.team, bot: !!p.bot, practice: !!p.practice,
-    hp: MAX_HP, alive: false, kills: 0, deaths: 0, hsKills: 0, dmg: 0, w: 1,
-    x: 0, y: -50, z: 0, yaw: 0, pitch: 0, crouch: false, onGround: true, vx: 0, vz: 0,
-    bufT: new Float64Array(BUF), bufD: new Float32Array(BUF * 7), bufHead: 0, bufCount: 0,
-    rx: 0, ry: -50, rz: 0, ryaw: 0, rpitch: 0, rc: 0, rw: 1, phase: 0, deadT: 0, flash: 0, stepT: 0, firedAt: 0,
-    plx: 0, plz: 0, walk: 0, direct: false, respawnAt: 0,
-  };
+class Ent {
+  constructor(p, isLocal) {
+    this.n = p.n; this.id = p.id; this.name = p.name; this.tag = p.tag || '';
+    this.isLocal = isLocal; this.dummy = !!p.dummy;
+    this.alive = false; this.hp = MAX_HP;
+    this.kills = 0; this.deaths = 0; this.dmg = 0;
+    this.pos = new THREE.Vector3(0, -50, 0); this.vel = new THREE.Vector3();
+    this.yaw = 0; this.pitch = 0; this.grounded = true;
+    this.snaps = [];
+    this.view = null;
+    this.burnT = 0; this.flash = 0;
+    this.prevGrounded = true; this.prevVy = 0;
+    this.lastHurt = 0;
+  }
 }
 
 export class Match {
+  static async create(app, opts) {
+    const m = new Match(app, opts);
+    await m.init();
+    return m;
+  }
+
   constructor(app, { cfg, net, isHost, localId, players }) {
     this.app = app; this.cfg = cfg; this.net = net; this.isHost = isHost; this.localId = localId;
-    this.mode = MODES[cfg.mode] || MODES.duel;
-    this.hud = app.hud;
-    // ---- scene ----
-    const scene = this.scene = new THREE.Scene();
-    this.map = buildMap(cfg.map, scene);
-    scene.background = new THREE.Color(this.map.sky);
-    scene.fog = new THREE.Fog(...this.map.fog);
-    const [hs, hg, hi] = this.map.hemi;
-    scene.add(new THREE.HemisphereLight(hs, hg, hi * 2.1));
-    const [sc, si, sd] = this.map.sun;
-    const sun = new THREE.DirectionalLight(sc, si * 1.5); sun.position.set(...sd); scene.add(sun);
-    this.chars = new CharacterRenderer(scene, 16);
-    this.trails = new TrailPool(scene, 64);
-    this._mv = new THREE.Vector3();
-    this.decals = new DecalPool(scene, 256);
-    this.sparks = new SparkPool(scene, 256);
-    this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 400);
-    this.camera.rotation.order = 'YXZ';
-    this.vm = app.viewmodels;
-    this.vm.select(1);
-    this.vm.onEvent = (ev) => this._vmEvent(ev);
-    if (this.map.buttons) this._buildButtons();
-
-    // ---- entities ----
-    this.ents = new Map(); this.byN = [];
-    players.forEach((p, i) => {
-      const e = makeEnt(p); e.slot = i;
-      this.ents.set(p.id, e); this.byN[p.n] = e;
-    });
-    this.me = this.ents.get(localId);
-    this.me.local = true;
-    for (const e of this.ents.values()) if (isHost && e.bot) e.direct = true;
-    this.entList = [...this.ents.values()];
-
-    // ---- local player ----
-    this.ctrl = new BhopController(this.map.world);
-    this.ws = new WeaponSystem();
-    this.ws.infinite = cfg.mode === 'range';
-    this.yaw = 0; this.pitch = 0;
-    this.accum = 0;
-    this.physOpts = { airAccelerate: cfg.bhop ? PHYS_BOOST.airAccelerate : PHYS.airAccelerate, airCap: cfg.bhop ? PHYS_BOOST.airCap : PHYS.airCap, frozen: false };
-    this.netT = 0; this.pingT = 0; this.ping = 0;
-    this.clockOff = null;
-    this.phase = 'warmup'; this.phaseEndLocal = 0; this.round = 0; this.score = [0, 0];
-    this.killedBy = null; this.deathT = 0;
-    this.buyOpen = false; this.ended = false;
-    this.curFov = 70;
-    this.hitsLocal = 0; this.shotsLocal = 0;
-    this.lastImpact = null;
-    this.scoped = 0;
-    this.landDip = 0;
-    this._dir = [0, 0, 0];
-    this._shotCb = this._makeShotCb();
-    this._traceEnts = (ox, oy, oz, dx, dy, dz, maxT) => this.traceEnts(ox, oy, oz, dx, dy, dz, maxT, this.me);
-
-    // ---- networking ----
+    this.players = players;
+    this.mode = MODES[cfg.mode] || MODES.ffa;
+    this.ents = new Map();
+    this.byId = new Map();
+    this.time = 0;
+    this.controlsActive = true;
+    this.ended = false;
+    this.phase = 'warmup'; this.timeLeft = 0; this.phaseEnd = 0;
+    this.areas = []; // firewalls, burning ground
+    this.sendT = 0;
+    this.aimPoint = new THREE.Vector3();
+    this.aimEnt = null;
+    this.killsToWin = cfg.killsToWin || this.mode.killsToWin;
+    // subscribe immediately and buffer: the host starts sending spawns while we still load
+    this._ready = false; this._queue = [];
     if (isHost) {
-      this.rules = new Rules(this);
-      net.on('msg', (pid, msg) => {
-        const e = this.ents.get(pid);
-        if (!e) return;
-        if (msg.t === 'ping') { net.send(pid, { t: 'pong', c: msg.c }); return; }
-        this.rules.handle(e.n, msg);
-      });
-      net.on('leave', (pid) => { const e = this.ents.get(pid); if (e) this.rules.playerLeft(e.n); });
-      net.on('hello', (conn) => { if (!conn._pid) net.reject(conn, 'in-progress'); });
+      this._offs = [
+        net.on('msg', (pid, msg) => { if (this._ready) { const e = this.byId.get(pid); if (e) this.hostHandle(e, msg); } else this._queue.push(['h', pid, msg]); }),
+        net.on('leave', (pid) => { if (this._ready) this.onLeave(pid); else this._queue.push(['l', pid]); }),
+      ];
     } else {
-      net.on('msg', (msg) => this.onNet(msg, false));
-      net.on('close', () => { if (!this.ended) this.app.leaveMatch('Connection to host lost.'); });
+      this._offs = [
+        net.on('msg', (msg) => { if (this._ready) this.clientHandle(msg); else this._queue.push(['c', msg]); }),
+        net.on('close', () => { if (!this.ended) this.app.leaveMatch('Disconnected from the match host.'); }),
+      ];
     }
-
-    this.hud.enterMatch(this);
-    this.app.chat.setContext('match', (text, team) => this.sendChat(text, team));
-    if (isHost) this.rules.start(performance.now() / 1000);
   }
 
-  // ---------------------------------------------------------------- utilities
-  get now() { return performance.now() / 1000; }
-  isEnemy(e) { if (e === this.me) return false; if (e.practice) return true; return this.mode.teams ? e.team !== this.me.team : true; }
-  enemiesOf(e) {
-    const out = this._enemies || (this._enemies = []); out.length = 0;
-    for (const o of this.entList) {
-      if (o === e || !o.alive || o.practice) continue;
-      if (this.mode.teams && o.team === e.team) continue;
-      if (o === this.me) { o.x = this.ctrl.x; o.y = this.ctrl.y; o.z = this.ctrl.z; o.crouch = this.ctrl.crouched; }
-      out.push(o);
+  async init() {
+    const app = this.app;
+    this.map = app.map;
+    this.scene = this.map.scene; this.world = this.map.world;
+    this.camera = new THREE.PerspectiveCamera(app.settings.fov, app.aspect, 0.08, 3000);
+    this.fx = new Fx(this.scene, this.world);
+    // without bloom, additive HDR fire saturates to white; tone it down
+    if (!app.composer) this.fx.fire.mat.uniforms.uGain.value = 0.55;
+    this.proj = new Projectiles(this);
+    const template = await loadMageModel(PYRO.model);
+    const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);
+    const list = [...this.players];
+    if (this.cfg.mode === 'practice') {
+      for (let i = 0; i < 5; i++) list.push({ n: 100 + i, id: `dummy-${i}`, name: 'Training Dummy', tag: '', dummy: true });
     }
-    return out;
-  }
-  toHost(msg) { if (this.isHost) this.rules.handle(this.me.n, msg); else this.net.send(msg); }
+    for (const p of list) {
+      const e = new Ent(p, p.id === this.localId);
+      e.view = new MageInstance(template, { groundAt }).uniqueMaterials();
+      if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
+      e.view.setVisible(false);
+      this.scene.add(e.view.root);
+      this.ents.set(e.n, e); this.byId.set(e.id, e);
+    }
+    this.local = this.byId.get(this.localId);
+    this.view = this.local.view;
+    this.body = new Body();
+    this.cam = new ShoulderCamera(this.camera, this.world);
+    this.cam.side = app.settings.shoulder || 1;
+    this.cam.baseFov = app.settings.fov;
+    this.kit = new PyroKit(this);
 
-  // ---------------------------------------------------------------- hit detection
-  // Ray vs character hitboxes (head box + body box with leg zone). For bot shooters the host
-  // uses latest positions; the local shooter uses what it currently renders (favor the shooter).
-  traceEnts(ox, oy, oz, dx, dy, dz, maxT, shooter) {
-    const idx = dx !== 0 ? 1 / dx : 1e30, idy = dy !== 0 ? 1 / dy : 1e30, idz = dz !== 0 ? 1 / dz : 1e30;
-    let best = maxT, be = null, bz = '';
-    const latest = shooter !== this.me;
-    for (let i = 0; i < this.entList.length; i++) {
-      const e = this.entList[i];
-      if (!e.alive || e === shooter) continue;
-      let x, y, z, cr;
-      if (e === this.me) { x = this.ctrl.x; y = this.ctrl.y; z = this.ctrl.z; cr = this.ctrl.crouched ? 1 : 0; }
-      else if (latest) { x = e.x; y = e.y; z = e.z; cr = e.crouch ? 1 : 0; }
-      else { x = e.rx; y = e.ry; z = e.rz; cr = e.rc; }
-      // cheap reject: distance from ray to the character's center
-      const cx = x - ox, cy = y + 1 - oy, cz = z - oz;
-      const along = cx * dx + cy * dy + cz * dz;
-      if (along < 0 || along > best + 1) continue;
-      const px = cx - dx * along, py = cy - dy * along, pz = cz - dz * along;
-      if (px * px + py * py + pz * pz > 2.0) continue;
-      const hy = y + 1.66 - cr * 0.54;
-      const th = rayBox(ox, oy, oz, idx, idy, idz, x - 0.155, hy - 0.16, z - 0.155, x + 0.155, hy + 0.17, z + 0.155);
-      if (th < best) { best = th; be = e; bz = 'head'; }
-      const top = y + 1.5 - cr * 0.5;
-      const tb = rayBox(ox, oy, oz, idx, idy, idz, x - 0.26, y, z - 0.26, x + 0.26, top, z + 0.26);
-      if (tb < best) {
-        best = tb; be = e;
-        const hyy = oy + dy * tb;
-        bz = hyy < y + 0.86 - cr * 0.36 ? 'leg' : 'body';
+    if (this.isHost) this.rules = new Rules(this);
+    addRecent(this.players.filter((p) => p.id !== this.localId && !p.dummy));
+    app.hud.enterMatch(this);
+    if (this.rules) this.rules.start();
+    this._ready = true;
+    for (const q of this._queue) {
+      if (q[0] === 'c') this.clientHandle(q[1]);
+      else if (q[0] === 'h') { const e = this.byId.get(q[1]); if (e) this.hostHandle(e, q[2]); }
+      else this.onLeave(q[1]);
+    }
+    this._queue.length = 0;
+    // camera starts behind the local spawn
+    this._placeCamera();
+  }
+
+  _placeCamera() {
+    this.cam.update(0.016, this.body.pos, false);
+  }
+
+  // ---------------------------------------------------------------- outgoing
+  sendToHost(msg) {
+    if (this.isHost) this.hostHandle(this.local, msg);
+    else this.net.send(msg);
+  }
+
+  playAnim(kind, data = {}) {
+    this.view.anim.play(kind, data);
+    this.sendToHost({ t: 'ev', k: 'anim', a: kind, d: data });
+  }
+
+  // owner casts an ability: spawn locally (with damage authority) and tell everyone
+  castAbility(data) {
+    this.spawnAbility(this.local, data, true);
+    this.sendToHost({ t: 'ev', k: 'ab', ...data });
+  }
+
+  reportHit(target, dmg, ab, extra = {}) {
+    if (!target || !target.alive) return;
+    const msg = { t: 'hit', v: target.n, dmg, ab, head: extra.head ? 1 : 0 };
+    if (extra.burn) msg.burn = extra.burn;
+    if (extra.kb) msg.kb = extra.kb;
+    this.sendToHost(msg);
+    // instant feedback (host confirms HP)
+    this.app.hud.hitMarker(extra.head, dmg);
+    this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
+    Audio.play(extra.head ? 'head' : 'hit', 0.6);
+    this.kit.addUlt(dmg * (target.dummy ? 0.12 : 0.22));
+  }
+
+  // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
+  areaDamage(c, radius, maxD, minD, ab, opts = {}) {
+    for (const e of this.ents.values()) {
+      if (e === this.local || !e.alive) continue;
+      const d = tmpV.set(e.pos.x - c.x, e.pos.y + 0.9 - c.y, e.pos.z - c.z).length();
+      if (d > radius + 0.4) continue;
+      // line of sight from the blast to the body (walls/rocks shelter)
+      const dir = tmpV2.copy(tmpV).normalize();
+      const block = this.world.raycast(c.x, c.y + 0.3, c.z, dir.x, dir.y, dir.z, Math.max(0, d - 0.5), 0, null, true);
+      if (block < d - 0.6) continue;
+      const k = Math.min(1, Math.max(0, d / radius));
+      const dmg = Math.round(maxD + (minD - maxD) * k);
+      const extra = { at: new THREE.Vector3(e.pos.x, e.pos.y + 1.4, e.pos.z) };
+      if (opts.burn) extra.burn = opts.burn;
+      if (opts.kb) {
+        const hx = e.pos.x - c.x, hz = e.pos.z - c.z, hl = Math.hypot(hx, hz) || 1;
+        const s = opts.kb * (1 - k * 0.5);
+        extra.kb = [hx / hl * s, opts.up != null ? opts.up : 4.5, hz / hl * s];
       }
+      this.reportHit(e, dmg, ab, extra);
     }
-    if (shooter === this.me && this.buttons) {
-      for (const b of this.map.buttons) {
-        const t = rayBox(ox, oy, oz, idx, idy, idz, b.x - 0.68, b.y - 0.16, b.z - 0.06, b.x + 0.68, b.y + 0.16, b.z + 0.12);
-        if (t < best) { best = t; be = b; bz = 'btn'; }
+  }
+
+  onUltReady() { Audio.play('ultReady', 0.7); this.app.hud.flashUlt(); }
+
+  // ---------------------------------------------------------------- ability effects (all clients)
+  spawnAbility(e, d, local) {
+    if (!e) return;
+    switch (d.ab) {
+      case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
+      case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
+      case 'wall': this._wall(e, d, local); break;
+      case 'leap': {
+        const o = new THREE.Vector3().fromArray(d.o);
+        this.fx.leapBlast(o);
+        this.sound('leap', o, 1, 40);
+        e.leapT = 0.9;
+        if (local) this.areaDamage(o, 3.8, 25, 15, 'leap', { kb: 11, up: 6 });
+        break;
       }
+      case 'meteor': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.sound('meteorFall', c, 1, 80);
+        this.app.hud.meteorWarning(c);
+        this.fx.meteor(c, 5.5, 1.35, () => {
+          this.sound('meteorHit', c, 1.2, 90);
+          this.fx.fireField(c, 4.2, 3.5);
+          if (local) {
+            this.areaDamage(c, 5.5, 95, 35, 'meteor', { kb: 13, up: 7, burn: [6, 3] });
+            this.areas.push({ kind: 'field', c, r: 4.2, t: 0, life: 3.5, tick: 0, owner: e.n, local });
+          }
+        });
+        break;
+      }
+      default: break;
     }
-    if (!be) return null;
-    _hitOut.t = best; _hitOut.ent = be; _hitOut.zone = bz;
-    return _hitOut;
   }
 
-  _makeShotCb() {
-    const self = this;
-    return {
-      hitEntity(ent, zone, mul, x, y, z, dx, dy, dz, w) {
-        if (zone === 'btn') { self.pressButton(ent.id); return; }
-        self.sparks.burst(x, y, z, -dx, -dy, -dz, 7, 0.75, 0.05, 0.05, 2.5);
-        if (!self.isEnemy(ent)) return;
-        const dmg = (zone === 'head' ? w.head : zone === 'leg' ? w.leg : w.body) * mul;
-        self.hitsLocal++;
-        if (self.cfg.hsOnly && zone !== 'head') { self.hud.hitmarker(false, true); return; }
-        const kill = ent.hp - dmg <= 0;
-        self.hud.hitmarker(zone === 'head', false, kill);
-        Audio.play(zone === 'head' ? 'head' : 'hit', zone === 'head' ? 0.9 : 0.5);
-        ent.flash = 1;
-        self.toHost({ t: 'hit', v: ent.n, d: Math.round(dmg * 10) / 10, z: zone, w: w.slot });
-      },
-      impact(x, y, z, nx, ny, nz, mat, obj, w, mul) {
-        self.lastImpact = [nx, ny, nz];
-        self.decals.spawn(x, y, z, nx, ny, nz, mat === 'wood' ? 1.1 : 1);
-        if (mat === 'wood') { self.sparks.burst(x, y, z, nx, ny, nz, 6, 0.62, 0.42, 0.22, 3); Audio.play('wood', 0.25); }
-        else self.sparks.burst(x, y, z, nx, ny, nz, 5, 1, 0.85, 0.5, 3.5);
-        if (obj && obj.data && obj.data.maxHp !== undefined) self.toHost({ t: 'crate', i: obj.data.index, d: w.body * mul });
-      },
-    };
+  _wall(e, d, local) {
+    const c = new THREE.Vector3().fromArray(d.c);
+    const ca = Math.cos(d.r), sa = Math.sin(d.r);
+    // runs perpendicular to the cast direction (sin r, cos r)
+    const half = 3.5;
+    const a = new THREE.Vector3(c.x + ca * half, 0, c.z - sa * half), b = new THREE.Vector3(c.x - ca * half, 0, c.z + sa * half);
+    a.y = this.world.groundAt(a.x, a.z, c.y + 3); b.y = this.world.groundAt(b.x, b.z, c.y + 3);
+    const area = { kind: 'wall', a, b, c, t: 0, life: 5, tick: 0, owner: e.n, local, id: Math.random() };
+    this.areas.push(area);
+    // scorch line
+    for (let i = 0; i <= 3; i++) { const t = i / 3; this.fx.scorch(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, 1.4, 6); }
+    this.fx.light(new THREE.Vector3(c.x, c.y + 1.4, c.z), 30, 10, 0.4);
+    this.sound('wall', c, 1, 40);
   }
 
-  // ---------------------------------------------------------------- Range buttons
-  _buildButtons() {
-    const n = this.map.buttons.length;
-    this.buttons = new THREE.InstancedMesh(new THREE.BoxGeometry(1.36, 0.3, 0.1), new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x222222 }), n);
-    const m4 = new THREE.Matrix4();
-    this.map.buttons.forEach((b, i) => { m4.makeTranslation(b.x, b.y, b.z + 0.03); this.buttons.setMatrixAt(i, m4); });
-    this.scene.add(this.buttons);
-    this.rangeState = { mode: 'static', run: false, k: 0, hs: 0, tot: 50, time: 0 };
-    this._colorButtons();
-  }
-  _colorButtons() {
-    if (!this.buttons) return;
-    const c = new THREE.Color();
-    this.map.buttons.forEach((b, i) => {
-      if (b.id === 'start') c.set(this.rangeState.run ? 0xff4655 : 0x2ecc71);
-      else c.set(this.rangeState.mode === b.id ? 0xff4655 : 0x56606b);
-      this.buttons.setColorAt(i, c);
-    });
-    this.buttons.instanceColor.needsUpdate = true;
-  }
-  pressButton(id) {
-    if (this._btnCooldown && this.now < this._btnCooldown) return;
-    this._btnCooldown = this.now + 0.35;
-    Audio.play('ui', 0.8);
-    this.toHost({ t: 'btn', id });
-  }
-
-  // ---------------------------------------------------------------- state ingest / interpolation
-  pushSample(e, t, x, y, z, yaw, pitch, f, w) {
-    const i = e.bufHead; e.bufHead = (i + 1) % BUF; if (e.bufCount < BUF) e.bufCount++;
-    e.bufT[i] = t; const d = e.bufD, o = i * 7;
-    d[o] = x; d[o + 1] = y; d[o + 2] = z; d[o + 3] = yaw; d[o + 4] = pitch; d[o + 5] = f; d[o + 6] = w;
-  }
-  resetBuf(e) { e.bufCount = 0; e.bufHead = 0; }
-
-  ingestState(e, msg, now) {
-    if (e === this.me) return;
-    e.x = msg.x; e.y = msg.y; e.z = msg.z; e.yaw = msg.yaw; e.pitch = msg.pitch;
-    e.crouch = !!(msg.f & 2); e.onGround = !!(msg.f & 4); e.w = msg.w || 1;
-    this.pushSample(e, now, msg.x, msg.y, msg.z, msg.yaw, msg.pitch, msg.f, e.w);
-  }
-
-  sampleEnt(e, t) {
-    if (e.bufCount === 0) { e.rx = e.x; e.ry = e.y; e.rz = e.z; e.ryaw = e.yaw; e.rpitch = e.pitch; return; }
-    const n = e.bufCount, T = e.bufT, D = e.bufD;
-    // find newest sample with time <= t
-    let newest = (e.bufHead - 1 + BUF) % BUF;
-    let a = -1, b = newest;
-    for (let k = 0; k < n; k++) {
-      const i = (newest - k + BUF) % BUF;
-      if (T[i] <= t) { a = i; break; }
-      b = i;
-    }
-    let ia, ib, f;
-    if (a === -1) { ia = ib = b; f = 0; } // older than all samples
-    else if (a === newest) { ia = ib = a; f = 0; } // newer than latest: hold
-    else { ia = a; ib = b; const span = T[ib] - T[ia]; f = span > 1e-6 ? (t - T[ia]) / span : 0; }
-    const oa = ia * 7, ob = ib * 7;
-    e.rx = D[oa] + (D[ob] - D[oa]) * f;
-    e.ry = D[oa + 1] + (D[ob + 1] - D[oa + 1]) * f;
-    e.rz = D[oa + 2] + (D[ob + 2] - D[oa + 2]) * f;
-    e.ryaw = lerpAngle(D[oa + 3], D[ob + 3], f);
-    e.rpitch = D[oa + 4] + (D[ob + 4] - D[oa + 4]) * f;
-    const fl = D[ob + 5];
-    e.crouch = !!(fl & 2); e.onGround = !!(fl & 4); e.rw = D[ob + 6];
-  }
-
-  // ---------------------------------------------------------------- network messages (host broadcasts + relays)
-  onNet(msg, local) {
-    const now = this.now;
-    switch (msg.t) {
-      case 's': {
-        const sample = now - msg.T;
-        if (this.clockOff === null) this.clockOff = sample;
-        else if (sample < this.clockOff) this.clockOff = sample; // take faster arrivals immediately
-        else this.clockOff += (sample - this.clockOff) * 0.02; // drift slowly upward
-        const a = msg.e;
-        for (let i = 0; i < a.length; i += 8) {
-          const e = this.byN[a[i]];
-          if (!e || e === this.me) continue;
-          e.x = a[i + 1]; e.y = a[i + 2]; e.z = a[i + 3];
-          this.pushSample(e, msg.T, a[i + 1], a[i + 2], a[i + 3], a[i + 4], a[i + 5], a[i + 6], a[i + 7]);
+  _updateAreas(dt) {
+    const L = this.listener();
+    for (let i = this.areas.length - 1; i >= 0; i--) {
+      const ar = this.areas[i];
+      ar.t += dt;
+      if (ar.kind === 'wall') {
+        const k = ar.t < 0.2 ? ar.t / 0.2 : ar.t > ar.life - 0.5 ? (ar.life - ar.t) / 0.5 : 1;
+        this.fx.wallTick(ar.a, ar.b, Math.max(0.2, k), 2.6 * k + 0.3);
+        if (Math.random() < dt * 6) this.fx.light(tmpV.set(ar.c.x, ar.c.y + 1.3, ar.c.z), 14, 9, 0.25);
+        const dl = Math.hypot(ar.c.x - L.x, ar.c.z - L.z);
+        Audio.loop('wall' + ar.id, 'fireLoop', 0.55 / (1 + (dl / 14) ** 2) * k);
+        if (ar.local) {
+          ar.tick -= dt;
+          if (ar.tick <= 0) {
+            ar.tick = 0.25;
+            for (const e of this.ents.values()) {
+              if (e === this.local || !e.alive) continue;
+              const d = distToSegXZ(e.pos, ar.a, ar.b);
+              const gy = ar.a.y + (ar.b.y - ar.a.y) * 0.5;
+              if (d < 0.95 && e.pos.y < gy + 3.2 && e.pos.y > gy - 1.5) this.reportHit(e, 7, 'wall', { burn: [5, 2], at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
+            }
+          }
         }
+        if (ar.t >= ar.life) { Audio.stopLoop('wall' + ar.id); this.areas.splice(i, 1); }
+      } else if (ar.kind === 'field') {
+        ar.tick -= dt;
+        if (ar.local && ar.tick <= 0) {
+          ar.tick = 0.5;
+          for (const e of this.ents.values()) {
+            if (e === this.local || !e.alive) continue;
+            if (Math.hypot(e.pos.x - ar.c.x, e.pos.z - ar.c.z) < ar.r && Math.abs(e.pos.y - ar.c.y) < 2) this.reportHit(e, 7, 'meteor', { at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
+          }
+        }
+        if (ar.t >= ar.life) this.areas.splice(i, 1);
+      }
+    }
+  }
+
+  // positional sound relative to the camera
+  listener() { return { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z, yaw: this.cam.yaw }; }
+  sound(name, pos, gain = 1, falloff = 30) { Audio.at(name, pos, this.listener(), gain, falloff); }
+
+  // ---------------------------------------------------------------- host side
+  hostHandle(e, msg) {
+    if (!msg || typeof msg !== 'object' || !e) return;
+    switch (msg.t) {
+      case 's': if (e !== this.local) this._pushSnap(e, msg); break;
+      case 'ev': {
+        const out = { ...msg, n: e.n };
+        this.net.broadcast(out, e === this.local ? null : e.id);
+        if (e !== this.local) this.clientHandle(out);
+        break;
+      }
+      case 'hit': if (this.rules) this.rules.onHit(e, msg); break;
+      case 'chat': {
+        const text = String(msg.msg || '').slice(0, 120);
+        if (!text) return;
+        this.rules.bcast({ t: 'chat', n: e.n, msg: text });
+        break;
+      }
+      default: break;
+    }
+  }
+
+  onLeave(pid) {
+    const e = this.byId.get(pid);
+    if (!e) return;
+    if (this.rules) this.rules.bcast({ t: 'left', n: e.n });
+  }
+
+  // ---------------------------------------------------------------- client side (also runs on host)
+  clientHandle(msg) {
+    if (!msg || typeof msg !== 'object') return;
+    const hud = this.app.hud;
+    switch (msg.t) {
+      case 'S': {
+        for (const s of msg.l) {
+          const e = this.ents.get(s[0]);
+          if (!e || e === this.local) continue;
+          this._pushSnap(e, { p: [s[1], s[2], s[3]], v: [s[4], s[5], s[6]], y: s[7], pi: s[8], g: s[9] });
+        }
+        break;
+      }
+      case 'ev': {
+        const e = this.ents.get(msg.n);
+        if (!e || e === this.local) return;
+        if (msg.k === 'anim') e.view.anim.play(msg.a, msg.d || {});
+        else if (msg.k === 'ab') this.spawnAbility(e, msg, false);
+        break;
+      }
+      case 'hp': {
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        const prev = e.hp;
+        e.hp = msg.hp;
+        if (msg.hp < prev) {
+          e.flash = 1; e.lastHurt = this.time;
+          if (msg.burn) e.burnT = Math.max(e.burnT, msg.burn);
+          if (prev - msg.hp >= 5) e.view.anim.play('hit');
+          if (e === this.local) {
+            hud.hurt(prev - msg.hp, this.ents.get(msg.by));
+            Audio.play('hurt', Math.min(1, 0.4 + (prev - msg.hp) / 60));
+          }
+        }
+        break;
+      }
+      case 'burn': { const e = this.ents.get(msg.n); if (e) e.burnT = msg.s; break; }
+      case 'kill': {
+        const v = this.ents.get(msg.v), k = this.ents.get(msg.k);
+        if (v) {
+          v.alive = false; v.hp = 0; v.deaths = msg.vd ?? v.deaths + 1; v.burnT = 0;
+          v.view.anim.play('die');
+          this.fx.deathBurst(v.pos);
+          this.sound('death', v.pos, 0.8, 30);
+          v.hideAt = this.time + 2.4;
+        }
+        if (k && k !== v) k.kills = msg.kk ?? k.kills + 1;
+        hud.killFeed(k, v, msg.ab, this.local);
+        if (k === this.local && v !== this.local) { Audio.play('kill', 0.8); hud.killBanner(v, k.kills); this.kit.addUlt(v.dummy ? 3 : 15); }
+        if (v === this.local) { hud.deathScreen(k, msg.ab, msg.rt); this.kit.pending.length = 0; }
         break;
       }
       case 'spawn': {
-        const e = this.byN[msg.n]; if (!e) break;
-        e.alive = true; e.hp = MAX_HP; e.deadT = 0; e.x = msg.x; e.y = msg.y; e.z = msg.z; e.yaw = msg.yaw;
-        this.resetBuf(e);
-        const t = this.isHost ? now : (this.clockOff !== null ? now - this.clockOff : now);
-        this.pushSample(e, t - 1, msg.x, msg.y, msg.z, msg.yaw, 0, 4, e.w);
-        e.rx = msg.x; e.ry = msg.y; e.rz = msg.z;
-        if (e === this.me) {
-          this.ctrl.teleport(msg.x, msg.y, msg.z); this.yaw = msg.yaw; this.pitch = 0;
-          this.ws.refill(); this.killedBy = null; this.hud.setDead(null);
-          this.hud.setHP(MAX_HP);
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        e.alive = true; e.hp = MAX_HP; e.burnT = 0; e.hideAt = 0;
+        e.pos.set(msg.x, msg.y, msg.z); e.vel.set(0, 0, 0); e.yaw = msg.yaw; e.snaps.length = 0;
+        e.view.anim.play('respawn');
+        e.view.setVisible(true);
+        e.spawnProt = this.time + 1.5;
+        this.fx.spawnPillar(e.pos);
+        if (e === this.local) {
+          this.body.teleport(msg.x, msg.y, msg.z, msg.yaw);
+          this.cam.yaw = msg.yaw; this.cam.pitch = -0.08; this.cam.pivotY = null;
+          this.kit.reset();
+          hud.respawned();
         }
         break;
       }
-      case 'phase': {
-        const prev = this.phase;
-        this.phase = msg.p; this.phaseEndLocal = now + msg.tl; this.round = msg.r; this.score = msg.sc;
-        if (prev !== msg.p) {
-          if (msg.p === 'buy') { this.hud.center(`ROUND ${msg.r}`, 'BUY PHASE — press B', 2.5); }
-          if (msg.p === 'live' && this.mode.teams) { this.hud.center('', 'GO', 0.8); this.closeBuy(); }
+      case 'kb': {
+        if (msg.n === this.local.n && this.local.alive) {
+          this.body.vel.x += msg.v[0]; this.body.vel.z += msg.v[2];
+          this.body.vel.y = Math.max(this.body.vel.y, msg.v[1]);
+          this.body.grounded = false;
         }
         break;
       }
-      case 'roundEnd': {
-        this.score = msg.sc;
-        const won = msg.win === this.me.team;
-        this.hud.center(won ? 'ROUND WON' : 'ROUND LOST', `${msg.sc[this.me.team]} — ${msg.sc[1 - this.me.team]}`, 3, won ? '#4fd8ff' : '#ff4655');
-        Audio.play('found', 0.5, 0, won ? 1.2 : 0.7);
+      case 'board': {
+        for (const r of msg.l) { const e = this.ents.get(r[0]); if (e) { e.kills = r[1]; e.deaths = r[2]; e.dmg = r[3]; } }
+        this.timeLeft = msg.tl; this.phase = msg.ph;
         break;
       }
-      case 'dmg': {
-        const v = this.byN[msg.v]; if (!v) break;
-        v.hp = msg.hp; v.flash = 1;
-        if (v === this.me) { this._damaged(msg.a); this.hud.setHP(msg.hp); }
-        break;
-      }
-      case 'kill': {
-        const a = this.byN[msg.a], v = this.byN[msg.v]; if (!v) break;
-        v.alive = false; v.hp = 0; v.deadT = 0.0001;
-        if (a && !v.practice) { if (!this.isHost) { a.kills++; v.deaths++; if (msg.h) a.hsKills++; } }
-        this.hud.killfeed(a, v, msg.w, msg.h, a === this.me || v === this.me);
-        if (v === this.me) {
-          this.killedBy = a; this.deathT = now; this.hud.setHP(0);
-          this.hud.setDead(a, this.mode.teams && !this.map.buttons ? 'Wait for the next round' : 'Respawning…');
-          if (a && a !== this.me) this._damaged(msg.a);
-          this.closeBuy();
-        } else if (a === this.me) {
-          Audio.play('kill', 0.45, 0, msg.h ? 1.25 : 1);
-          if (!v.practice) this.hud.center('', `${msg.h ? '◎ ' : ''}ELIMINATED ${v.name}`, 1.3);
-        }
-        break;
-      }
-      case 'board': for (const r of msg.e) { const e = this.byN[r[0]]; if (e) { e.kills = r[1]; e.deaths = r[2]; e.hsKills = r[3]; e.dmg = r[4]; } } break;
-      case 'chat': {
-        const e = this.byN[msg.n];
-        this.app.chat.add(msg.tm ? 'team' : 'all', e ? `${e.name}${e.tag ? '#' + e.tag : ''}` : '?', msg.m, e && e.team === this.me.team && this.mode.teams);
-        break;
-      }
-      case 'shot': {
-        if (msg.n === this.me.n) break;
-        const e = this.byN[msg.n];
-        const o = msg.o, en = msg.e;
-        this.trails.spawn(o[0], o[1], o[2], en[0], en[1], en[2], TRAIL_STYLE[msg.w] || TRAIL_STYLE[1]);
-        if (msg.nrm) { this.decals.spawn(en[0], en[1], en[2], msg.nrm[0], msg.nrm[1], msg.nrm[2]); this.sparks.burst(en[0], en[1], en[2], msg.nrm[0], msg.nrm[1], msg.nrm[2], 4, 1, 0.85, 0.5, 3); }
-        this.sparks.burst(o[0], o[1], o[2], 0, 0.2, 0, 3, 1, 0.8, 0.3, 1.2, 0);
-        const w = WEAPONS[msg.w] || WEAPONS[1];
-        Audio.gun3D(w.id, o[0], o[1], o[2], this.ctrl.x, this.ctrl.y + 1.6, this.ctrl.z, this.yaw);
-        if (e) e.firedAt = now;
-        break;
-      }
-      case 'crateBreak': {
-        const c = this.map.breakCrate(msg.i);
-        if (c) {
-          this.decals.clearBox(c.cx - c.size / 2, c.y0, c.cz - c.size / 2, c.cx + c.size / 2, c.y0 + c.h, c.cz + c.size / 2);
-          this.sparks.burst(c.cx, c.y0 + c.h / 2, c.cz, 0, 1, 0, 40, 0.62, 0.42, 0.22, 5);
-          Audio.play3D('wood', c.cx, c.y0, c.cz, this.ctrl.x, this.ctrl.y, this.ctrl.z, this.yaw, 1.2, 40, 0.6);
-        }
-        break;
-      }
-      case 'resetCrates': if (!local || !this.isHost) this.map.resetCrates(); break;
-      case 'range': this.rangeState = msg; this._colorButtons(); this.hud.range(msg, this.hitsLocal, this.shotsLocal); break;
-      case 'rangeBtn': if (msg.id === 'start' || msg.id === this.rangeState.mode) Audio.play('ui', 0.5); break;
-      case 'rangeDone': {
-        let best = null; try { best = JSON.parse(localStorage.getItem('riftline.best50') || 'null'); } catch { /* ignore */ }
-        const isBest = !best || msg.time < best;
-        if (isBest) { try { localStorage.setItem('riftline.best50', JSON.stringify(msg.time)); } catch { /* ignore */ } }
-        this.hud.center('50-BOT TEST COMPLETE', `${msg.time.toFixed(2)}s · HS ${(msg.hs * 100).toFixed(0)}%${isBest ? ' · NEW BEST' : ''}`, 5, '#2ecc71');
-        Audio.play('found', 0.6);
-        break;
-      }
-      case 'hideAll': for (const e of this.entList) if (e.practice) { e.alive = false; e.deadT = 9; } break;
+      case 'phase': this.phase = msg.p; this.timeLeft = msg.tl; this.phaseEnd = this.time + msg.tl; hud.phase(msg.p, msg.tl); break;
+      case 'end': this.ended = true; this.controlsActive = false; hud.endScreen(msg, this); setTimeout(() => { if (this.app.match === this) this.app.leaveMatch(); }, 11000); break;
+      case 'chat': { const e = this.ents.get(msg.n); if (e) this.app.chat.add('all', e.name, msg.msg, e === this.local); break; }
       case 'left': {
-        const e = this.byN[msg.n]; if (!e) break;
-        this.app.chat.system(`${e.name} left the match`);
-        this.ents.delete(e.pid); this.byN[msg.n] = null;
-        this.entList = [...this.ents.values()];
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        this.app.chat.system(`${e.name} left the match.`);
+        e.alive = false; e.left = true; e.view.setVisible(false);
         break;
       }
-      case 'end': this._end(msg); break;
-      case 'pong': this.ping = Math.round((now - msg.c) * 1000); break;
-      case 'hostLeft': this.app.leaveMatch('The host left the match.'); break;
+      case 'hostLeft': this.app.leaveMatch('The match host left.'); break;
       default: break;
     }
   }
 
-  _damaged(attN) {
-    const a = this.byN[attN];
-    Audio.play('hit', 0.5, 0, 0.6);
-    if (!a) return;
-    const ang = Math.atan2(-(a.rx - this.ctrl.x), -(a.rz - this.ctrl.z)) - this.yaw;
-    this.hud.damageFrom(ang);
+  _pushSnap(e, s) {
+    const t = this.time;
+    const snap = { t, x: s.p[0], y: s.p[1], z: s.p[2], vx: s.v[0], vy: s.v[1], vz: s.v[2], yaw: s.y, pitch: s.pi, g: !!s.g };
+    e.snaps.push(snap);
+    if (e.snaps.length > 30) e.snaps.shift();
+    if (this.isHost) { e.pos.set(snap.x, snap.y, snap.z); }
   }
 
-  _end(msg) {
-    if (this.ended) return;
-    this.ended = true;
-    let title, sub = '';
-    if (this.mode.teams) { const won = msg.win === this.me.team; title = won ? 'VICTORY' : 'DEFEAT'; sub = `${msg.sc[this.me.team]} — ${msg.sc[1 - this.me.team]}`; }
-    else { const w = this.byN[msg.win]; title = w === this.me ? 'VICTORY' : `${w ? w.name : '?'} WINS`; }
-    this.hud.results(title, sub, this);
-    setTimeout(() => this.app.leaveMatch(), 7000);
-  }
-
-  sendChat(text, team) { this.toHost({ t: 'chat', m: text, tm: team }); }
-
-  // ---------------------------------------------------------------- buy menu
-  canBuy() {
-    if (!this.me.alive) return false;
-    if (!this.mode.teams || this.map.buttons) return true;
-    return this.phase === 'buy' || (this.phase === 'live' && this.phaseEndLocal - this.now > this.mode.roundTime - 15);
-  }
-  toggleBuy() { if (this.buyOpen) this.closeBuy(); else if (this.canBuy()) { this.buyOpen = true; this.hud.showBuy(true, this); } else this.hud.toast('Buy menu is only available during the buy phase'); }
-  closeBuy() { if (this.buyOpen) { this.buyOpen = false; this.hud.showBuy(false, this); } }
-  buy(slot) {
-    if (!this.canBuy()) return;
-    const a = this.ws.ammo[slot], w = WEAPONS[slot];
-    a.mag = w.mag; a.reserve = w.reserve;
-    this.selectSlot(slot);
-    Audio.play('ui', 0.7);
-    this.closeBuy();
-  }
-  selectSlot(slot) {
-    if (this.ws.select(slot, this.now)) { this.vm.select(slot); Audio.play('reload', 0.4, 0, 0.8); }
-  }
-
-  // ---------------------------------------------------------------- per-frame
+  // ---------------------------------------------------------------- per frame
   update(dt) {
-    const now = this.now;
-    const app = this.app, input = app.input, s = app.settings;
-    const me = this.me;
-    const inp = input.poll();
-    const pressed = input.pressed;
-    const alive = me.alive;
+    const app = this.app, input = app.input;
+    this.time += dt;
+    if (this.phaseEnd) this.timeLeft = Math.max(0, this.phaseEnd - this.time);
+    const st = input.poll();
+    const [dx, dy] = input.consumeLook();
+    const me = this.local;
+    if (!app.paused && !app.chat.isOpen) this.cam.look(dx, dy, app.settings.sens, app.settings.invertY);
+    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup';
 
-    // --- look ---
-    const [ldx, ldy] = input.consumeLook();
-    const zoom = this.ws.zoomFactor();
-    const sensBase = input.mode === 'touch' ? 0.0042 * s.touchSens : 0.0016 * s.sens;
-    const sens = sensBase / zoom;
-    if (alive) {
-      this.yaw -= ldx * sens;
-      this.pitch -= ldy * sens;
-      if (this.pitch > 1.55) this.pitch = 1.55; if (this.pitch < -1.55) this.pitch = -1.55;
-    }
-
-    // --- movement (fixed 60 Hz, interpolated rendering) ---
-    const frozen = !alive || this.phase === 'buy' || this.phase === 'end' || this.ended;
-    this.physOpts.frozen = frozen;
-    const moveInp = this._moveInp || (this._moveInp = { fwd: 0, side: 0, jump: false, crouch: false, walk: false });
-    moveInp.fwd = inp.fwd; moveInp.side = inp.side; moveInp.jump = inp.jump; moveInp.crouch = inp.crouch && alive; moveInp.walk = inp.walk;
-    this.accum += dt;
-    let steps = 0;
-    while (this.accum >= TICK && steps < 5) {
-      this.ctrl.tick(TICK, moveInp, this.yaw, this.ws.maxSpeed(), this.physOpts);
-      if (this.ctrl.landed && this.ctrl.lastFallSpeed > 0.35) { Audio.play('land', 0.25); this.vm.dip = 0.03; }
-      if (this.isHost) this.rules.fixedUpdate(TICK, now);
-      this.accum -= TICK; steps++;
-    }
-    if (steps === 5) this.accum = 0;
-    const alpha = this.accum / TICK;
-    const c = this.ctrl;
-    const px = c.px + (c.x - c.px) * alpha, py = c.py + (c.y - c.py) * alpha, pz = c.pz + (c.z - c.pz) * alpha;
-    const eye = c.peye + (c.eye - c.peye) * alpha;
-    me.x = c.x; me.y = c.y; me.z = c.z; me.yaw = this.yaw; me.pitch = this.pitch; me.crouch = c.crouched; me.onGround = c.onGround; me.w = this.ws.slot;
-
-    // --- weapon switching / interact ---
-    if (alive && !input.typing) {
-      if (pressed.slot) this.selectSlot(pressed.slot);
-      if (pressed.cycle) this.selectSlot(((this.ws.slot - 1 + pressed.cycle + 3) % 3) + 1);
-      if (pressed.interact && this.map.buttons) {
-        dirFromAngles(this.yaw, this.pitch, this._dir);
-        const h = this.traceEnts(px, py + eye, pz, this._dir[0], this._dir[1], this._dir[2], 4, this.me);
-        if (h && h.zone === 'btn') this.pressButton(h.ent.id);
+    // ---- local player
+    if (me.alive) {
+      const b = this.body;
+      b.yaw = this.cam.yaw; b.pitch = this.cam.pitch;
+      const cmd = canMove ? { fwd: st.fwd, side: st.side, jumpPressed: input.pressed.jump, dashPressed: input.pressed.dash, aim: st.aim } : { fwd: 0, side: 0 };
+      const steps = Math.min(4, Math.ceil(dt / (1 / 60)));
+      for (let i = 0; i < steps; i++) {
+        stepMovement(b, i === 0 ? cmd : { ...cmd, jumpPressed: false, dashPressed: false }, dt / steps, this.world, (k, d) => this._localEvent(k, d));
       }
+      me.pos.copy(b.pos); me.vel.copy(b.vel); me.yaw = b.yaw; me.pitch = b.pitch; me.grounded = b.grounded;
     }
-
-    // --- camera ---
-    const cam = this.camera;
-    cam.position.set(px, py + eye - (alive ? 0 : 0.9), pz);
-    const pp = this.ws.punchP * Math.PI / 180, py2 = this.ws.punchY * Math.PI / 180;
-    cam.rotation.set(this.pitch + pp, this.yaw + py2, 0);
-    const aspect = app.aspect;
-    const hfov = s.fov * Math.PI / 180;
-    const vfov = 2 * Math.atan(Math.tan(hfov / 2) / Math.max(1.0, aspect)) * 180 / Math.PI;
-    const target = 2 * Math.atan(Math.tan(vfov * Math.PI / 360) / zoom) * 180 / Math.PI;
-    this.curFov += (target - this.curFov) * Math.min(1, dt * 22);
-    if (Math.abs(cam.fov - this.curFov) > 0.01 || cam.aspect !== aspect) { cam.fov = this.curFov; cam.aspect = aspect; cam.updateProjectionMatrix(); }
-    cam.updateMatrixWorld();
-
-    // --- shooting ---
-    let fire = inp.fire, firePressed = pressed.fire;
-    if (input.mode === 'touch') { firePressed = inp.fire && !this._touchFireWas; this._touchFireWas = inp.fire; }
-    if (s.autoFire && input.mode === 'touch' && alive) {
-      dirFromAngles(this.yaw + py2, this.pitch + pp, this._dir);
-      const ox = cam.position.x, oy = cam.position.y, oz = cam.position.z;
-      const wt = this.map.world.raycast(ox, oy, oz, this._dir[0], this._dir[1], this._dir[2], 120, this._afHit || (this._afHit = {}));
-      const h = this.traceEnts(ox, oy, oz, this._dir[0], this._dir[1], this._dir[2], Math.min(wt, 120), this.me);
-      if (h && h.zone !== 'btn' && this.isEnemy(h.ent)) { fire = true; if (!this._afWas) firePressed = true; this._afWas = true; } else this._afWas = false;
-    }
-    const canShoot = alive && !this.buyOpen && !this.ended && this.phase !== 'buy' && this.phase !== 'end';
-    const altPressed = pressed.alt;
-    if (canShoot) {
-      this.ws.update({
-        now, dt, fire, firePressed, altPressed, reloadPressed: pressed.reload,
-        altHeld: inp.alt, modePressed: pressed.mode, inspectPressed: pressed.inspect,
-        adsToggle: input.mode === 'touch' || !!s.adsToggle,
-        speed: c.speed2D(), onGround: c.onGround, crouched: c.crouched, yaw: this.yaw, pitch: this.pitch,
-      }, (dx, dy, dz) => this._fireLocal(dx, dy, dz), (snd) => this._wsSound(snd));
-    } else if (alive && pressed.reload) this.ws.startReload(now);
-
-    // --- host rules ---
-    if (this.isHost) this.rules.update(dt, now);
-
-    // --- network out ---
-    this.netT -= dt;
-    if (this.netT <= 0) {
-      this.netT += 1 / NET_HZ; if (this.netT < 0) this.netT = 0;
-      if (this.isHost) this._sendSnapshot(now); else this._sendState();
-    }
-    if (!this.isHost) { this.pingT -= dt; if (this.pingT <= 0) { this.pingT = 2; this.net.send({ t: 'ping', c: now }); } }
-
-    // --- remote characters ---
-    this.chars.begin();
-    const renderT = this.isHost ? now - INTERP_DELAY : now - (this.clockOff || 0) - INTERP_DELAY;
-    for (let i = 0; i < this.entList.length; i++) {
-      const e = this.entList[i];
-      if (e === me) continue;
-      if (!e.alive) {
-        if (e.deadT > 0) e.deadT += dt;
-        if (e.deadT <= 0 || e.deadT > 3) continue;
-      }
-      if (e.direct) { e.rx = e.x; e.ry = e.y; e.rz = e.z; e.ryaw = e.yaw; e.rpitch = e.pitch; e.rw = e.w; }
-      else if (e.alive) this.sampleEnt(e, renderT);
-      e.rc += ((e.crouch ? 1 : 0) - e.rc) * Math.min(1, dt * 12);
-      const mvx = (e.rx - e.plx) / Math.max(dt, 1e-4), mvz = (e.rz - e.plz) / Math.max(dt, 1e-4);
-      e.plx = e.rx; e.plz = e.rz;
-      const sp = Math.min(12, Math.sqrt(mvx * mvx + mvz * mvz));
-      e.walk += (Math.min(1, sp / 5) - e.walk) * Math.min(1, dt * 8);
-      e.phase += dt * (4 + sp * 1.3) * (e.walk > 0.05 ? 1 : 0);
-      // remote footsteps (silent when walking with Shift / crouched)
-      if (e.alive && e.onGround && sp > 3.6 && !e.crouch) {
-        e.stepT -= dt * sp;
-        if (e.stepT <= 0) { e.stepT = 2.4; Audio.play3D('step', e.rx, e.ry, e.rz, c.x, c.y, c.z, this.yaw, 0.55, 22, 0.8 + Math.random() * 0.3); }
-      }
-      if (e.flash > 0) e.flash = Math.max(0, e.flash - dt * 6);
-      const fall = e.alive ? 0 : Math.min(1, e.deadT * 3.5);
-      const col = e.practice ? TARGET : this.isEnemy(e) ? ENEMY : ALLY;
-      this.chars.add(e.rx, e.ry, e.rz, e.ryaw, e.rc, e.phase, e.alive ? e.walk : 0, fall, e.rpitch, (e.rw | 0) || 1, col, e.flash);
-    }
-    this.chars.end();
-
-    // --- effects ---
-    this.trails.update(dt, this.camera);
-    this.sparks.update(dt);
-
-    // --- viewmodel ---
-    const speed = c.speed2D();
-    const ws = this.ws, adsE = ws.adsEase();
-    const scoped = ws.scoped;
-    const vs = this._vs || (this._vs = {});
-    vs.lookDX = ldx; vs.lookDY = ldy; vs.move = Math.min(1, speed / PHYS.runSpeed); vs.onGround = c.onGround; vs.crouch = c.crouched ? 1 : 0;
-    vs.ads = adsE; vs.reloadP = ws.reloadProgress(now); vs.boltP = ws.boltProgress(now); vs.drawP = ws.drawProgress(now);
-    vs.inspectP = ws.inspectProgress(now); vs.fireAge = now - ws.lastShotT; vs.visible = alive && !scoped;
-    vs.slideLocked = ws.slot === 2 && ws.ammo[2].mag === 0;
-    this.vm.update(dt, vs);
-
-    // --- HUD ---
-    this.hud.frame(this, now, toUPS(speed), adsE);
-    if (!alive && this.map.buttons && this.isHost) { /* range: no deaths */ }
+    if (canMove) this.kit.update(dt, input); else this.kit.update(dt, { pressed: {}, state: {} });
     input.clearPressed();
+
+    // ---- remote interpolation
+    const rt = this.time - INTERP_DELAY;
+    for (const e of this.ents.values()) {
+      if (e === this.local || e.dummy) continue;
+      this._interp(e, rt);
+    }
+    if (this.rules) this.rules.update(dt);
+
+    // ---- animation + visuals
+    const pushers = [];
+    for (const e of this.ents.values()) {
+      const v = e.view;
+      if (e.hideAt && this.time > e.hideAt && !e.alive) { v.setVisible(false); e.hideAt = 0; }
+      if (!v.root.visible) continue;
+      v.root.position.copy(e.pos);
+      v.anim.update(dt, { pos: e.pos, yaw: e.yaw, pitch: e.pitch, vel: e.vel, grounded: e.grounded });
+      v.root.rotation.y = e.yaw + v.anim.yawOffset;
+      // remote land/jump inferred from state
+      if (!e.isLocal) {
+        if (e.grounded && !e.prevGrounded) v.anim.play('land', { vy: e.prevVy });
+        e.prevGrounded = e.grounded; e.prevVy = e.vel.y;
+      }
+      e.flash = Math.max(0, e.flash - dt * 6);
+      v.setFlash(e.flash * 0.6);
+      if (e.burnT > 0) { e.burnT -= dt; this.fx.burn(e.pos); }
+      if (e.alive && pushers.length < 8) pushers.push(e.pos);
+      // idle palm flame (+ leap jets)
+      if (e.alive) {
+        if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
+        if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
+        if (this.body.dashT > 0 && e === this.local) this.fx.dashTrail(e.pos);
+      }
+    }
+    // local view fades when the camera is jammed against it
+    this.view.root.visible = me.alive || (me.hideAt && this.time < me.hideAt) ? !this.cam.tooClose : this.view.root.visible;
+
+    this.proj.update(dt);
+    this._updateAreas(dt);
+    // altar brazier
+    this.fx.brazier(this.map.altar);
+    const dA = this.camera.position.distanceTo(this.map.altar);
+    Audio.loop('brazier', 'fireLoop', 0.35 / (1 + (dA / 10) ** 2));
+
+    // ---- camera + aim
+    const focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);
+    this.cam.update(dt, focus, st.aim && me.alive, this.fx.shakeAmt);
+    this._computeAim();
+    this.fx.update(dt, this.camera, app.height);
+    this.map.update(dt, this.camera, focus, pushers);
+
+    // ---- net send
+    this.sendT -= dt;
+    if (this.sendT <= 0) {
+      this.sendT = 1 / NET_HZ;
+      if (this.isHost) this.rules.broadcastStates();
+      else if (me.alive) {
+        const b = this.body;
+        this.net.send({ t: 's', p: [r3(b.pos.x), r3(b.pos.y), r3(b.pos.z)], v: [r2(b.vel.x), r2(b.vel.y), r2(b.vel.z)], y: r3(b.yaw), pi: r3(b.pitch), g: b.grounded ? 1 : 0 });
+      }
+    }
+    app.hud.update(dt, this);
   }
 
-  // sounds keyed to the baked viewmodel animations
-  _vmEvent(ev) {
-    switch (ev) {
-      case 'magout': Audio.play('reload', 0.55, 0.15, 0.75); break;
-      case 'magin': Audio.play('reload', 0.65, 0.15, 1.15); Audio.play('empty', 0.3, 0.1, 0.8); break;
-      case 'rack': Audio.play('bolt', 0.6, 0.2, 1.25); break;
-      case 'release': Audio.play('bolt', 0.6, 0.2, 1.6); break;
-      case 'boltup': Audio.play('bolt', 0.45, 0.25, 1.5); break;
-      case 'boltback': Audio.play('bolt', 0.6, 0.25, 1.0); break;
-      case 'boltfwd': Audio.play('bolt', 0.6, 0.25, 1.15); break;
-      case 'boltdown': Audio.play('bolt', 0.45, 0.25, 1.7); break;
-      case 'cloth': Audio.play('step', 0.25, 0, 1.6); break;
-      case 'draw': Audio.play('reload', 0.3, 0.1, 1.4); break;
+  _localEvent(k, d) {
+    const me = this.local, b = this.body;
+    switch (k) {
+      case 'jump': this.view.anim.play('jumpStart'); this.sound('jump', b.pos, 0.5, 20); break;
+      case 'land': this.view.anim.play('land', d); if (d.vy < -6) this.sound('land', b.pos, Math.min(1, -d.vy / 14), 20); break;
+      case 'dash': this.playAnim('dash', d); this.sound('dash', b.pos, 0.8, 25); this.fx.dashTrail(b.pos); break;
+      case 'roll': this.playAnim('roll', d); this.sound('roll', b.pos, 0.8, 20); break;
+      case 'step': this.sound(d.water > 0.1 ? 'splash' : 'step', b.pos, d.water > 0.1 ? 0.4 : 0.25, 15); break;
       default: break;
     }
+    void me;
   }
 
-  _wsSound(snd) {
-    if (snd === 'reload') Audio.play('step', 0.25, 0, 1.3);
-    else if (snd === 'empty') Audio.play('empty', 0.6);
-    else if (snd === 'mode') { Audio.play('ui', 0.5); this.hud.toast(this.ws.burstMode ? 'GLOCK: 3-ROUND BURST' : 'GLOCK: SEMI-AUTO', 900); }
-    else if (snd === 'zoom') Audio.play('bolt', 0.25, 0, 1.6);
-  }
-
-  _fireLocal(dx, dy, dz) {
-    const cam = this.camera, w = this.ws.def;
-    const ox = cam.position.x, oy = cam.position.y, oz = cam.position.z;
-    this.lastImpact = null;
-    this.shotsLocal++;
-    const end = traceShot(this.map.world, this._traceEnts, ox, oy, oz, dx, dy, dz, w, this._shotCb);
-    // trail starts where the viewmodel muzzle appears on screen: unproject its screen position into
-    // the world 0.7 m in front of the eye (the gun is drawn on top, so the trail exits the barrel)
-    const v = this._mv;
-    if (this.vm.muzzleNDC(v) && !this.ws.scoped) {
-      v.z = 0.5; v.unproject(cam).sub(cam.position).normalize();
-      v.multiplyScalar(0.7).add(cam.position);
-    } else v.set(ox + dx * 0.4, oy + dy * 0.4 - 0.04, oz + dz * 0.4);
-    const mx = v.x, my = v.y, mz = v.z;
-    this.trails.spawn(mx, my, mz, end[0], end[1], end[2], TRAIL_STYLE[w.slot]);
-    this.vm.fire((w.kick / 0.07) * (1 - 0.3 * this.ws.adsEase()), this.now);
-    Audio.gunLocal(w.id);
-    this.me.firedAt = this.now;
-    const r = (v) => Math.round(v * 100) / 100;
-    this.toHost({ t: 'shot', o: [r(mx), r(my), r(mz)], e: [r(end[0]), r(end[1]), r(end[2])], nrm: this.lastImpact, w: w.slot });
-  }
-
-  _flags() { const c = this.ctrl; return (this.me.alive ? 1 : 0) | (c.crouched ? 2 : 0) | (c.onGround ? 4 : 0) | (this.ws.ads > 0.5 ? 8 : 0); }
-
-  _sendState() {
-    const c = this.ctrl, r = (v) => Math.round(v * 100) / 100, ra = (v) => Math.round(v * 1000) / 1000;
-    this.net.send({ t: 'u', x: r(c.x), y: r(c.y), z: r(c.z), yaw: ra(this.yaw), pitch: ra(this.pitch), f: this._flags(), w: this.ws.slot });
-  }
-
-  _sendSnapshot(now) {
-    if (!this.net.count) return;
-    const a = this._snap || (this._snap = []); a.length = 0;
-    const r = (v) => Math.round(v * 100) / 100, ra = (v) => Math.round(v * 1000) / 1000;
-    for (const e of this.entList) {
-      if (e === this.me) { const c = this.ctrl; a.push(e.n, r(c.x), r(c.y), r(c.z), ra(this.yaw), ra(this.pitch), this._flags(), this.ws.slot); continue; }
-      if (!e.alive && e.deadT > 3) continue;
-      a.push(e.n, r(e.x), r(e.y), r(e.z), ra(e.yaw), ra(e.pitch), (e.alive ? 1 : 0) | (e.crouch ? 2 : 0) | (e.onGround ? 4 : 0), e.w);
+  _interp(e, rt) {
+    const s = e.snaps;
+    if (!s.length) return;
+    let a = s[0], b = s[0];
+    for (let i = s.length - 1; i >= 0; i--) { if (s[i].t <= rt) { a = s[i]; b = s[Math.min(i + 1, s.length - 1)]; break; } }
+    if (rt < s[0].t) { a = b = s[0]; }
+    let u = b.t > a.t ? (rt - a.t) / (b.t - a.t) : 0;
+    if (a === b && rt > a.t) {
+      // extrapolate a little (max 150 ms)
+      const ex = Math.min(0.15, rt - a.t);
+      e.pos.set(a.x + a.vx * ex, a.y + (a.g ? 0 : a.vy * ex), a.z + a.vz * ex);
+    } else {
+      u = Math.min(1, Math.max(0, u));
+      e.pos.set(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, a.z + (b.z - a.z) * u);
     }
-    this.net.broadcast({ t: 's', T: Math.round(now * 1000) / 1000, e: a });
+    e.vel.set(a.vx + (b.vx - a.vx) * u, a.vy + (b.vy - a.vy) * u, a.vz + (b.vz - a.vz) * u);
+    e.yaw = a.yaw + wrapPi(b.yaw - a.yaw) * u;
+    e.pitch = a.pitch + (b.pitch - a.pitch) * u;
+    e.grounded = u < 0.5 ? a.g : b.g;
   }
 
-  render(renderer) {
-    renderer.render(this.scene, this.camera);
-    renderer.autoClear = false;
-    renderer.clearDepth();
-    renderer.render(this.vm.scene, this.vm.camera);
-    renderer.autoClear = true;
+  _computeAim() {
+    const c = this.camera.position, f = this.cam.fwd;
+    const maxD = 160;
+    let best = this.world.raycast(c.x, c.y, c.z, f.x, f.y, f.z, maxD, 0, rayHit);
+    this.aimEnt = null;
+    const end = tmpV.copy(c).addScaledVector(f, Math.min(best, maxD));
+    for (const e of this.ents.values()) {
+      if (e === this.local || !e.alive) continue;
+      const h = hitCharacter(e, c, end, 0);
+      if (h) { const d = h.s * Math.min(best, maxD); if (d < best) { best = d; this.aimEnt = e; } }
+    }
+    // never aim at points between the camera and the character
+    const minD = this.cam.curDist + 1;
+    this.aimPoint.copy(c).addScaledVector(f, Math.max(minD, Math.min(best, maxD)));
   }
+
+  render() { this.app.renderScene(this.scene, this.camera); }
+
+  resize(w, h) { this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
+
+  sendChat(text) { this.sendToHost({ t: 'chat', msg: text }); }
 
   dispose() {
-    this.ended = true;
-    this.map.dispose();
-    this.chars.dispose();
-    for (const o of [this.trails.mesh, this.decals.mesh, this.sparks.points, this.buttons]) {
-      if (!o) continue;
-      this.scene.remove(o); o.geometry.dispose(); if (o.material.map) o.material.map.dispose(); o.material.dispose();
+    for (const off of this._offs || []) off();
+    for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);
+    Audio.stopLoop('brazier');
+    this.fx.dispose();
+    this.proj.clear();
+    // the map is shared with the lobby: only remove what the match added
+    for (const e of this.ents.values()) {
+      this.scene.remove(e.view.root);
+      for (const mesh of e.view.meshes) mesh.material.dispose();
     }
-    this.vm.hideShells();
   }
 }
+
+function distToSegXZ(p, a, b) {
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz)));
+  return Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t));
+}
+const r3 = (v) => Math.round(v * 1000) / 1000;
+const r2 = (v) => Math.round(v * 100) / 100;
+void groundH;

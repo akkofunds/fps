@@ -30,7 +30,7 @@ export class PeerManager extends Emitter {
     this.identity = identity; // {name, tag}
     this.peer = null;
     this.status = 'offline';
-    this.party = { leader: null, members: [], map: 'piazza', mode: 'duel' };
+    this.party = { leader: null, members: [], map: 'sunvale', mode: 'ffa' };
     this.leaderConn = null; // when member
     this.memberConns = new Map(); // when leader: id → conn
     this.pendingInvites = new Map(); // fromId → {conn, from}
@@ -77,7 +77,7 @@ export class PeerManager extends Emitter {
   }
 
   _resetParty() {
-    this.party = { leader: this.id, members: [this.me], map: this.party.map || 'piazza', mode: this.party.mode || 'duel' };
+    this.party = { leader: this.id, members: [this.me], map: this.party.map || 'sunvale', mode: this.party.mode || 'ffa' };
     this.emit('party', this.party);
   }
 
@@ -177,7 +177,7 @@ export class PeerManager extends Emitter {
       }
       case 'accept': case 'join': {
         if (!this.isLeader) { conn.send({ t: 'decline', reason: 'not-leader' }); return; }
-        if (this.party.members.length >= 5) { conn.send({ t: 'decline', reason: 'full' }); return; }
+        if (this.party.members.length >= 8) { conn.send({ t: 'decline', reason: 'full' }); return; }
         const from = msg.from;
         conn._member = from.id;
         this.outgoing.delete(from.id);

@@ -1,0 +1,27 @@
+import * as THREE from 'three';
+import { GameMap } from '../src/world/map.js';
+import { groundH } from '../src/world/terrain.js';
+import { loadMageModel, MageInstance } from '../src/character/characterModel.js';
+
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true });
+r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
+r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+const t0 = performance.now();
+const map = new GameMap(q.get('q') || 'high');
+console.log('LOG build ms', Math.round(performance.now() - t0));
+const cam = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 3000);
+const [cx, cy, cz, tx, ty, tz] = (q.get('cam') || '20,6,40,0,1,0').split(',').map(Number);
+cam.position.set(cx, groundH(cx, cz) + cy, cz); cam.lookAt(tx, groundH(tx, tz) + ty, tz);
+const tmpl = await loadMageModel('/models/pyro.glb');
+const m = new MageInstance(tmpl);
+const px = +(q.get('px') || tx), pz = +(q.get('pz') || tz);
+m.root.position.set(px, groundH(px, pz), pz); m.root.rotation.y = Math.atan2(cx - px, cz - pz);
+map.scene.add(m.root);
+const s = { pos: m.root.position, yaw: m.root.rotation.y, pitch: 0, vel: new THREE.Vector3(), grounded: true };
+for (let i = 0; i < 30; i++) m.anim.update(1 / 60, s);
+map.update(5, cam, m.root.position, [m.root.position]);
+r.render(map.scene, cam);
+console.log('LOG calls', r.info.render.calls, 'tris', r.info.render.triangles);
+window.done = true;

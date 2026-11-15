@@ -1,224 +1,183 @@
-import { MODES, MAX_HP } from '../config.js';
-import { BotBrain } from '../entities/bots.js';
-import { WEAPONS } from '../weapons/weaponDefs.js';
-import { dirFromAngles, traceShot } from '../weapons/weaponSystem.js';
-import { RangePractice } from './rangePractice.js';
+import { MAX_HP, REGEN_DELAY, REGEN_RATE, MODES } from '../config.js';
 
-// HOST-ONLY authority: phases, rounds, HP, kills, respawns, bots, crates, range targets.
-// Every state change is broadcast; the host applies the same messages locally.
+// HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
+// Every state change is broadcast to clients and applied locally through Match.clientHandle.
+const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100 };
+
 export class Rules {
   constructor(match) {
     this.m = match;
-    this.mode = MODES[match.cfg.mode] || MODES.duel;
+    this.mode = MODES[match.cfg.mode] || MODES.ffa;
+    this.killsToWin = match.killsToWin;
+    this.timeLimit = match.cfg.timeLimit || this.mode.timeLimit;
     this.phase = 'warmup';
     this.phaseEnd = 0;
-    this.round = 0;
-    this.score = [0, 0];
-    this.matchEnd = 0;
-    this.brains = new Map();
-    this.boardT = 0; this.phaseT = 0; this.snapT = 0;
-    this._dir = [0, 0, 0];
-    this.range = match.cfg.mode === 'range' ? new RangePractice(match, this) : null;
-    for (const e of match.ents.values()) if (e.bot && !e.practice) this.brains.set(e.n, new BotBrain(match, e, 0.45 + Math.random() * 0.35));
+    this.now = 0;
+    this.boardT = 0; this.hpT = 0;
+    this.burns = new Map(); // n → { dps, until, by, acc }
+    this.respawnAt = new Map();
+    this.lastDamage = new Map();
+    this.lastHit = new Map(); // anti-spam per attacker
   }
 
-  isLive() { return this.phase === 'live'; }
-
-  start(now) {
-    if (this.range) { this.phase = 'live'; this.spawnAll(now); this.broadcastPhase(now); return; }
-    if (this.mode.teams) this.newRound(now);
-    else { this.phase = 'live'; this.phaseEnd = now + this.mode.timeLimit; this.spawnAll(now); this.broadcastPhase(now); }
+  bcast(msg) {
+    this.m.net.broadcast(msg);
+    this.m.clientHandle(msg);
   }
 
-  newRound(now) {
-    this.round++;
-    this.phase = 'buy'; this.phaseEnd = now + 4;
-    this.m.map.resetCrates && this.m.map.resetCrates();
-    this.bcast({ t: 'resetCrates' });
-    this.spawnAll(now);
-    this.broadcastPhase(now);
+  start() {
+    const practice = this.m.cfg.mode === 'practice';
+    this.phase = practice ? 'live' : 'warmup';
+    this.phaseEnd = this.now + (practice ? 0 : 4);
+    this.spawnAll();
+    if (practice) this.spawnDummies();
+    this.bcast({ t: 'phase', p: this.phase, tl: practice ? 0 : 4 });
   }
 
-  spawnAll(now) {
-    const used = { 0: 0, 1: 0 };
+  spawnAll() { for (const e of this.m.ents.values()) if (!e.dummy && !e.left) this.spawn(e); }
+
+  spawnDummies() {
+    const map = this.m.map;
+    const sp = map.spawns[0];
+    const l = Math.hypot(sp.x, sp.z) || 1;
+    const dx = -sp.x / l, dz = -sp.z / l, px = -dz, pz = dx;
+    let i = 0;
     for (const e of this.m.ents.values()) {
-      if (e.practice) continue;
-      let sp;
-      if (this.mode.teams) { const list = this.m.map.spawns[e.team]; sp = list[(used[e.team]++ * 3 + (this.round % 2)) % list.length]; }
-      else sp = this.pickFFASpawn(e);
-      this.spawn(e, sp, now);
+      if (!e.dummy) continue;
+      const d = 11 + (i % 2) * 7, lat = (i - 2) * 3.6;
+      const x = sp.x + dx * d + px * lat, z = sp.z + dz * d + pz * lat;
+      const y = map.world.groundAt(x, z, 50);
+      this.bcast({ t: 'spawn', n: e.n, x, y, z, yaw: Math.atan2(sp.x - x, sp.z - z) });
+      e.home = { x, y, z };
+      i++;
     }
   }
 
-  pickFFASpawn(e) {
-    const list = this.m.map.spawns.ffa;
+  pickSpawn(e) {
+    const list = this.m.map.spawns;
     let best = list[0], bestD = -1;
     for (const s of list) {
       let md = 1e9;
-      for (const o of this.m.ents.values()) { if (o === e || !o.alive || o.practice) continue; const d = (o.x - s.x) ** 2 + (o.z - s.z) ** 2; if (d < md) md = d; }
-      md += Math.random() * 40;
+      for (const o of this.m.ents.values()) { if (o === e || !o.alive) continue; const d = (o.pos.x - s.x) ** 2 + (o.pos.z - s.z) ** 2; if (d < md) md = d; }
+      md += Math.random() * 60;
       if (md > bestD) { bestD = md; best = s; }
     }
     return best;
   }
 
-  spawn(e, sp, now) {
-    const jx = (Math.random() - 0.5) * 0.6, jz = (Math.random() - 0.5) * 0.6;
-    const msg = { t: 'spawn', n: e.n, x: sp.x + jx, y: sp.y + 0.05, z: sp.z + jz, yaw: sp.yaw || 0 };
-    e.hp = MAX_HP; e.alive = true; e.respawnAt = 0;
-    const brain = this.brains.get(e.n);
-    if (brain) brain.spawn(msg.x, msg.y, msg.z, msg.yaw);
-    this.bcast(msg);
+  spawn(e) {
+    const s = this.m.cfg.mode === 'practice' ? this.m.map.spawns[0] : this.pickSpawn(e);
+    const jx = (Math.random() - 0.5) * 1.2, jz = (Math.random() - 0.5) * 1.2;
+    this.respawnAt.delete(e.n);
+    this.burns.delete(e.n);
+    this.bcast({ t: 'spawn', n: e.n, x: s.x + jx, y: this.m.world.groundAt(s.x + jx, s.z + jz, s.y + 2) + 0.02, z: s.z + jz, yaw: s.yaw });
   }
 
-  bcast(msg, except = null) {
-    this.m.net.broadcast(msg, except);
-    if (except !== this.m.localId) this.m.onNet(msg, true);
-  }
-
-  broadcastPhase(now) {
-    this.bcast({ t: 'phase', p: this.phase, tl: Math.max(0, this.phaseEnd - now), r: this.round, sc: this.score });
-  }
-
-  broadcastBoard() {
-    const e = [];
-    for (const x of this.m.ents.values()) if (!x.practice) e.push([x.n, x.kills, x.deaths, x.hsKills, x.dmg | 0]);
-    this.bcast({ t: 'board', e });
-  }
-
-  // ---- damage ----
-  applyHit(attN, vicN, dmg, zone, w) {
-    const m = this.m;
-    const a = m.byN[attN], v = m.byN[vicN];
-    if (!a || !v || !v.alive) return;
-    if (!a.alive && !a.practice) return;
-    if (v.practice) { if (this.range) this.range.onHit(a, v, dmg, zone, w); return; }
-    if (this.range) return; // humans can't hurt each other in the range
+  onHit(from, msg) {
     if (this.phase !== 'live') return;
-    if (this.mode.teams && a.team === v.team && a !== v) return;
-    if (m.cfg.hsOnly && zone !== 'head') return;
-    dmg = Math.max(0, Math.min(200, dmg));
-    if (dmg <= 0) return;
-    v.hp -= dmg; a.dmg += Math.min(dmg, v.hp + dmg);
-    if (v.hp <= 0) {
-      v.hp = 0; v.alive = false; v.deaths++;
-      if (a !== v) { a.kills++; if (zone === 'head') a.hsKills++; }
-      this.bcast({ t: 'kill', a: a.n, v: v.n, w, h: zone === 'head' ? 1 : 0 });
-      if (!this.mode.teams) {
-        v.respawnAt = performance.now() / 1000 + this.mode.respawn;
-        if (a.kills >= this.mode.killsToWin) this.endMatch(a.n);
-      }
-      this.broadcastBoard();
-    } else {
-      this.bcast({ t: 'dmg', v: v.n, a: a.n, hp: v.hp, z: zone, w });
+    const v = this.m.ents.get(msg.v);
+    if (!v || !v.alive || v === from) return;
+    if (v.spawnProt && this.m.time < v.spawnProt) return;
+    const cap = MAX_HIT[msg.ab];
+    if (!cap) return;
+    const dmg = Math.max(0, Math.min(cap, Math.round(Number(msg.dmg) || 0)));
+    if (!dmg) return;
+    this.damage(v, dmg, from, msg.ab);
+    if (v.alive && Array.isArray(msg.burn)) {
+      const dps = Math.min(8, Number(msg.burn[0]) || 0), secs = Math.min(4, Number(msg.burn[1]) || 0);
+      const cur = this.burns.get(v.n);
+      this.burns.set(v.n, { dps, until: this.now + secs, by: from.n, acc: cur ? cur.acc : 0 });
+      this.bcast({ t: 'burn', n: v.n, s: secs });
+    }
+    if (v.alive && Array.isArray(msg.kb)) {
+      const k = msg.kb.map((x) => Math.max(-16, Math.min(16, Number(x) || 0)));
+      if (v.isLocal) this.m.clientHandle({ t: 'kb', n: v.n, v: k });
+      else if (!v.dummy) this.m.net.send(v.id, { t: 'kb', n: v.n, v: k });
     }
   }
 
-  damageCrate(i, dmg) {
-    const c = this.m.map.crates && this.m.map.crates[i];
-    if (!c || c.broken) return;
-    c.hp -= dmg;
-    if (c.hp <= 0) this.bcast({ t: 'crateBreak', i });
+  damage(v, dmg, from, ab) {
+    v.hp = Math.max(0, v.hp - dmg);
+    if (from) from.dmg += dmg;
+    this.lastDamage.set(v.n, this.now);
+    this.bcast({ t: 'hp', n: v.n, hp: v.hp, by: from ? from.n : -1, ab });
+    if (v.hp <= 0) this.kill(v, from, ab);
   }
 
-  botShoot(e, yaw, pitch, eyeY) {
-    const m = this.m;
-    const w = WEAPONS[e.w];
-    const d = dirFromAngles(yaw, pitch, this._dir);
-    const ox = e.x, oy = eyeY, oz = e.z;
-    let nrm = null;
-    const self = this;
-    const end = traceShot(m.map.world, (a, b, c, dx, dy, dz, maxT) => m.traceEnts(a, b, c, dx, dy, dz, maxT, e), ox, oy, oz, d[0], d[1], d[2], w, {
-      hitEntity(ent, zone, mul) {
-        const dmg = (zone === 'head' ? w.head : zone === 'leg' ? w.leg : w.body) * mul;
-        self.applyHit(e.n, ent.n, dmg, zone, e.w);
-      },
-      impact(x, y, z, nx, ny, nz, mat, obj, ww, mul) {
-        nrm = [nx, ny, nz];
-        if (obj && obj.data && obj.data.index !== undefined && obj.data.hp !== undefined) self.damageCrate(obj.data.index, w.body * mul);
-      },
-    });
-    const r = (v) => Math.round(v * 100) / 100;
-    this.bcast({ t: 'shot', n: e.n, o: [r(ox - Math.sin(yaw) * 0.6), r(oy - 0.15), r(oz - Math.cos(yaw) * 0.6)], e: [r(end[0]), r(end[1]), r(end[2])], nrm, w: e.w });
+  kill(v, k, ab) {
+    v.alive = false;
+    v.deaths++;
+    if (k && k !== v && !v.dummy) k.kills++;
+    const rt = v.dummy ? 2 : this.mode.respawn;
+    this.respawnAt.set(v.n, this.now + rt);
+    this.burns.delete(v.n);
+    this.bcast({ t: 'kill', k: k ? k.n : -1, v: v.n, ab, kk: k ? k.kills : 0, vd: v.deaths, rt });
+    this.sendBoard();
+    if (this.killsToWin && k && k.kills >= this.killsToWin) this.end();
   }
 
-  // ---- messages from clients ----
-  handle(n, msg) {
-    const m = this.m, e = m.byN[n];
-    if (!e) return;
-    switch (msg.t) {
-      case 'u': m.ingestState(e, msg, performance.now() / 1000); break;
-      case 'hit': if (typeof msg.v === 'number') this.applyHit(n, msg.v, +msg.d || 0, msg.z, msg.w | 0); break;
-      case 'shot': e.firedAt = performance.now() / 1000; this.bcast({ ...msg, n }, m.net.clients ? this.pidOf(n) : null); break;
-      case 'crate': this.damageCrate(msg.i | 0, +msg.d || 0); break;
-      case 'btn': if (this.range) this.range.press(msg.id, e); break;
-      case 'chat': {
-        const out = { t: 'chat', n, m: String(msg.m || '').slice(0, 120), tm: !!msg.tm };
-        if (out.tm && this.mode.teams) {
-          for (const x of m.ents.values()) if (x.team === e.team && !x.bot) { if (x.n === m.me.n) m.onNet(out, true); else m.net.send(x.pid, out); }
-        } else this.bcast(out);
-        break;
-      }
-      default: break;
+  end() {
+    if (this.phase === 'ended') return;
+    this.phase = 'ended';
+    const ranked = [...this.m.ents.values()].filter((e) => !e.dummy).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths || b.dmg - a.dmg);
+    this.bcast({ t: 'end', l: ranked.map((e) => [e.n, e.kills, e.deaths, e.dmg]) });
+  }
+
+  sendBoard() {
+    const l = [...this.m.ents.values()].filter((e) => !e.dummy).map((e) => [e.n, e.kills, e.deaths, e.dmg]);
+    this.bcast({ t: 'board', l, tl: Math.max(0, this.phaseEnd - this.now), ph: this.phase });
+  }
+
+  broadcastStates() {
+    const l = [];
+    for (const e of this.m.ents.values()) {
+      if (!e.alive || e.left) continue;
+      if (e.isLocal) { const b = this.m.body; l.push([e.n, r3(b.pos.x), r3(b.pos.y), r3(b.pos.z), r2(b.vel.x), r2(b.vel.y), r2(b.vel.z), r3(b.yaw), r3(b.pitch), b.grounded ? 1 : 0]); }
+      else if (!e.dummy) l.push([e.n, r3(e.pos.x), r3(e.pos.y), r3(e.pos.z), r2(e.vel.x), r2(e.vel.y), r2(e.vel.z), r3(e.yaw), r3(e.pitch), e.grounded ? 1 : 0]);
     }
-  }
-  pidOf(n) { const e = this.m.byN[n]; return e ? e.pid : null; }
-
-  playerLeft(n) {
-    const e = this.m.byN[n];
-    if (!e) return;
-    this.bcast({ t: 'left', n });
+    this.m.net.broadcast({ t: 'S', l });
   }
 
-  endMatch(winner) {
-    if (this.phase === 'end') return;
-    this.phase = 'end';
-    this.broadcastBoard();
-    this.bcast({ t: 'end', win: winner, sc: this.score });
-  }
-
-  // fixed-step simulation (bots)
-  fixedUpdate(dt, now) {
-    const frozen = this.phase === 'buy' || this.phase === 'end';
-    for (const b of this.brains.values()) b.update(dt, now, frozen);
-    if (this.range) this.range.fixedUpdate(dt, now);
-  }
-
-  update(dt, now) {
+  update(dt) {
+    this.now += dt;
     const m = this.m;
-    if (this.range) this.range.update(dt, now);
-    // phase transitions
-    if (this.mode.teams && !this.range) {
-      if (this.phase === 'buy' && now >= this.phaseEnd) { this.phase = 'live'; this.phaseEnd = now + this.mode.roundTime; this.broadcastPhase(now); }
-      else if (this.phase === 'live') {
-        const alive = [0, 0], total = [0, 0];
-        for (const e of m.ents.values()) { if (e.practice) continue; total[e.team]++; if (e.alive) alive[e.team]++; }
-        let winner = -1;
-        if (total[0] === 0 || total[1] === 0) { if (now >= this.phaseEnd) winner = total[0] ? 0 : 1; }
-        else if (alive[0] === 0 && alive[1] === 0) winner = 1;
-        else if (alive[0] === 0) winner = 1; else if (alive[1] === 0) winner = 0;
-        else if (now >= this.phaseEnd) winner = alive[0] > alive[1] ? 0 : 1;
-        if (winner >= 0) {
-          this.score[winner]++;
-          this.phase = 'post'; this.phaseEnd = now + 3.5;
-          this.bcast({ t: 'roundEnd', win: winner, sc: this.score });
-          this.broadcastPhase(now);
-          if (this.score[winner] >= this.mode.roundsToWin) this.matchEnd = now + 3.0;
+    if (this.phase === 'warmup' && this.now >= this.phaseEnd) {
+      this.phase = 'live';
+      this.phaseEnd = this.timeLimit ? this.now + this.timeLimit : 0;
+      this.bcast({ t: 'phase', p: 'live', tl: this.timeLimit || 0 });
+    }
+    if (this.phase === 'live' && this.timeLimit && this.now >= this.phaseEnd) this.end();
+    // burning
+    for (const [n, b] of this.burns) {
+      const e = m.ents.get(n);
+      if (!e || !e.alive || this.now > b.until) { this.burns.delete(n); continue; }
+      b.acc += b.dps * dt;
+      if (b.acc >= 1) { const d = Math.floor(b.acc); b.acc -= d; this.damage(e, d, m.ents.get(b.by), 'burn'); }
+    }
+    // regen + respawns
+    this.hpT -= dt;
+    const sendHp = this.hpT <= 0;
+    if (sendHp) this.hpT = 0.25;
+    for (const e of m.ents.values()) {
+      if (!e.alive) {
+        const at = this.respawnAt.get(e.n);
+        if (at !== undefined && this.now >= at && this.phase !== 'ended' && !e.left) {
+          if (e.dummy) { this.respawnAt.delete(e.n); this.bcast({ t: 'spawn', n: e.n, x: e.home.x, y: e.home.y, z: e.home.z, yaw: e.yaw }); }
+          else this.spawn(e);
         }
-      } else if (this.phase === 'post' && now >= this.phaseEnd) {
-        if (this.matchEnd) this.endMatch(this.score[0] > this.score[1] ? 0 : 1);
-        else this.newRound(now);
+        continue;
       }
-    } else if (!this.range && this.phase === 'live') {
-      for (const e of m.ents.values()) if (!e.alive && e.respawnAt && now >= e.respawnAt) this.spawn(e, this.pickFFASpawn(e), now);
-      if (now >= this.phaseEnd) {
-        let best = null; for (const e of m.ents.values()) if (!best || e.kills > best.kills) best = e;
-        this.endMatch(best ? best.n : -1);
+      const last = this.lastDamage.get(e.n) || -99;
+      const delay = e.dummy ? 2.5 : REGEN_DELAY;
+      if (e.hp < MAX_HP && this.now - last > delay && !this.burns.has(e.n)) {
+        e.hp = Math.min(MAX_HP, e.hp + (e.dummy ? 200 : REGEN_RATE) * dt);
+        if (sendHp || e.hp >= MAX_HP) this.bcast({ t: 'hp', n: e.n, hp: Math.round(e.hp), by: -1 });
       }
     }
-    this.phaseT -= dt;
-    if (this.phaseT <= 0) { this.phaseT = 1; this.broadcastPhase(now); }
     this.boardT -= dt;
-    if (this.boardT <= 0) { this.boardT = 3; this.broadcastBoard(); }
+    if (this.boardT <= 0) { this.boardT = 1; this.sendBoard(); }
   }
 }
+
+const r3 = (v) => Math.round(v * 1000) / 1000;
+const r2 = (v) => Math.round(v * 100) / 100;
