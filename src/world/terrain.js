@@ -117,9 +117,9 @@ function detailTexture() {
 export function grassColorAt(x, z, out) {
   // shared palette for the ground and grass blades
   const n1 = N.fbm(x / 23 + 40, z / 23, 3), n2 = N.n2(x / 7, z / 7);
-  const lush = new THREE.Color(0.2, 0.42, 0.09), fresh = new THREE.Color(0.38, 0.58, 0.14), dry = new THREE.Color(0.62, 0.6, 0.24);
+  const lush = new THREE.Color(0.17, 0.44, 0.09), fresh = new THREE.Color(0.36, 0.62, 0.13), dry = new THREE.Color(0.55, 0.6, 0.22);
   out.copy(lush).lerp(fresh, smoothstep(-0.4, 0.5, n1 + n2 * 0.25));
-  out.lerp(dry, smoothstep(0.25, 0.75, N.fbm(x / 40 - 30, z / 40 + 12, 2)) * 0.7);
+  out.lerp(dry, smoothstep(0.3, 0.8, N.fbm(x / 40 - 30, z / 40 + 12, 2)) * 0.45);
   return out;
 }
 

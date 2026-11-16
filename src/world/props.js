@@ -347,7 +347,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
     const a = rnd() * 6.28, r = R(PLAY_RADIUS + 2, 230);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (N.fbm(x / 40, z / 40, 2) < -0.15) continue;
-    if (tryTree(x, z, rnd() < 0.55 ? 'pine' : rnd() < 0.7 ? 'oak' : 'birch', R(1.0, 1.6), r < PLAY_RADIUS + 12)) i++;
+    if (tryTree(x, z, rnd() < 0.72 ? 'pine' : rnd() < 0.6 ? 'oak' : 'birch', R(1.0, 1.7), r < PLAY_RADIUS + 12)) i++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   // arena trees cast shadows; the forest on the surrounding hills doesn't (it's outside the shadow
