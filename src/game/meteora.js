@@ -64,10 +64,14 @@ export class MeteoraKit {
     }
     if (!m.local.alive || !m.controlsActive) return;
     const pr = input.pressed;
-    if (pr.e) this.starfall();
-    if (pr.c) this.sigil();
-    if (pr.v) this.blink();
-    if (pr.x) this.nova();
+    // input buffer: a press during another ability's animation goes off as soon as it ends
+    const buf = this.buf || (this.buf = { e: 0, c: 0, v: 0, x: 0 });
+    for (const k in buf) buf[k] = pr[k] ? 0.3 : Math.max(0, buf[k] - dt);
+    const go = (k, fn) => { if (buf[k] > 0 && (this.busy <= 0 || pr[k])) { buf[k] = 0; fn(); } };
+    go('e', () => this.starfall());
+    go('c', () => this.sigil());
+    go('v', () => this.blink());
+    go('x', () => this.nova());
     if (input.state.fire || pr.fire) this.spark();
   }
 

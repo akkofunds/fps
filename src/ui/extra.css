@@ -122,3 +122,5 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 #queueBar i { font-style: normal; font-size: 11px; color: #9aa4ad; letter-spacing: 0.06em; }
 @keyframes qPulse { 50% { opacity: 0.55; } }
 @media (max-width: 700px) { #queueBar i { display: none; } }
+/* tablets: bigger ability buttons */
+@media (min-width: 900px) and (pointer: coarse) { .tbtns { transform: scale(1.28); transform-origin: 100% 100%; } }
