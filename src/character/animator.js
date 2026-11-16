@@ -45,6 +45,7 @@ const ACTIONS = {
   skate: { clip: C.SKATE_CLIP, in: 0.05, out: 0.1, aimOff: true },
   uppercut: { clip: C.UPPERCUT_CLIP, in: 0.04, out: 0.16 },
   zeroburn: { clip: C.ZEROBURN_CLIP, in: 0.06, out: 0.2 },
+  freeze: { clip: C.FREEZE_STOMP, in: 0.05, out: 0.2 },
   doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true },
 };
 const CASTS = {

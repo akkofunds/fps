@@ -489,6 +489,31 @@ Object.assign(Fx.prototype, {
   },
 
   // C — Scarlet Ray: three magic circles spin up in front of the staff while she channels
+  // Megumin-style casting: a magic circle snaps open at the staff tip, facing where the spell goes,
+  // spins, and burns out as the spell leaves it
+  tipSeal(o, dir, size = 0.9, life = 0.45, layers = 1) {
+    const Z = new THREE.Vector3(0, 0, 1), d = dir.clone().normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(Z, d);
+    const rings = [];
+    for (let i = 0; i < layers; i++) {
+      const m = circleMesh(circleTexture(41 + i * 7, 512), size * (1 - i * 0.28), new THREE.Color(3.2, 0.7 - i * 0.1, 0.32));
+      m.position.copy(o).addScaledVector(d, 0.25 + i * 0.32); m.quaternion.copy(q); m.material.opacity = 0;
+      this.scene.add(m); rings.push(m);
+    }
+    let t = 0;
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      rings.forEach((m, i) => {
+        const open = Math.min(1, Math.max(0, (t - i * 0.04) / 0.08));
+        m.scale.setScalar(Math.max(0.001, 0.5 + 0.5 * (1 - (1 - open) ** 3)));
+        m.rotateZ(dt * (i % 2 ? -5 : 6));
+        m.material.opacity = open * Math.max(0, 1 - Math.max(0, t - life * 0.5) / (life * 0.5));
+      });
+      if (t >= life) { for (const m of rings) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); } return false; }
+      return true;
+    } });
+  },
+
   rayCharge(getTip, getDir, dur) {
     const circles = [0, 1, 2].map((i) => {
       const m = circleMesh(circleTexture(41 + i * 5, 512), 0.9 + i * 0.55, new THREE.Color(3.2, 0.6 - i * 0.08, 0.3));

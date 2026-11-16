@@ -136,7 +136,7 @@ export class Match {
     if (!g) {
       if (this.ghosts.length >= 10) return;
       const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
-      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.85, 0.88, 0.95), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
       for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
       inst.setLod(true);
       this.scene.add(inst.root);
@@ -150,7 +150,7 @@ export class Match {
     }
     dst.root.position.copy(src.root.position); dst.root.rotation.copy(src.root.rotation);
     dst.root.visible = true;
-    g.t = 0.32; g.mat.opacity = 0.55;
+    g.t = 0.3; g.mat.opacity = 0.4;
   }
 
   _updateGhosts(dt) {
@@ -158,7 +158,7 @@ export class Match {
     for (const g of this.ghosts) {
       if (g.t <= 0) continue;
       g.t -= dt;
-      g.mat.opacity = Math.max(0, g.t / 0.32) * 0.55;
+      g.mat.opacity = Math.max(0, g.t / 0.3) * 0.4;
       if (g.t <= 0) g.inst.root.visible = false;
     }
   }
@@ -272,7 +272,7 @@ export class Match {
       case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
-      case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
+      case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); this.fx.tipSeal(tmpV.fromArray(d.o), tmpV2.fromArray(d.d), 0.75, 0.4); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
       // ---- Pyro: Fire Force kit
       case 'kick': {
         const o = new THREE.Vector3().fromArray(d.o);
@@ -420,6 +420,9 @@ export class Match {
         const pts = [];
         for (let i = 0; i + 2 < raw.length; i += 3) pts.push(new THREE.Vector3(+raw[i], +raw[i + 1], +raw[i + 2]));
         this.sound('starCall', c, 0.9, 60);
+        // the call goes up through a seal at the staff tip, and a big seal opens in the sky over the target
+        if (e.view.root.visible) { const tip = e.view.staffTip(new THREE.Vector3()); this.fx.tipSeal(tip, tmpV2.set(c.x - tip.x, 40, c.z - tip.z), 1.0, 0.7, 2); }
+        this.fx.tipSeal(new THREE.Vector3(c.x, c.y + 24, c.z), tmpV2.set(0, -1, 0), STARFALL.spread * 1.15, 2.2, 2);
         this.fx.starfallBarrage(pts, { first: STARFALL.first, gap: STARFALL.gap, radius: STARFALL.radius, onImpact: (p) => {
           this.sound('starHit', p, 0.8, 45);
           if (local) this.areaDamage(p, STARFALL.radius, STARFALL.dmg, STARFALL.minDmg, 'starfall', { kb: 4, up: 4 });
@@ -531,6 +534,12 @@ export class Match {
           },
         });
         if (this.cine && this.cine.caster === e) this.cine.novaFx = novaFx;
+        // "EXPLOSION!": as she levels the staff, three seals stack open at its tip, aimed at the target
+        setTimeout(() => {
+          if (!e.view.root.visible) return;
+          const tip = e.view.staffTip(new THREE.Vector3());
+          this.fx.tipSeal(tip, new THREE.Vector3().subVectors(c, tip), 1.25, 1.1, 3);
+        }, 6250);
         break;
       }
       case 'leap': {

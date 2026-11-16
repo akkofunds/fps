@@ -200,21 +200,32 @@ def knn_transfer(Q, P, W, k=6):
 
 # ---------------------------------------------------------------- cape (re-draped + physics strands)
 CAPE_CX, CAPE_CZ = -3.0, -6.5      # body axis (source units)
-CAPE_TOP, CAPE_LEN = 45.5, 84.0    # collar height, collar → hem (hem ≈ mid-calf once standing)
-STRANDS = (('L', 62.0), ('C', 0.0), ('R', -62.0))   # angle around the back (+ = her left)
+CAPE_TOP, CAPE_LEN = 45.5, 72.0    # collar height, collar → hem (hem ≈ just below the knee standing)
+STRANDS = (('L', 48.0), ('C', 0.0), ('R', -48.0))   # angle around the back (+ = her left)
 SEG_T = (0.1, 0.4, 0.7, 1.0)                         # joint positions down the cape (t)
 CAPE_BONES = [f'cape_{s}{k}' for s, _ in STRANDS for k in range(3)]
 
 
+def cape_wrap_deg(t):
+    """half-angle the cape covers around her (from straight behind): wraps the neck at the collar,
+    then hangs from the shoulder blades so the arms stay outside it"""
+    ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
+    return 150 - 80 * sm - 8 * np.clip((t - 0.09) / 0.91, 0, 1)
+
+
+def cape_R(t, th=0.0):
+    ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
+    low = np.clip((t - 0.09) / 0.91, 0, 1)
+    folds = np.sin(th * 7.0 + 0.6) * 1.1 * low ** 0.8          # soft vertical cloth folds toward the hem
+    return 6.5 + 8.5 * sm + 2.2 * low ** 1.2 + folds
+
+
 def cape_shape(a, t):
     """(a across ∈ [-1,1], t down ∈ [0,1]) → source-space point on the hanging cape"""
-    ramp = np.clip(t / 0.09, 0, 1)
-    sm = ramp * ramp * (3 - 2 * ramp)
-    wrap = np.radians(150 - 50 * sm - 22 * np.clip((t - 0.09) / 0.91, 0, 1))   # around the neck → sides → behind
-    R = 6.5 + 11.0 * sm + 5.0 * np.clip((t - 0.09) / 0.91, 0, 1) ** 1.2              # neck → shoulders → flared hem
-    th = a * wrap
+    th = a * np.radians(cape_wrap_deg(t))
+    R = cape_R(t, th)
     x = CAPE_CX + R * np.sin(th)
-    z = CAPE_CZ - R * np.cos(th) * 0.98 - 3.0 * t
+    z = CAPE_CZ - R * np.cos(th) * 0.98 - 1.0 * t
     y = CAPE_TOP - CAPE_LEN * t
     return np.stack([x, y, z], -1)
 
@@ -247,21 +258,18 @@ def cape_joint_pos():
         wrap0 = 1.0  # angle → a at each t
         for k in range(3):
             t = SEG_T[k]
-            ramp = min(t / 0.09, 1); sm = ramp * ramp * (3 - 2 * ramp)
-            wrap = 150 - 50 * sm - 22 * np.clip((t - 0.09) / 0.91, 0, 1)
-            pos[f'cape_{sname}{k}'] = cape_shape(np.array(ang / wrap), np.array(t))
+            wrap = cape_wrap_deg(t)
+            pos[f'cape_{sname}{k}'] = cape_shape(np.array(np.clip(ang / wrap, -1, 1)), np.array(t))
         t = 1.0
-        wrap = 150 - 50 - 22
-        tails[f'cape_{sname}2'] = tuple(cape_shape(np.array(ang / wrap), np.array(t)).tolist())
+        wrap = cape_wrap_deg(t)
+        tails[f'cape_{sname}2'] = tuple(cape_shape(np.array(np.clip(ang / wrap, -1, 1)), np.array(t)).tolist())
     return pos, tails
 
 
 def cape_weights(a, t, NB, CB):
     n = len(a)
     W = np.zeros((n, NB))
-    ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
-    wrapd = 150 - 50 * sm - 22 * np.clip((t - 0.09) / 0.91, 0, 1)
-    th = a * wrapd
+    th = a * cape_wrap_deg(t)
     # across: piecewise-linear between strand angles (beyond the side strands → that strand)
     angs = np.array([g for _, g in STRANDS])  # 62, 0, -62
     wL = np.clip(th / angs[0], 0, 1)
@@ -488,10 +496,9 @@ def main():
         if not p['name'].startswith(('cloth', 'body')) or 'W' not in p: continue
         Q = p['P']
         t = (CAPE_TOP - Q[:, 1]) / CAPE_LEN
-        ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
-        R = 6.5 + 11.0 * sm + 5.0 * np.clip((t - 0.09) / 0.91, 0, 1) ** 1.2
-        wrap = np.radians(150 - 50 * sm - 22 * np.clip((t - 0.09) / 0.91, 0, 1))
-        dx, dz = Q[:, 0] - CAPE_CX, (Q[:, 2] - CAPE_CZ + 3.0 * t) / 0.98
+        R = cape_R(t)
+        wrap = np.radians(cape_wrap_deg(t))
+        dx, dz = Q[:, 0] - CAPE_CX, (Q[:, 2] - CAPE_CZ + 1.0 * t) / 0.98
         r, th = np.hypot(dx, dz), np.abs(np.arctan2(dx, -dz))
         torso = body_class(p['W'][:, :len(NAMES)]) == 0
         under = (t > 0.06) & (t < 0.2) & (r < R * 0.98) & (th < wrap * 0.8) & ((dz < 0) & torso | (dz < -2.5))
