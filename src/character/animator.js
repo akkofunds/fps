@@ -308,9 +308,9 @@ export class Animator {
 
     // hips
     const st = this.style;
-    const bob = st.bounce * 0.026 * wFast * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) + 0.012 * (wRun - wFast) * Math.cos(4 * Math.PI * (this.phase - 0.15));
+    const bob = st.bounce * 0.034 * wFast * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) + 0.012 * (wRun - wFast) * Math.cos(4 * Math.PI * (this.phase - 0.15));
     const idleSink = this.lobby ? -0.012 : -0.03;
-    P.hip[1] = lerp(idleSink, -0.035, wFast) - bob + this.dip;
+    P.hip[1] = lerp(idleSink, -0.012, wFast) - bob + this.dip;
     // pelvis sways over the stance foot (more for the graceful caster)
     P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * 0.016 * st.sway * wRun * (1 - 0.4 * wFast);
     const hipYawD = this.hipYaw * R2D;
@@ -329,8 +329,8 @@ export class Animator {
       } else {
         const k2 = (u - beta) / (1 - beta);
         const e = k2 * k2 * k2 * (k2 * (k2 * 6 - 15) + 10);
-        along = Ls * (-0.5 + e) - 0.22 * wFast * Math.sin(Math.PI * k2) * (1 - k2) * 1.6;
-        const H = lerp(0.08, 0.3, wFast);
+        along = Ls * (-0.5 + e) - 0.34 * wFast * Math.sin(Math.PI * k2) * (1 - k2) * 1.6;
+        const H = lerp(0.08, 0.38, wFast);
         lift = H * Math.pow(Math.sin(Math.PI * Math.pow(k2, 0.8)), 1.2) * wRun;
         pitch = lerp(40, -14, sstep(0, 0.9, k2)) * wRun;
       }
@@ -342,7 +342,7 @@ export class Animator {
     }
     // pelvis/torso motion from the stride
     const stride = Ls > 1e-3 ? (feet.L.along - feet.R.along) / Ls : 0; // + when L foot ahead
-    const leanT = ((3 + 9 * wFast) * Math.max(0, fwdness) - 4 * wFast * Math.max(0, -fwdness)) * st.lean + clamp(this.az * 1.4, -8, 10) * wRun;
+    const leanT = ((4 + 13 * wFast) * Math.max(0, fwdness) - 5 * wFast * Math.max(0, -fwdness)) * st.lean + clamp(this.az * 1.4, -8, 10) * wRun;
     const bankT = clamp(-this.ax * 1.2 + this.yawRate * 3.2 * Math.min(1, speed / 3), -14, 14) * wRun;
     // under-damped springs: the torso overshoots a little when you stop or cut, then settles
     const lean = spring(this.sLean, leanT, 70, st.settle, dt);
@@ -361,7 +361,7 @@ export class Animator {
     setE(P, B.head, -lean * 0.35, counter * 0.04 + glance * 14 + this.yawRate * 4 * wRun, -bank * 0.4 + shift * 2);
 
     // arms: counter-swing to the legs; idle = guard stance with the casting hand raised
-    const swingAmt = (34 + 14 * wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness)) * st.swing;
+    const swingAmt = (44 + 22 * wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness)) * st.swing;
     // arms drag behind sharp turns / strafes, then swing back through
     const drag = spring(this.sArm, this.yawRate * 5 - this.ax * 0.8, 45, 0.38, dt);
     for (const side of ['L', 'R']) {
@@ -369,9 +369,9 @@ export class Animator {
       const sw = (Ls > 1e-3 ? feet[side].along / (Ls * 0.5) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
       // relaxed ready stance: arms close to the body, casting hand slightly raised
       const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
-      const ax = lerp(idleX, 8 + sw, wRun);
-      const az = lerp(idleZ, 10 + 4 * wFast, wRun);
-      const ex = lerp(idleE, -(48 + 42 * wFast) - Math.max(0, -sw) * 0.5, wRun);
+      const ax = lerp(idleX, 2 + sw, wRun);
+      const az = lerp(idleZ, 7 + 3 * wFast, wRun);
+      const ex = lerp(idleE, -(46 + 34 * wFast) - Math.max(0, -sw) * 0.45, wRun);
       setS(P, B['upperArm' + side], sg, ax, 0, az);
       setS(P, B['foreArm' + side], sg, ex, -10 * wRun, 0);
       setS(P, B['hand' + side], sg, -6, 0, -4);
@@ -482,8 +482,8 @@ export class Animator {
     const vy = s.vel.y;
     const fall = sstep(2.5, -5, vy);
     const fwd = clamp(this.vz / RUN_SPEED, -1, 1);
-    const R = { spine: [6, 0, 0], upperLegL: [-62, 0, 6], lowerLegL: [84, 0, 0], footL: [22, 0, 0], upperLegR: [12, 0, 6], lowerLegR: [46, 0, 0], footR: [28, 0, 0], upperArmL: [-34, 0, 24], foreArmL: [-44, 0, 0], upperArmR: [26, 0, 26], foreArmR: [-52, 0, 0], head: [-6, 0, 0] };
-    const F = { spine: [2, 0, 0], upperLegL: [-34, 0, 8], lowerLegL: [44, 0, 0], footL: [10, 0, 0], upperLegR: [-12, 0, 8], lowerLegR: [30, 0, 0], footR: [16, 0, 0], upperArmL: [-14, 0, 52], foreArmL: [-28, 0, 0], upperArmR: [-8, 0, 56], foreArmR: [-30, 0, 0], head: [6, 0, 0] };
+    const R = { spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-84, 0, 6], lowerLegL: [104, 0, 0], footL: [28, 0, 0], upperLegR: [20, 0, 6], lowerLegR: [62, 0, 0], footR: [36, 0, 0], upperArmL: [-62, 0, 26], foreArmL: [-52, 0, 0], upperArmR: [32, 0, 34], foreArmR: [-42, 0, 0], head: [-10, 0, 0] };
+    const F = { spine: [-3, 0, 0], chest: [-2, 0, 0], upperLegL: [-30, 0, 10], lowerLegL: [40, 0, 0], footL: [6, 0, 0], upperLegR: [-4, 0, 10], lowerLegR: [24, 0, 0], footR: [14, 0, 0], upperArmL: [-24, 0, 66], foreArmL: [-32, 0, 0], upperArmR: [-16, 0, 70], foreArmR: [-30, 0, 0], head: [5, 0, 0] };
     for (const key of Object.keys(R)) {
       const a = R[key], b = F[key];
       const side = /[a-z]R$/.test(key) ? -1 : 1;
@@ -497,7 +497,7 @@ export class Animator {
     if (kk > 0) { addE(P, B.upperArmL, -40 * kk, 0, 10 * kk); addE(P, B.upperArmR, -40 * kk, 0, -10 * kk); addE(P, B.spine, -6 * kk, 0, 0); }
     // tuck at the apex (|vy| small) for a floatier read
     const apex = Math.max(0, 1 - Math.abs(vy) / 3);
-    addE(P, B.upperLegL, -10 * apex, 0, 0); addE(P, B.lowerLegL, 14 * apex, 0, 0);
+    addE(P, B.upperLegL, -16 * apex, 0, 0); addE(P, B.lowerLegL, 22 * apex, 0, 0); addE(P, B.upperLegR, -14 * apex, 0, 0); addE(P, B.lowerLegR, 26 * apex, 0, 0); addE(P, B.spine, 6 * apex, 0, 0);
   }
 
   _stabilizeStaff(out, actionW) {

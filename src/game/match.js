@@ -397,7 +397,7 @@ export class Match {
         const c = new THREE.Vector3().fromArray(d.c), o = new THREE.Vector3().fromArray(d.o);
         this._startCine(e, c, o);
         const novaFx = this.fx.nova(c, o, {
-          radius: NOVA.radius, channel: NOVA.channel,
+          radius: NOVA.radius, channel: NOVA.channel, beam: 0.6,
           stagger: [3.62, 3.84, 4.06, 4.28, 4.5, 4.72, 4.94],
           onLayer: (i) => Audio.play('circleOn', 0.45 + i * 0.06, 0, 0.9 + i * 0.05),
           onFlash: () => {
@@ -452,7 +452,8 @@ export class Match {
   //  0.0–3.6  casting stage (the world vanishes: violet cosmos, golden molten circle, light pillars)
   //  3.6–5.4  the battlefield: seven seals stack in the sky over the target
   //  5.4–6.6  back on stage: spinning shot, "EXPLOSION!" with a whip zoom
-  //  6.6      impact frames → the explosion; wide shot of the catastrophe until 10.0
+  //  6.6–7.2  the beam drives down from the seals into the target
+  //  7.2      impact frames → the explosion; wide shot of the catastrophe until 10.6
   _startCine(caster, c, o) {
     if (this.cine) return; // a second nova during one keeps its own effect, not a second camera
     const f = new THREE.Vector3(c.x - o.x, 0, c.z - o.z);
@@ -495,13 +496,14 @@ export class Match {
       [5.95, 'EXPLOSION!', true],
       [6.6, ''],
     ];
+    if (t >= 6.6 && !C.beamSnd) { C.beamSnd = true; Audio.play('adollaBeam', 1.2, 0, 0.7); }
     while (C.subs < subs.length && t >= subs[C.subs][0]) { const [, text, big] = subs[C.subs]; this.app.hud.cineSub(text, !!big); C.subs++; }
     const onStage = t < 3.6 || (t >= 5.4 && t < 6.6);
     this._cineSetStage(onStage);
     if (C.novaFx) C.novaFx.visible = !onStage;
     const I = t < 3.6 ? Math.min(1, t / 3.2) : Math.min(1, 0.7 + (t - 5.4) / 1.2);
     C.stage.update(dt, I);
-    this.app.hud.cineDark(onStage ? 0 : t < 6.6 ? 0.3 : Math.max(0, 0.45 - (t - 6.6) / 2));
+    this.app.hud.cineDark(onStage ? 0 : t < 7.2 ? 0.3 : Math.max(0, 0.45 - (t - 7.2) / 2));
     if (t >= C.dur) this._endCine();
   }
 
@@ -541,15 +543,19 @@ export class Match {
       P.set(o.x + Math.sin(a) * r, o.y + 1.0 + k * 0.6, o.z + Math.cos(a) * r);
       L.set(o.x, o.y + 1.35, o.z);
       fov = t < 5.95 ? 58 : Math.max(30, 58 - (t - 5.95) * 70);
+    } else if (t < 7.2) { // the beam: looking up from the battlefield as it drives down into the target
+      const k = (t - 6.6) / 0.6;
+      P.set(c.x - f.x * NOVA.radius * 1.7 + sd.x * 7, c.y + 3, c.z - f.z * NOVA.radius * 1.7 + sd.z * 7);
+      L.set(c.x, c.y + 22 - k * 12, c.z); fov = 66;
     } else { // the catastrophe, from far away, slowly pushing in
-      const k = t - 6.6;
+      const k = t - 7.2;
       const back = NOVA.radius * (3.0 - k * 0.15);
       P.set(c.x - f.x * back + sd.x * NOVA.radius * 1.1, c.y + 30 + k * 2.5, c.z - f.z * back + sd.z * NOVA.radius * 1.1);
       L.set(c.x, c.y + 12 + k * 4, c.z); fov = 66;
       const sh = this.fx.shakeAmt * 0.7;
       P.x += Math.sin(t * 47) * sh; P.y += Math.sin(t * 59 + 1) * sh;
     }
-    if (t >= 3.6 && (t < 5.4 || t >= 6.6)) P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 50) + 0.6);
+    if (t >= 3.6 && (t < 5.4 || t >= 6.6)) P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 50) + 1.2);
     cam.position.copy(P); cam.lookAt(L);
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     return L;
