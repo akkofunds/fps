@@ -198,6 +198,190 @@ def knn_transfer(Q, P, W, k=6):
     return out
 
 
+# ---------------------------------------------------------------- cape (re-draped + physics strands)
+CAPE_CX, CAPE_CZ = -3.0, -6.5      # body axis (source units)
+CAPE_TOP, CAPE_LEN = 45.5, 72.0    # collar height, collar → hem (hem ≈ just below the knee standing)
+STRANDS = (('L', 48.0), ('C', 0.0), ('R', -48.0))   # angle around the back (+ = her left)
+SEG_T = (0.1, 0.4, 0.7, 1.0)                         # joint positions down the cape (t)
+CAPE_BONES = [f'cape_{s}{k}' for s, _ in STRANDS for k in range(3)]
+
+
+def cape_wrap_deg(t):
+    """half-angle the cape covers around her (from straight behind): wraps the neck at the collar,
+    then hangs from the shoulder blades so the arms stay outside it"""
+    ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
+    return 150 - 80 * sm - 8 * np.clip((t - 0.09) / 0.91, 0, 1)
+
+
+def cape_R(t, th=0.0):
+    ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
+    low = np.clip((t - 0.09) / 0.91, 0, 1)
+    folds = np.sin(th * 7.0 + 0.6) * 1.1 * low ** 0.8          # soft vertical cloth folds toward the hem
+    return 6.5 + 8.5 * sm + 2.2 * low ** 1.2 + folds
+
+
+def cape_shape(a, t):
+    """(a across ∈ [-1,1], t down ∈ [0,1]) → source-space point on the hanging cape"""
+    th = a * np.radians(cape_wrap_deg(t))
+    R = cape_R(t, th)
+    x = CAPE_CX + R * np.sin(th)
+    z = CAPE_CZ - R * np.cos(th) * 0.98 - 1.0 * t
+    y = CAPE_TOP - CAPE_LEN * t
+    return np.stack([x, y, z], -1)
+
+
+def drape_cape(UV):
+    u, v = UV[:, 0], UV[:, 1]
+    t = (u.max() - u) / (u.max() - u.min())
+    # across: normalise v within each band of t (the layout is a trapezoid)
+    bins = np.clip((t * 24).astype(int), 0, 23)
+    lo = np.array([v[bins == k].min() if (bins == k).any() else v.min() for k in range(24)])
+    hi = np.array([v[bins == k].max() if (bins == k).any() else v.max() for k in range(24)])
+    tc = (np.arange(24) + 0.5) / 24
+    vlo, vhi = np.interp(t, tc, lo), np.interp(t, tc, hi)
+    a = np.clip((v - (vlo + vhi) / 2) / np.maximum((vhi - vlo) / 2, 1e-6), -1, 1)
+    return cape_shape(a, t), a, t
+
+
+def vertex_normals(P, I):
+    N = np.zeros_like(P)
+    tri = I.reshape(-1, 3)
+    fn = np.cross(P[tri[:, 1]] - P[tri[:, 0]], P[tri[:, 2]] - P[tri[:, 0]])
+    for k in range(3): np.add.at(N, tri[:, k], fn)
+    return N / np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
+
+
+def cape_joint_pos():
+    """head position of every cape bone (+ strand tails), on the draped surface"""
+    pos, tails = {}, {}
+    for sname, ang in STRANDS:
+        wrap0 = 1.0  # angle → a at each t
+        for k in range(3):
+            t = SEG_T[k]
+            wrap = cape_wrap_deg(t)
+            pos[f'cape_{sname}{k}'] = cape_shape(np.array(np.clip(ang / wrap, -1, 1)), np.array(t))
+        t = 1.0
+        wrap = cape_wrap_deg(t)
+        tails[f'cape_{sname}2'] = tuple(cape_shape(np.array(np.clip(ang / wrap, -1, 1)), np.array(t)).tolist())
+    return pos, tails
+
+
+def cape_weights(a, t, NB, CB):
+    n = len(a)
+    W = np.zeros((n, NB))
+    th = a * cape_wrap_deg(t)
+    # across: piecewise-linear between strand angles (beyond the side strands → that strand)
+    angs = np.array([g for _, g in STRANDS])  # 62, 0, -62
+    wL = np.clip(th / angs[0], 0, 1)
+    wR = np.clip(th / angs[2], 0, 1)
+    wC = 1 - wL - wR
+    across = {'L': wL, 'C': wC, 'R': wR}
+    # down: hat functions centred mid-segment; the collar is pinned to the chest
+    cen = np.array([(SEG_T[k] + SEG_T[k + 1]) / 2 for k in range(3)])
+    h = 0.3
+    down = np.stack([np.clip(1 - np.abs(t - c) / h, 0, 1) for c in cen], 1)
+    down[t >= cen[2], 2] = 1.0
+    down[t <= cen[0], 0] = np.maximum(down[t <= cen[0], 0], 1.0)
+    down /= np.maximum(down.sum(1, keepdims=True), 1e-9)
+    collar = np.clip((0.17 - t) / 0.12, 0, 1)
+    for sname, _ in STRANDS:
+        for k in range(3):
+            W[:, CB[f'cape_{sname}{k}']] = across[sname] * down[:, k] * (1 - collar)
+    W[:, IDX['upperChest']] = collar
+    return W
+
+
+ARM_GROUPS = {
+    'L': ('shoulder_L', 'upperArm_L', 'foreArm_L', 'hand_L'),
+    'R': ('shoulder_R', 'upperArm_R', 'foreArm_R', 'hand_R'),
+}
+
+
+def body_class(W):
+    """0 = torso/legs/head, 1 = left arm, 2 = right arm (by dominant bone; shoulders count as arm),
+    3 = the staff"""
+    dom = W.argmax(1)
+    c = np.zeros(len(W), int)
+    for ci, side in ((1, 'L'), (2, 'R')):
+        c[np.isin(dom, [IDX[n] for n in ARM_GROUPS[side]])] = ci
+    if W.shape[1] > len(NAMES): c[dom == len(NAMES)] = 3
+    return c
+
+
+def regioned_transfer(Q, I, P, W, k=6, passes=3, arm_band=False, allowed=None):
+    """Copy skin weights from a source surface to a garment/outline WITHOUT letting a sleeve borrow
+    from the ribs it hangs beside. The target is split into left arm / right arm / torso / staff by
+    distance along its OWN surface from unambiguous seeds, then each region copies only from the
+    matching source region; a short smoothing pass along the target closes seams."""
+    Wn = knn_transfer(Q, P, W, k=k)
+    inv, Qw = weld(Q, I)
+    adj = graph(Qw, inv[I])
+    n = len(Qw)
+    domw = np.zeros(n, int); domw[inv] = Wn.argmax(1)
+    seeds = {
+        1: np.isin(domw, [IDX['foreArm_L'], IDX['hand_L']]),
+        2: np.isin(domw, [IDX['foreArm_R'], IDX['hand_R']]),
+        0: np.isin(domw, [IDX[n_] for n_ in ('hips', 'spine', 'chest', 'upperLeg_L', 'upperLeg_R', 'head', 'neck')]),
+    }
+    if W.shape[1] > len(NAMES): seeds[3] = domw == len(NAMES)
+    D = np.full((n, 4), np.inf)
+    for c, m in seeds.items():
+        if m.any(): D[:, c] = dijkstra(adj, np.where(m)[0], n)
+    cls_w = D.argmin(1)
+    cls_w[~np.isfinite(D.min(1))] = 0
+    if allowed is not None:
+        # unambiguous by plain distance: much closer to an arm bone than to the spine axis
+        # (the source pose swings her right arm far back, bunching the sleeve top behind her
+        # shoulder where the surface path runs through the dress back)
+        dax = np.hypot(Qw[:, 0] - CAPE_CX, Qw[:, 2] - CAPE_CZ)
+        for c, side in ((1, 'L'), (2, 'R')):
+            da = np.min(np.stack([seg(Qw, JP[IDX[b_]], tail(b_))[0] for b_ in ('upperArm_' + side, 'foreArm_' + side, 'hand_' + side)], 1), 1)
+            cls_w[(da < 0.5 * dax) & (da < 9.0) & (Qw[:, 1] > 15) & (Qw[:, 2] < CAPE_CZ - 4)] = c
+    if arm_band:
+        # the off-shoulder band of the dress wraps the top of each upper arm: anything outside the
+        # torso's width at shoulder height belongs to that arm
+        dx = Qw[:, 0] - CAPE_CX
+        band = (Qw[:, 1] > 29) & (np.abs(dx) > 9.0)
+        cls_w[band & (dx > 0)] = 1
+        cls_w[band & (dx < 0)] = 2
+    cls = cls_w[inv]
+    bcls = body_class(W)
+    out = np.zeros_like(Wn)
+    for c in (0, 1, 2, 3):
+        q, src = cls == c, bcls == c
+        if q.any(): out[q] = knn_transfer(Q[q], P[src], W[src], k=k) if src.sum() > 8 else Wn[q]
+    if allowed is not None:
+        # each region may only follow its own bones (no head / other-arm weights leaking onto a
+        # dress back, which tugs it out through the cape)
+        for c, names in allowed.items():
+            m = cls == c
+            if not m.any(): continue
+            keep = np.zeros(out.shape[1], bool); keep[[IDX[n_] for n_ in names]] = True
+            sub = out[m] * keep
+            ok = sub.sum(1) > 1e-6
+            sub[ok] /= sub[ok].sum(1, keepdims=True)
+            out[np.where(m)[0][ok]] = sub[ok]
+    Ww = np.zeros((n, out.shape[1])); cnt = np.zeros(n)
+    np.add.at(Ww, inv, out); np.add.at(cnt, inv, 1); Ww /= np.maximum(cnt, 1)[:, None]
+    nbrs = [[v for v in adj[u] if cls_w[v] == cls_w[u]] for u in range(n)]
+    for _ in range(passes):
+        nxt = Ww.copy()
+        for u in range(n):
+            if nbrs[u]: nxt[u] = 0.5 * Ww[u] + 0.5 * Ww[nbrs[u]].mean(0)
+        Ww = nxt
+    # stitch the seams between regions: blend across the boundary over a couple of rings
+    seam = np.array([any(cls_w[v] != cls_w[u] for v in adj[u]) for u in range(n)])
+    ring = seam.copy()
+    for _ in range(2): ring = ring | np.array([any(ring[v] for v in adj[u]) for u in range(n)])
+    for _ in range(3):
+        nxt = Ww.copy()
+        for u in np.where(ring)[0]:
+            nb = list(adj[u])
+            if nb: nxt[u] = 0.4 * Ww[u] + 0.6 * Ww[nb].mean(0)
+        Ww = nxt
+    return Ww[inv]
+
+
 def main():
     js, b = read_glb(SRC)
     prims = baked_primitives(js, b, 0)
@@ -206,8 +390,9 @@ def main():
         parts.append(dict(name=nm, mat=mat, P=yup(P), N=yup(N) if N is not None else None, UV=UV, I=I))
     get = lambda pre: [p for p in parts if p['name'].startswith(pre)]
     body = get('body_mesh')[0]
-    NB = len(NAMES) + 2  # + prop_R, cape
+    NB = len(NAMES) + 2 + len(CAPE_BONES)  # + prop_R, cape root, cape strands
     PROP, CAPE = len(NAMES), len(NAMES) + 1
+    CB = {n: len(NAMES) + 2 + i for i, n in enumerate(CAPE_BONES)}
 
     print('body weights (geodesic)…', flush=True)
     Wb = body_weights(body['P'], body['I'])
@@ -233,20 +418,13 @@ def main():
         elif p['name'].startswith(('staff', 'StaffBall')):
             W[:, PROP] = 1
         elif p['name'].startswith('cape'):
-            # the source cape is frozen mid-flutter: fold it in behind her back first
-            Q = p['P']
-            ax_, az_ = -3.0, -15.0
-            k = np.clip((40.0 - Q[:, 1]) / 38.0, 0, 1)
-            Q[:, 0] = ax_ + (Q[:, 0] - ax_) * (1 - 0.5 * k)
-            dz = Q[:, 2] - az_
-            Q[:, 2] = az_ + np.where(dz < 0, dz * (1 - 0.62 * k), dz)
-            Q[:, 2] = np.minimum(Q[:, 2], az_ + 2 + (1 - k) * 12)
-            # pinned at the collar, swings below it
-            y = p['P'][:, 1]
-            top = JP[IDX['neck']][1] + 6
-            k = np.clip((top - y) / 22.0, 0, 1) ** 1.2
-            W[:, IDX['upperChest']] = 1 - k
-            W[:, CAPE] = k
+            # The source cape is frozen mid-flutter. Re-drape it from its UV layout (u: collar→hem,
+            # v: across the back) into a cape hanging from her shoulders, then hang it on three
+            # strands of bones (left / centre / right) that the runtime simulates with gravity.
+            Q, A_, T_ = drape_cape(p['UV'])
+            p['P'] = Q
+            p['N'] = vertex_normals(Q, p['I'])
+            W[:] = cape_weights(A_, T_, NB, CB)
         elif p['name'].startswith('Megumin_stroke'):
             continue  # outline: after everything else
         elif p['name'].startswith('boots'):
@@ -263,7 +441,13 @@ def main():
                 Wl /= np.maximum(Wl.sum(1, keepdims=True), 1e-9)
                 W[m, :len(NAMES)] = knn_transfer(p['P'][m], body['P'][src], Wl[src])
         else:
-            W[:, :len(NAMES)] = knn_transfer(p['P'], body['P'], Wb)
+            if p['name'].startswith('cloth'):
+                W[:, :len(NAMES)] = regioned_transfer(p['P'], p['I'], body['P'], Wb[:, :len(NAMES)], allowed={
+                    0: ('hips', 'spine', 'chest', 'upperChest', 'neck', 'upperLeg_L', 'upperLeg_R'),
+                    1: ('chest', 'upperChest', 'shoulder_L', 'upperArm_L', 'foreArm_L', 'hand_L'),
+                    2: ('chest', 'upperChest', 'shoulder_R', 'upperArm_R', 'foreArm_R', 'hand_R')})
+            else:
+                W[:, :len(NAMES)] = knn_transfer(p['P'], body['P'], Wb)
             if p['name'].startswith('cloth'):
                 # skirt: soften toward the hips so it doesn't shred between the legs
                 y = p['P'][:, 1]
@@ -289,28 +473,68 @@ def main():
         p['P'] = shrink(p['P'])
     staff_top = grip + ax * 52  # orb centre (after the 25% shortening)
 
-    # outline shell: nearest vertex among all other parts (weights + staff shrink)
-    allP = np.concatenate([p['P'] for p in parts if 'W' in p])
-    allW = np.concatenate([p['W'] for p in parts if 'W' in p])
-    allS = np.concatenate([np.full(len(p['P']), p['name'].startswith(('staff', 'StaffBall'))) for p in parts if 'W' in p])
-    for p in get('Megumin_stroke'):
+    # skin hidden under the dress never needs to render, and it is what pokes through the cloth
+    # when the arm/torso weights disagree: delete body faces fully covered by the dress
+    cloth = get('cloth')[0]
+    cN = cloth['N'] if cloth['N'] is not None else None
+    Pb = body['P']
+    covered = np.zeros(len(Pb), bool)
+    for s0 in range(0, len(Pb), 512):
+        d = ((Pb[s0:s0 + 512, None, :] - cloth['P'][None, :, :]) ** 2).sum(-1)
+        j = d.argmin(1); dist = np.sqrt(d[np.arange(len(j)), j])
+        behind = ((Pb[s0:s0 + 512] - cloth['P'][j]) * cN[j]).sum(1) < 0.4 if cN is not None else np.ones(len(j), bool)
+        covered[s0:s0 + 512] = (dist < 3.2) & behind
+    tri = body['I'].reshape(-1, 3)
+    keep = ~covered[tri].all(1)
+    print('hidden body faces under the dress:', int((~keep).sum()), 'of', len(tri))
+    body['I'] = tri[keep].ravel().copy()
+    body['hide'] = covered
+
+    # the top of the cape is pinned to the chest, so torso clothing right under it is never seen —
+    # and the dress's stiff shoulder flaps poke through it. Remove those torso faces.
+    for p in parts:
+        if not p['name'].startswith(('cloth', 'body')) or 'W' not in p: continue
         Q = p['P']
-        near = np.zeros(len(Q), int)
-        for s in range(0, len(Q), 256):
-            near[s:s + 256] = ((Q[s:s + 256, None, :] - allP[None, :, :]) ** 2).sum(-1).argmin(1)
-        p['W'] = allW[near]
-        st = allS[near]
-        Q[st] = shrink(Q[st])
+        t = (CAPE_TOP - Q[:, 1]) / CAPE_LEN
+        R = cape_R(t)
+        wrap = np.radians(cape_wrap_deg(t))
+        dx, dz = Q[:, 0] - CAPE_CX, (Q[:, 2] - CAPE_CZ + 1.0 * t) / 0.98
+        r, th = np.hypot(dx, dz), np.abs(np.arctan2(dx, -dz))
+        torso = body_class(p['W'][:, :len(NAMES)]) == 0
+        under = (t > 0.06) & (t < 0.2) & (r < R * 0.98) & (th < wrap * 0.8) & ((dz < 0) & torso | (dz < -2.5))
+        tri = p['I'].reshape(-1, 3)
+        keep = ~under[tri].all(1)
+        if (~keep).any(): print('hidden under the cape collar:', p['name'][:12], int((~keep).sum()))
+        p['I'] = tri[keep].ravel().copy()
+
+    # ink outline: an inverted hull generated from each visible part with that part's OWN weights,
+    # so it can never drift off the surface it outlines (the source stroke mesh borrowed weights
+    # from whatever was nearest, which put black streaks on the arms and shoulders)
+    stroke = get('Megumin_stroke')[0]
+    parts[:] = [p for p in parts if not p['name'].startswith('Megumin_stroke')]
+    OUTLINED = ('body', 'cloth', 'hat', 'hair', 'boots', 'belt', 'choker', 'staff', 'StaffBall')
+    PUSH = 0.42
+    for p in list(parts):
+        if not p['name'].startswith(OUTLINED): continue
+        inv, Pw = weld(p['P'], p['I'])
+        Nw = np.zeros_like(Pw)
+        Nsrc = p['N'] if p['N'] is not None else vertex_normals(p['P'], p['I'])
+        np.add.at(Nw, inv, Nsrc)
+        Nw /= np.maximum(np.linalg.norm(Nw, axis=1, keepdims=True), 1e-9)
+        thick = PUSH * (0.6 if p['name'].startswith(('hair', 'StaffBall', 'choker')) else 1.0)
+        parts.append(dict(name='Megumin_stroke_' + p['name'].split('_UV')[0], mat=stroke['mat'], P=p['P'] + Nw[inv] * thick,
+                          N=None, UV=None, I=p['I'].reshape(-1, 3)[:, ::-1].ravel().copy(), W=p['W'].copy()))
 
     # ---------------------------------------------------------------- to meters, feet ~0
     floor = min(JP[IDX['toes_L']][1], JP[IDX['toes_R']][1])
     off = np.array([3.0, 0.0, 5.0])
     def T(v): return ((v + off) * S).astype(np.float32)
-    joints = np.vstack([JP, grip[None, :], np.array([[-3.0, 42.0, -11.0]])])
-    jnames = NAMES + ['prop_R', 'cape']
-    jparent = [b[1] for b in BONES] + ['hand_R', 'upperChest']
+    cpos, ctails = cape_joint_pos()
+    joints = np.vstack([JP, grip[None, :], np.array([[CAPE_CX, CAPE_TOP - 1.0, CAPE_CZ]])] + [cpos[n][None, :] for n in CAPE_BONES])
+    jnames = NAMES + ['prop_R', 'cape'] + CAPE_BONES
+    jparent = [b[1] for b in BONES] + ['hand_R', 'upperChest'] + [('cape' if n.endswith('0') else n[:-1] + str(int(n[-1]) - 1)) for n in CAPE_BONES]
     jm = T(joints)
-    tails = {**TAILS, 'prop_R': staff_top, 'cape': (-3.0, 10.0, -16.0)}
+    tails = {**TAILS, 'prop_R': staff_top, 'cape': (CAPE_CX, CAPE_TOP - 9.0, CAPE_CZ - 10.0), **ctails}
 
     binbuf = bytearray(); bvs = []; accs = []
     def push(data, target=None, comp=5126, typ='VEC3', minmax=False):

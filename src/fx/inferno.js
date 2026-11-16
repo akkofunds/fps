@@ -9,6 +9,9 @@ import { Fx } from './fire.js';
 const R = Math.random;
 const WHITE = [3.4, 2.3, 1.0, 1], HOT = [3.0, 1.45, 0.42, 1], FLAME = [2.6, 1.0, 0.24, 0.95], DEEP = [1.8, 0.35, 0.06, 0.6], DARK = [0.5, 0.08, 0.02, 0];
 const SMOKE0 = [0.2, 0.18, 0.17, 0.45], SMOKE1 = [0.38, 0.36, 0.34, 0];
+// afterburner air: cool white streaks (additive) and soft gray puffs
+const AIR0 = [1.5, 1.55, 1.7, 0.75], AIR2 = [0.9, 0.92, 1.0, 0.6], AIR1 = [0.35, 0.36, 0.4, 0];
+const PUFF0 = [0.82, 0.83, 0.86, 0.38], PUFF1 = [0.9, 0.9, 0.92, 0];
 const tv = new THREE.Vector3();
 
 function beamMaterial(inner) {
@@ -93,34 +96,34 @@ Object.assign(Fx.prototype, {
     } });
   },
 
-  // double jump: a burst under the feet (fire for Pyro, crimson-gold arcane for Meteora)
-  doubleJumpFx(p, mage) {
-    const arc = mage === 'meteora';
-    const A = arc ? [3.0, 0.5, 0.35, 1] : HOT, B = arc ? [3.2, 1.9, 0.6, 1] : WHITE;
-    for (let i = 0; i < 30; i++) {
-      const a = (i / 30) * 6.283, sp = 3.5 + R() * 1.5;
-      this.fire.emit(p.x + Math.cos(a) * 0.3, p.y + 0.05, p.z + Math.sin(a) * 0.3, Math.cos(a) * sp, -1.5 - R(), Math.sin(a) * sp, 0.25 + R() * 0.15, 0.32, 0.05, R() < 0.3 ? B : A, DARK, 4, 0);
+  // Movement afterburners are AIR, not fire: white/gray streaks and puffs for every character.
+  // double jump: a pressure ring of air kicked off under the feet
+  doubleJumpFx(p) {
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * 6.283, sp = 3.2 + R() * 1.6;
+      this.fire.emit(p.x + Math.cos(a) * 0.3, p.y + 0.05, p.z + Math.sin(a) * 0.3, Math.cos(a) * sp, -1.2 - R(), Math.sin(a) * sp, 0.22 + R() * 0.14, 0.3, 0.05, AIR0, AIR1, 4, 0);
     }
-    this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.1, 1.6, 2.2, B, A, 0, 0);
-    this.ring(p, 1.8, 0.28, arc ? new THREE.Color(3, 0.6, 0.4) : new THREE.Color(4, 1.8, 0.5));
-    this.light(p, 10, 6, 0.15, arc ? 0xff3040 : 0xff8a30);
+    for (let i = 0; i < 10; i++) {
+      const a = R() * 6.283;
+      this.smoke.emit(p.x + Math.cos(a) * 0.4, p.y, p.z + Math.sin(a) * 0.4, Math.cos(a) * 2.2, -0.6, Math.sin(a) * 2.2, 0.5 + R() * 0.3, 0.35, 1.3, PUFF0, PUFF1, 2.5, 0);
+    }
+    this.ring(p, 1.7, 0.26, new THREE.Color(1.6, 1.65, 1.8));
   },
-  // dash: an afterimage streak of flame/arcane wisps along the path (per frame while dashing)
-  dashStreak(p, v, mage) {
-    const arc = mage === 'meteora';
-    for (let i = 0; i < 5; i++) {
-      const h = 0.15 + R() * 1.5;
-      this.fire.emit(p.x + (R() - 0.5) * 0.35, p.y + h, p.z + (R() - 0.5) * 0.35, -v.x * 0.12 + (R() - 0.5) * 0.4, 0.3 + R() * 0.5, -v.z * 0.12 + (R() - 0.5) * 0.4, 0.22 + R() * 0.18, 0.42 - h * 0.12, 0.04, arc ? (R() < 0.4 ? [3.2, 1.9, 0.6, 1] : [3.0, 0.5, 0.35, 1]) : (R() < 0.35 ? WHITE : FLAME), DARK, 3, 0.5);
+  // dash: pale wind streaks and afterburner puffs along the path (per frame while dashing)
+  dashStreak(p, v) {
+    for (let i = 0; i < 4; i++) {
+      const h = 0.2 + R() * 1.4;
+      this.fire.emit(p.x + (R() - 0.5) * 0.35, p.y + h, p.z + (R() - 0.5) * 0.35, -v.x * 0.25 + (R() - 0.5) * 0.3, 0.1 + R() * 0.2, -v.z * 0.25 + (R() - 0.5) * 0.3, 0.2 + R() * 0.15, 0.3 - h * 0.06, 0.03, R() < 0.5 ? AIR0 : AIR2, AIR1, 3, 0);
     }
+    if (R() < 0.7) this.smoke.emit(p.x + (R() - 0.5) * 0.3, p.y + 0.15 + R() * 0.8, p.z + (R() - 0.5) * 0.3, -v.x * 0.15, 0.3, -v.z * 0.15, 0.45 + R() * 0.25, 0.45, 1.2, PUFF0, PUFF1, 2, 0.1);
   },
-  dashBurst(p, dir, mage) {
-    const arc = mage === 'meteora';
-    for (let i = 0; i < 26; i++) {
-      const a = Math.atan2(-dir.z, -dir.x) + (R() - 0.5) * 1.8, sp = 3 + R() * 6;
-      this.fire.emit(p.x, p.y + 0.3 + R() * 1.2, p.z, Math.cos(a) * sp, R() * 2, Math.sin(a) * sp, 0.2 + R() * 0.2, 0.35, 0.04, arc ? [3.0, 0.5, 0.35, 1] : HOT, DARK, 4, 0);
+  dashBurst(p, dir) {
+    for (let i = 0; i < 22; i++) {
+      const a = Math.atan2(-dir.z, -dir.x) + (R() - 0.5) * 1.6, sp = 3 + R() * 6;
+      this.fire.emit(p.x, p.y + 0.3 + R() * 1.2, p.z, Math.cos(a) * sp, R() * 1.5, Math.sin(a) * sp, 0.18 + R() * 0.16, 0.3, 0.03, R() < 0.4 ? AIR0 : AIR2, AIR1, 4, 0);
     }
-    this.ring(p, 1.6, 0.22, arc ? new THREE.Color(3, 0.6, 0.4) : new THREE.Color(4, 1.8, 0.5));
-    for (let i = 0; i < 6; i++) this.smoke.emit(p.x, p.y + 0.1, p.z, (R() - 0.5) * 2 - dir.x * 2, 0.4, (R() - 0.5) * 2 - dir.z * 2, 0.6, 0.3, 1.0, [0.55, 0.5, 0.42, 0.3], [0.6, 0.56, 0.48, 0], 3, 0.2);
+    this.ring(p, 1.6, 0.22, new THREE.Color(1.5, 1.55, 1.7));
+    for (let i = 0; i < 10; i++) this.smoke.emit(p.x, p.y + 0.1 + R() * 0.6, p.z, (R() - 0.5) * 2 - dir.x * 2.5, 0.4, (R() - 0.5) * 2 - dir.z * 2.5, 0.6 + R() * 0.3, 0.4, 1.4, PUFF0, PUFF1, 3, 0.2);
   },
 
   // ---------------------------------------------------------------- Rapid Ignition

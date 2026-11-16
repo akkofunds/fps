@@ -2,9 +2,10 @@ import { BAL, ADMIN } from './balance.js';
 import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ, hitCharacter } from './projectiles.js';
+import { B } from '../character/rig.js';
 
-// SHOTO — half-cold, half-hot. Ice from the right side, fire from the left.
-//   LMB Frost & Flame · E Flashfreeze Heatwave · C Hellfire Lance · V Cryo-Jet Blitz
+// SHOTO — half-cold, half-hot. Ice from his stomping foot, fire from his fists.
+//   LMB Flame Fists · E Flashfreeze Heatwave · C Hellfire Lance · V Cryo-Jet Blitz
 //   X Calamity: Absolute Zero-Burn
 // (internal id stays 'pyro' so saved settings and older lobbies keep working)
 export const SHOTO = {
@@ -15,9 +16,9 @@ export const SHOTO = {
   color: '#7fd4ff',
   bio: 'Ice from his right hand, fire from his left. Shoto locks enemies in place with jagged ice, then hits them with heat so sudden the frozen air explodes.',
   abilities: [
-    { key: 'LMB', id: 'bolt', name: 'Frost & Flame', desc: 'Alternate ice shards (right hand, briefly slows) and fire bolts (left hand). 16–18 damage, more on headshots.' },
+    { key: 'LMB', id: 'bolt', name: 'Flame Fists', desc: 'Left-right jabs that each hurl a fire bolt off the fist. 18 damage, more on headshots.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land. Press jump again in the air to double jump.' },
-    { key: 'E', id: 'freeze', name: 'Flashfreeze Heatwave', cd: 10, desc: 'A surge of jagged ice races to the target and freezes everyone there in place. A moment later a massive wave of flame follows: frozen enemies shatter in a pressure explosion for heavy bonus damage.' },
+    { key: 'E', id: 'freeze', name: 'Flashfreeze Heatwave', cd: 10, desc: 'Stomp: jagged ice erupts from your foot and races along the ground to the target, freezing everyone there in place. Then a fire punch rolls a massive wave of flame out over it: frozen enemies shatter in a pressure explosion for heavy bonus damage.' },
     { key: 'C', id: 'lance', name: 'Hellfire Lance', cd: 8, desc: 'Compress white-hot flame into a narrow beam from your fingertip: a long-range sniper shot to exactly where you aim (68 damage, 98 on headshots). Scorches the ground beneath it.' },
     { key: 'V', id: 'blitz', name: 'Cryo-Jet Blitz', cd: 11, desc: 'Freeze the ground and skate forward at blinding speed, fire jets roaring behind you, then finish with a dual-element uppercut that launches, burns and slows.' },
     { key: 'X', id: 'zero', name: 'Calamity: Absolute Zero-Burn', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Flood everything around you with a massive glacier that traps every enemy, superheat the air above them, then slam your hands together to set off a catastrophic thermobaric blast.' },
@@ -92,43 +93,54 @@ export class ShotoKit {
   }
   _flatAim(out) { const y = this.m.cam.yaw; return out.set(Math.sin(y), 0, Math.cos(y)); }
 
-  // ---------------------------------------------------------------- LMB: ice shard (right) / fire bolt (left)
+  // ---------------------------------------------------------------- LMB: fire punches (left/right jabs)
   bolt() {
     if (!this._ready('bolt')) return;
     const m = this.m;
     this.cd.bolt = cdOf(COOLDOWN.bolt);
-    const ice = this.side > 0;
+    const hand = this.side > 0 ? 'R' : 'L';
     this.side = -this.side;
-    const hand = ice ? 'R' : 'L';
-    m.playAnim('cast', { anim: ice ? 'jabR' : 'jabL' });
-    this.pending.push({ t: 0.05, fn: () => {
+    m.playAnim('cast', { anim: hand === 'R' ? 'jabR' : 'jabL' });
+    this.pending.push({ t: 0.045, fn: () => {
       const o = m.view.palmWorld(hand, tmp);
       const dir = this._aimDir(o, tmp2);
-      const kind = ice ? 'shard' : 'bolt';
-      const v = dir.multiplyScalar(PROJ[kind].speed);
-      m.castAbility({ ab: kind, o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
-      m.sound(ice ? 'iceShot' : 'bolt', o, 0.5, 30);
+      m.fx.castBurst(o, dir, 0.7);
+      const v = dir.multiplyScalar(PROJ.bolt.speed);
+      m.castAbility({ ab: 'bolt', o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
+      m.sound('bolt', o, 0.5, 30);
       m.cam.kick += 0.006;
     } });
   }
 
   // ---------------------------------------------------------------- E: Flashfreeze Heatwave
+  // knee up → STOMP: ice erupts from his right foot and races to the target, freezing it; then a
+  // left fire punch rolls the heatwave out over the frozen ground
   freeze() {
     if (!this._ready('freeze')) return;
     const m = this.m, me = m.local.pos;
-    this.cd.freeze = cdOf(COOLDOWN.freeze); this.busy = 1.0;
-    m.body.slow = 0.5; this.pending.push({ t: 1.0, fn: () => { m.body.slow = 1; } });
+    this.cd.freeze = cdOf(COOLDOWN.freeze); this.busy = 1.2;
+    m.body.slow = 0.15; this.pending.push({ t: 1.15, fn: () => { m.body.slow = 1; } });
     // target: crosshair on the ground, within range
     tmp.copy(m.aimPoint); tmp2.set(tmp.x - me.x, 0, tmp.z - me.z);
     let d = tmp2.length();
-    if (d < 0.5) { this._flatAim(tmp2); d = 1; tmp2.multiplyScalar(1); } else tmp2.divideScalar(d);
+    if (d < 0.5) { this._flatAim(tmp2); d = 1; } else tmp2.divideScalar(d);
     d = Math.max(4, Math.min(FREEZE.range, d));
     const cx = me.x + tmp2.x * d, cz = me.z + tmp2.z * d;
     const cy = m.world.groundAt(cx, cz, me.y + 4);
     const dir = [tmp2.x, tmp2.z];
-    m.playAnim('cast', { anim: 'freezeCast' });
-    this.pending.push({ t: 0.18, fn: () => m.castAbility({ ab: 'freeze', o: [me.x, me.y, me.z], c: [cx, cy, cz] }) });
-    this.pending.push({ t: 0.18 + FREEZE.delay, fn: () => { const p = m.local.pos; m.castAbility({ ab: 'heatwave', o: [p.x, p.y, p.z], d: dir }); m.fx.shake(0.3); } });
+    m.playAnim('freeze');
+    this.pending.push({ t: 0.2, fn: () => {
+      const f = m.view.rig.bones[B.footR].getWorldPosition(tmp3);
+      f.y = m.world.groundAt(f.x, f.z, f.y + 1);
+      m.castAbility({ ab: 'freeze', o: [f.x, f.y, f.z], c: [cx, cy, cz] });
+      m.fx.shake(0.25);
+    } });
+    this.pending.push({ t: 0.88, fn: () => {
+      const p = m.local.pos, fist = m.view.palmWorld('L', tmp3);
+      m.fx.castBurst(fist, tmp.set(dir[0], 0, dir[1]), 1.6);
+      m.castAbility({ ab: 'heatwave', o: [p.x, p.y, p.z], d: dir });
+      m.fx.shake(0.3);
+    } });
   }
 
   // ---------------------------------------------------------------- C: Hellfire Lance (hitscan to the crosshair)

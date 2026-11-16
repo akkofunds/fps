@@ -25,6 +25,8 @@ import { Rules } from './rules.js';
 //   host → all      S (all states) · ev (relayed) · hp · kill · spawn · kb · board · phase · end · chat
 // The host runs Rules (HP, kills, respawns, burning, scoring) and also plays as a normal client.
 
+// small deterministic RNG (mulberry32) so every client derives the same random layout
+function seeded(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), rayHit = { t: 0 };
 const wrapPi = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
@@ -134,7 +136,7 @@ export class Match {
     if (!g) {
       if (this.ghosts.length >= 10) return;
       const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
-      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.85, 0.88, 0.95), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
       for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
       inst.setLod(true);
       this.scene.add(inst.root);
@@ -148,7 +150,7 @@ export class Match {
     }
     dst.root.position.copy(src.root.position); dst.root.rotation.copy(src.root.rotation);
     dst.root.visible = true;
-    g.t = 0.32; g.mat.opacity = 0.55;
+    g.t = 0.3; g.mat.opacity = 0.4;
   }
 
   _updateGhosts(dt) {
@@ -156,7 +158,7 @@ export class Match {
     for (const g of this.ghosts) {
       if (g.t <= 0) continue;
       g.t -= dt;
-      g.mat.opacity = Math.max(0, g.t / 0.32) * 0.55;
+      g.mat.opacity = Math.max(0, g.t / 0.3) * 0.4;
       if (g.t <= 0) g.inst.root.visible = false;
     }
   }
@@ -232,7 +234,7 @@ export class Match {
     this.app.hud.hitMarker(extra.head, dmg);
     this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
     Audio.play(extra.head ? 'head' : 'hit', 0.6);
-    if (ab !== 'nova' && ab !== 'meteor' && ab !== 'adolla' && ab !== 'adollaPath') this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
+    if (!/^(nova|meteor|adolla|zero)/.test(ab)) this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
   }
 
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
@@ -270,7 +272,7 @@ export class Match {
       case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
-      case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
+      case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); this.fx.tipSeal(tmpV.fromArray(d.o), tmpV2.fromArray(d.d), 0.75, 0.4); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
       // ---- Pyro: Fire Force kit
       case 'kick': {
         const o = new THREE.Vector3().fromArray(d.o);
@@ -418,6 +420,9 @@ export class Match {
         const pts = [];
         for (let i = 0; i + 2 < raw.length; i += 3) pts.push(new THREE.Vector3(+raw[i], +raw[i + 1], +raw[i + 2]));
         this.sound('starCall', c, 0.9, 60);
+        // the call goes up through a seal at the staff tip, and a big seal opens in the sky over the target
+        if (e.view.root.visible) { const tip = e.view.staffTip(new THREE.Vector3()); this.fx.tipSeal(tip, tmpV2.set(c.x - tip.x, 40, c.z - tip.z), 1.0, 0.7, 2); }
+        this.fx.tipSeal(new THREE.Vector3(c.x, c.y + 24, c.z), tmpV2.set(0, -1, 0), STARFALL.spread * 1.15, 2.2, 2);
         this.fx.starfallBarrage(pts, { first: STARFALL.first, gap: STARFALL.gap, radius: STARFALL.radius, onImpact: (p) => {
           this.sound('starHit', p, 0.8, 45);
           if (local) this.areaDamage(p, STARFALL.radius, STARFALL.dmg, STARFALL.minDmg, 'starfall', { kb: 4, up: 4 });
@@ -503,6 +508,23 @@ export class Match {
           },
           onImpact: () => {
             if (local) this.areaDamage(c, NOVA.radius, NOVA.maxDmg, NOVA.minDmg, 'nova', { kb: 16, up: 12, noCover: true, burn: [8, 3] });
+            // …and it keeps going: aftershocks reach past the kill radius, the crater burns, and
+            // burning fragments of the sky rain down across the area (same spots on every client)
+            const rnd = seeded(Math.floor(c.x * 131 + c.z * 977 + c.y * 31));
+            const frags = [];
+            for (let i = 0; i < NOVA.frags; i++) {
+              const a = rnd() * Math.PI * 2, r = NOVA.radius * (0.35 + rnd() * 1.25);
+              frags.push([c.x + Math.cos(a) * r, c.z + Math.sin(a) * r, 0.5 + i * (4.2 / NOVA.frags) + rnd() * 0.3]);
+            }
+            this.fx.novaAftermath(c, NOVA.radius, frags, (p) => {
+              this.sound('explode', p, 0.9, 60);
+              if (local) this.areaDamage(p, 3.2, NOVA.fragDmg, 25, 'novaFrag', { kb: 8, up: 7, burn: [5, 2] });
+            });
+            if (local) {
+              setTimeout(() => { if (this.local) this.areaDamage(c, NOVA.radius * 1.8, NOVA.shockDmg, 30, 'novaShock', { kb: 12, up: 6, noCover: true }); }, 900);
+              this.areas.push({ kind: 'crater', c: c.clone(), r: NOVA.radius * 0.5, t: 0, life: 7, tick: 0.4, owner: e.n, local, dmg: 9, ab: 'novaBurn', burn: [6, 2] });
+            }
+            setTimeout(() => Audio.play('rumble', 0.8), 1500);
             // the shockwave shoves the local player even outside the kill radius
             const me = this.local;
             if (me.alive && e !== me) {
@@ -512,6 +534,12 @@ export class Match {
           },
         });
         if (this.cine && this.cine.caster === e) this.cine.novaFx = novaFx;
+        // "EXPLOSION!": as she levels the staff, three seals stack open at its tip, aimed at the target
+        setTimeout(() => {
+          if (!e.view.root.visible) return;
+          const tip = e.view.staffTip(new THREE.Vector3());
+          this.fx.tipSeal(tip, new THREE.Vector3().subVectors(c, tip), 1.25, 1.1, 3);
+        }, 6250);
         break;
       }
       case 'leap': {
@@ -705,6 +733,17 @@ export class Match {
               if (distToSegXZ(e.pos, ar.a, ar.b) < ar.w && e.pos.y < Math.max(ar.a.y, ar.b.y) + 2.2 && e.pos.y > Math.min(ar.a.y, ar.b.y) - 1.5) this.reportHit(e, ar.dmg, ar.ab, { burn: ar.burn, at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
               void gy;
             }
+          }
+        }
+        if (ar.t >= ar.life) this.areas.splice(i, 1);
+      } else if (ar.kind === 'crater') {
+        // the Nova's crater keeps burning anyone who walks in
+        ar.tick -= dt;
+        if (ar.local && ar.tick <= 0) {
+          ar.tick = 0.5;
+          for (const e of this.ents.values()) {
+            if (e === this.local || !e.alive) continue;
+            if (Math.hypot(e.pos.x - ar.c.x, e.pos.z - ar.c.z) < ar.r && Math.abs(e.pos.y - ar.c.y) < 4) this.reportHit(e, ar.dmg, ar.ab, { burn: ar.burn, at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
           }
         }
         if (ar.t >= ar.life) this.areas.splice(i, 1);
@@ -967,6 +1006,8 @@ export class Match {
       if (Q.outlines) v.setLod(d2 > 900); // beyond 30 m use the low-poly meshes
       if (e.animTick === 0) {
         v.anim.update(e.animAcc, { pos: e.pos, yaw: e.yaw, pitch: e.pitch, vel: e.vel, grounded: e.grounded });
+        v.root.rotation.y = e.yaw + v.anim.yawOffset;
+        v.stepCape(e.animAcc);
         e.animAcc = 0;
       }
       v.root.rotation.y = e.yaw + v.anim.yawOffset;

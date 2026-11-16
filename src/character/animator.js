@@ -23,6 +23,8 @@ const lerp = (a, b, t) => a + (b - a) * t;
 const damp = (cur, target, rate, dt) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
 const wrapPi = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 const R2D = 180 / Math.PI;
+// weight of a [start, end] time window with short ramps (true / undefined = always / never)
+const windowW = (win, t) => (win === true ? 1 : !win ? 0 : Math.min(sstep(win[0] - 0.15, win[0] + 0.1, t), 1 - sstep(win[1] - 0.1, win[1] + 0.15, t)));
 
 const ACTIONS = {
   dash: { clip: C.DASH, in: 0.05, out: 0.12, turn: true },
@@ -33,16 +35,17 @@ const ACTIONS = {
   leap: { clip: C.LEAP, in: 0.04, out: 0.25, airBlendOut: true },
   death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true },
   plant: { clip: C.M_PLANT, in: 0.06, out: 0.18 },
-  nova: { clip: C.M_NOVA, in: 0.1, out: 0.2 },
+  nova: { clip: C.M_NOVA, in: 0.1, out: 0.2, upright: [0.3, 6.1], twoHand: [0.25, 99] },
   exhausted: { clip: C.M_EXHAUSTED, in: 0.05, out: 0.25, aimOff: true },
   respawn: { clip: C.RESPAWN, in: 0.02, out: 0.2, aimOff: true, freeProp: true },
   kick: { clip: C.KICK_CLIP, in: 0.03, out: 0.14, aimOff: true },
   stomp: { clip: C.STOMP_CLIP, in: 0.04, out: 0.16 },
   adolla: { clip: C.ADOLLA_CLIP, in: 0.06, out: 0.2 },
-  ray: { clip: C.M_RAY, in: 0.06, out: 0.2 },
+  ray: { clip: C.M_RAY, in: 0.06, out: 0.2, twoHand: [0.12, 1.9] },
   skate: { clip: C.SKATE_CLIP, in: 0.05, out: 0.1, aimOff: true },
   uppercut: { clip: C.UPPERCUT_CLIP, in: 0.04, out: 0.16 },
   zeroburn: { clip: C.ZEROBURN_CLIP, in: 0.06, out: 0.2 },
+  freeze: { clip: C.FREEZE_STOMP, in: 0.05, out: 0.2 },
   doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true },
 };
 const CASTS = {
@@ -51,7 +54,7 @@ const CASTS = {
   orb: { clip: C.ORB, in: 0.05, out: 0.16 },
   ult: { clip: C.ULT, in: 0.08, out: 0.2 },
   mBolt: { clip: C.M_BOLT, in: 0.04, out: 0.16 },
-  mRaise: { clip: C.M_RAISE, in: 0.06, out: 0.2 },
+  mRaise: { clip: C.M_RAISE, in: 0.06, out: 0.2, twoHand: [0.08, 0.62] },
   mBlink: { clip: C.M_BLINK, in: 0.04, out: 0.15 },
   mBolt2: { clip: C.M_BOLT2, in: 0.04, out: 0.16 },
   jabR: { clip: C.JAB_R, in: 0.02, out: 0.08 },
@@ -233,7 +236,12 @@ export class Animator {
     }
     if (this.castA && this.castA.def.fidget && !still) { this.castA.t = Math.max(this.castA.t, this.castA.def.clip.duration - this.castA.def.out); }
     // ---- staff: stays upright in world space unless a clip drives it
-    if (rig.hasProp) this._stabilizeStaff(out, a && !a.def.freeProp ? a.w : 0);
+    if (rig.hasProp) {
+      // actions drive the staff from their clip, except inside an `upright` window where it is
+      // held perfectly vertical in world space (planted / raised for a long incantation)
+      const up = a ? windowW(a.def.upright, a.t) : 0;
+      this._stabilizeStaff(out, a && !a.def.freeProp ? a.w * (1 - up) : 0);
+    }
     // ---- 4. upper-body cast
     const ca = this.castA;
     if (ca && !this.dead) {
@@ -248,7 +256,6 @@ export class Animator {
         blend(out, out, this.cast, ca.w * (1 - rollW), UPPER_MASK);
       }
     }
-    if (rig.hasCape) this._cape(dt, out, s);
     if (this.lobby) {
       // showcase pose, yielding to whatever the character is playing (fidgets, admin viewer)
       const busyW = Math.max(this.castA ? this.castA.w : 0, this.action ? this.action.w : 0);
@@ -286,6 +293,11 @@ export class Animator {
     const br = Math.sin(this.t * 1.9) * (1 - Math.min(1, speed / 3)) * aimW;
     addE(out, B.chest, br * 1.2, 0, 0); addE(out, B.upperChest, br * 0.8, 0, 0);
     addE(out, B.shoulderL, 0, 0, br * 1.2); addE(out, B.shoulderR, 0, 0, -br * 1.2);
+    // ---- 6. two-handed staff grip: the left hand takes hold of the shaft below the right
+    if (rig.hasProp && !this.dead) {
+      const gw = Math.max(a && a.def.twoHand ? a.w * windowW(a.def.twoHand, a.t) : 0, ca && ca.def.twoHand ? ca.w * windowW(ca.def.twoHand, ca.t) : 0);
+      if (gw > 0.001) this._gripLeft(out, gw);
+    }
     rig.apply(out);
   }
 
@@ -506,6 +518,69 @@ export class Animator {
     addE(P, B.upperLegL, -16 * apex, 0, 0); addE(P, B.lowerLegL, 22 * apex, 0, 0); addE(P, B.upperLegR, -14 * apex, 0, 0); addE(P, B.lowerLegR, 26 * apex, 0, 0); addE(P, B.spine, 6 * apex, 0, 0);
   }
 
+  // canonical forward kinematics of the whole pose (root space): rotations + joint positions
+  _fk(P) {
+    const rig = this.rig, n = rig.bones.length;
+    const R = this._fkR || (this._fkR = Array.from({ length: n }, () => new THREE.Quaternion()));
+    const X = this._fkX || (this._fkX = Array.from({ length: n }, () => new THREE.Vector3()));
+    const q = this._fkq || (this._fkq = new THREE.Quaternion());
+    for (let i = 0; i < n; i++) {
+      const pi = rig.parent[i];
+      getQ(P, i, q);
+      if (pi < 0) { R[i].copy(q); X[i].copy(rig.canon[i]); X[i].x += P.hip[0]; X[i].y += P.hip[1]; X[i].z += P.hip[2]; }
+      else { R[i].copy(R[pi]).multiply(q); X[i].copy(rig.canon[i]).sub(rig.canon[pi]).applyQuaternion(R[pi]).add(X[pi]); }
+    }
+    return { R, X };
+  }
+
+  // left-arm two-bone IK onto the staff shaft, a hand-width below the right hand
+  _gripLeft(P, w) {
+    const rig = this.rig;
+    const { R, X } = this._fk(P);
+    const V = this._gv || (this._gv = Array.from({ length: 8 }, () => new THREE.Vector3()));
+    const Q = this._gq || (this._gq = Array.from({ length: 6 }, () => new THREE.Quaternion()));
+    const [axis, tgt, sh, d, n, pole, c1, c2] = V;
+    axis.set(0, 1, 0.12).normalize().applyQuaternion(R[B.propR]);
+    const grip = X[B.propR];
+    const toBody = sh.copy(X[B.upperArmL]).sub(grip);
+    tgt.copy(grip).addScaledVector(axis, -0.17);
+    // wrist sits a palm's width off the shaft, toward her
+    toBody.addScaledVector(axis, -toBody.dot(axis)).normalize();
+    tgt.addScaledVector(toBody, 0.075);
+    const S = X[B.upperArmL];
+    c1.copy(rig.canon[B.foreArmL]).sub(rig.canon[B.upperArmL]);
+    c2.copy(rig.canon[B.handL]).sub(rig.canon[B.foreArmL]);
+    const l1 = c1.length(), l2 = c2.length();
+    c1.normalize(); c2.normalize();
+    const Rp = R[B.shoulderL], Rpi = Q[0].copy(Rp).invert();
+    d.copy(tgt).sub(S).applyQuaternion(Rpi);
+    let dist = d.length();
+    const maxD = (l1 + l2) * 0.995;
+    if (dist > maxD) { d.multiplyScalar(maxD / dist); dist = maxD; }
+    if (dist < 0.05) return;
+    const vn = d.divideScalar(dist);
+    const a1 = Math.acos(clamp((l1 * l1 + dist * dist - l2 * l2) / (2 * l1 * dist), -1, 1));
+    // elbow hangs down and out to her left, a little back
+    pole.set(0.55, -1, -0.25).applyQuaternion(Rpi);
+    n.copy(pole).addScaledVector(vn, -pole.dot(vn));
+    if (n.lengthSq() < 1e-6) n.set(0, -1, 0); n.normalize();
+    const upper = pole.copy(vn).multiplyScalar(Math.cos(a1)).addScaledVector(n, Math.sin(a1));
+    const q1 = Q[1].setFromUnitVectors(c1, upper);
+    // forearm direction in world → local of (shoulder * upperArm)
+    const elbow = sh.copy(upper).multiplyScalar(l1).applyQuaternion(Rp).add(S);
+    const fw = d.copy(tgt).sub(elbow).normalize();
+    const R1 = Q[2].copy(Rp).multiply(q1), R1i = Q[3].copy(R1).invert();
+    const q2 = Q[4].setFromUnitVectors(c2, fw.clone().applyQuaternion(R1i));
+    // hand: fingers wrap toward the shaft
+    const R2i = Q[5].copy(R1).multiply(q2).invert();
+    const hd = n.copy(grip).addScaledVector(axis, -0.17).sub(tgt).normalize().applyQuaternion(R2i);
+    const q3 = new THREE.Quaternion().setFromUnitVectors(c2, hd);
+    const cur = this._gc || (this._gc = new THREE.Quaternion());
+    for (const [bi, qq] of [[B.upperArmL, q1], [B.foreArmL, q2], [B.handL, q3]]) {
+      getQ(P, bi, cur); cur.slerp(qq, w); putQ(P, bi, cur);
+    }
+  }
+
   _stabilizeStaff(out, actionW) {
     // canonical world rotation of the right hand = product down the chain
     const chain = [B.hips, B.spine, B.chest, B.upperChest, B.shoulderR, B.upperArmR, B.foreArmR, B.handR];
@@ -528,8 +603,9 @@ export class Animator {
     const fwd = Math.max(0, this.vz);
     const wind = this.windBoost || 0; // cutscene gale
     const target = Math.min(70, fwd * 5.5 + Math.max(0, -this.vy) * 2.2 + (this.airW > 0.5 ? 8 : 0) + wind * 42);
-    this.capeV = (this.capeV || 0) + ((target - (this.capeA || 0)) * 60 - this.capeV * 9) * dt;
-    this.capeA = (this.capeA || 0) + this.capeV * dt;
+    const v0 = Number.isFinite(this.capeV) ? this.capeV : 0, a0 = Number.isFinite(this.capeA) ? this.capeA : 0;
+    this.capeV = v0 + ((target - a0) * 60 - v0 * 9) * Math.min(dt, 0.05);
+    this.capeA = Math.max(-25, Math.min(80, a0 + this.capeV * Math.min(dt, 0.05)));
     const flutter = (Math.sin(this.t * 7.3) * (2 + fwd * 0.6) + Math.sin(this.t * 2.1) * 2) * (1 + wind * 3) + Math.sin(this.t * 13.7) * wind * 4;
     addE(out, B.cape, this.capeA + flutter, Math.sin(this.t * 1.7) * 3, -this.vx * 1.5);
   }

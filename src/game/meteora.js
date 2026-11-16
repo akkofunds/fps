@@ -24,7 +24,7 @@ export const METEORA = {
 };
 
 // the cutscene timeline (seconds after the cast): circles stack, final word, impact, wide shot
-export const NOVA = { radius: 24, channel: 7.2, cine: 10.6, maxDmg: 500, minDmg: 220, range: 85, exhausted: 3.3 };
+export const NOVA = { radius: 24, channel: 7.2, cine: 10.6, maxDmg: 500, minDmg: 220, range: 85, exhausted: 3.3, frags: 14, fragDmg: 60, shockDmg: 75 };
 export const RAY = { channel: 1.3, range: 90, width: 1.3, dmg: 85 };
 export const STARFALL = { count: 5, spread: 4.2, radius: 2.5, dmg: 26, minDmg: 10, first: 0.55, gap: 0.16 };
 const COOLDOWN = { spark: 0.45, starfall: 8, sigil: 11, ray: 10, blink: 9 };

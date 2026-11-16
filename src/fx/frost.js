@@ -44,6 +44,13 @@ Object.assign(Fx.prototype, {
     const g = new THREE.Group(); this.scene.add(g);
     const dx = c.x - o.x, dz = c.z - o.z, L = Math.hypot(dx, dz) || 1, ux = dx / L, uz = dz / L;
     const spikes = [];
+    // the eruption at his foot: a cluster of shards bursting out where the stomp lands
+    for (let i = 0; i < 7; i++) {
+      const a = Math.atan2(uz, ux) + (R() - 0.5) * 2.6, rr = 0.25 + R() * 0.7;
+      const x = o.x + Math.cos(a) * rr, z = o.z + Math.sin(a) * rr, y = this.world.groundAt(x, z, o.y + 2) - 0.08;
+      spikes.push({ m: spike(g, x, y, z, 0.5 + R() * 0.8, 0.18 + R() * 0.2, 0.35 + R() * 0.45, a), at: R() * 0.04 });
+    }
+    for (let i = 0; i < 14; i++) { const a = R() * 6.283; this.fire.emit(o.x, o.y + 0.1, o.z, Math.cos(a) * 3, 1 + R() * 2.5, Math.sin(a) * 3, 0.35, 0.3, 0.05, ICE2, CLEAR, 2, -6); }
     const n = Math.max(3, Math.floor(L / 0.9));
     for (let i = 1; i <= n; i++) {
       const t = i / n, x = o.x + dx * t + (R() - 0.5) * 0.8, z = o.z + dz * t + (R() - 0.5) * 0.8;

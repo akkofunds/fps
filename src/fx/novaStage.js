@@ -171,6 +171,61 @@ Object.assign(Fx.prototype, {
     } });
   },
 
+  // After the Nova: a towering mushroom cloud, a glowing crater, and the crust of the sky falling
+  // back down as burning fragments (positions from `frags`, identical on every client)
+  novaAftermath(c, radius, frags, onFrag) {
+    const w = this.world;
+    // crater: scorched, glowing ground that keeps burning
+    this.scorch(c.x, c.z, radius * 0.75, 30);
+    this.fireField(c, radius * 0.5, 7);
+    const glow = this.light(new THREE.Vector3(c.x, c.y + 4, c.z), 30, radius * 2.2, 6, 0xff5a1a);
+    void glow;
+    // mushroom cloud: a boiling stem of fire and smoke, then a rolling cap that spreads out
+    let t = 0;
+    const H = Math.min(60, radius * 2.2);
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      const k = Math.min(1, t / 5.5);
+      const top = H * (1 - (1 - Math.min(1, t / 2.4)) ** 3);
+      const stemN = Math.round(34 * (1 - k * 0.7));
+      for (let i = 0; i < stemN; i++) {
+        const y = c.y + R() * top, rr = (3.2 + (y - c.y) * 0.1) * (0.35 + R() * 0.65), a = R() * 6.283;
+        const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
+        if (R() < 0.55 - k * 0.4) this.fire.emit(x, y, z, Math.cos(a) * 1.5, 6 + R() * 6, Math.sin(a) * 1.5, 0.7 + R() * 0.6, 3 + R() * 3, 1.2, [3.0, 1.2, 0.3, 1], [0.8, 0.12, 0.04, 0], 1.2, 0.5);
+        this.smoke.emit(x, y, z, Math.cos(a) * 1.2, 4 + R() * 4, Math.sin(a) * 1.2, 2.4 + R() * 1.6, 3 + R() * 2.5, 7 + R() * 5, [0.28, 0.16, 0.12, 0.7], [0.32, 0.27, 0.25, 0], 1.0, 0.2);
+      }
+      // the cap: a torus of fire-lit smoke rolling outward at the top
+      if (t > 0.9) {
+        const capR = Math.min(radius * 1.0, 6 + (t - 0.9) * 7);
+        const capN = Math.round(44 * (1 - k * 0.6));
+        for (let i = 0; i < capN; i++) {
+          const a = R() * 6.283, rr = capR * (0.6 + R() * 0.5);
+          const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr, y = c.y + top + (R() - 0.3) * 6;
+          const lit = R() < 0.35 * (1 - k);
+          this.smoke.emit(x, y, z, Math.cos(a) * 3, 1 + R() * 2, Math.sin(a) * 3, 3.2 + R() * 2, 6 + R() * 4, 13 + R() * 7, lit ? [1.3, 0.5, 0.16, 0.85] : [0.3, 0.17, 0.13, 0.8], [0.4, 0.33, 0.3, 0], 1.0, 0.1);
+          if (lit && R() < 0.5) this.fire.emit(x, y, z, Math.cos(a) * 2, 1 + R(), Math.sin(a) * 2, 1 + R(), 4 + R() * 3, 2, [3.0, 1.1, 0.3, 1], [0.7, 0.1, 0.03, 0], 1.0, 0.2);
+        }
+      }
+      // embers raining from the cloud
+      for (let i = 0; i < 6 * (1 - k); i++) {
+        const a = R() * 6.283, rr = R() * radius * 1.2;
+        this.fire.emit(c.x + Math.cos(a) * rr, c.y + top * (0.6 + R() * 0.4), c.z + Math.sin(a) * rr, (R() - 0.5) * 2, -2 - R() * 3, (R() - 0.5) * 2, 3 + R() * 2, 0.25, 0.08, [3.2, 1.4, 0.3, 1], [1.2, 0.2, 0.04, 0], 0.4, -3);
+      }
+      return t < 6.5;
+    } });
+    // aftershocks
+    setTimeout(() => { this.shockwave(c, radius * 1.9, 1.6); this.shake(0.6); }, 900);
+    setTimeout(() => { this.shockwave(c, radius * 1.4, 1.3); this.shake(0.4); }, 1800);
+    // falling fragments of the sky
+    for (const f of frags) {
+      setTimeout(() => {
+        const p = new THREE.Vector3(f[0], 0, f[1]);
+        p.y = w.groundAt(p.x, p.z, c.y + 40);
+        this.meteor(p, 2.6, 0.9, () => { this.fireField(p, 2.2, 3); if (onFrag) onFrag(p); });
+      }, f[2] * 1000);
+    }
+  },
+
   // rocks and burning debris thrown into the sky
   debris(c, n = 80, speed = 30) {
     for (let i = 0; i < n; i++) {
