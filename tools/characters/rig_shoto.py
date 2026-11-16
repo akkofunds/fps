@@ -171,11 +171,29 @@ def body_weights(P, I):
     return W[inv]
 
 
-def region_weights(P):
+def arm_mask(P, I):
+    """Which vertices belong to an arm. Decided by distance ALONG THE SURFACE from clear arm
+    seeds vs clear torso seeds: the short sleeve hangs right beside the ribs, so a straight-line
+    test hands the sleeve's inner hem to the chest and it stays behind when the arm swings."""
+    inv, Pw = weld(P, I)
+    adj = graph(Pw, inv[I])
+    x, y = Pw[:, 0], Pw[:, 1]
+    arm_seed = np.where((np.abs(x) > 1.2) & (y > 4.0) & (y < 7.7))[0]
+    torso_seed = np.where((np.abs(x) < 0.55) & (y > 5.6) & (y < 7.9))[0]
+    da = dijkstra(adj, arm_seed, len(Pw))
+    dt = dijkstra(adj, torso_seed, len(Pw))
+    arm = (da < dt) & (y > 3.6) & (y < 8.3)
+    # pieces not surface-connected to either seed set fall back to the straight-line test
+    lost = ~np.isfinite(da) & ~np.isfinite(dt)
+    arm[lost] = (np.abs(x[lost]) > 1.02) & (y[lost] > 3.6) & (y[lost] < 8.25)
+    return arm[inv]
+
+
+def region_weights(P, I=None):
     """Bone-distance weights with A-pose region masks: arm bones only reach the arms of their
     side, leg bones only the legs of their side, so hands resting by the thighs never couple."""
     x, y = P[:, 0], P[:, 1]
-    arm = (np.abs(x) > 1.02) & (y > 3.6) & (y < 8.25)
+    arm = arm_mask(P, I) if I is not None else (np.abs(x) > 1.02) & (y > 3.6) & (y < 8.25)
     shoulder_zone = (np.abs(x) > 0.75) & (y > 7.3)
     D = np.stack([seg(P, JP[i], tail(nm))[0] for i, nm in enumerate(NAMES)], 1)
     for i, nm in enumerate(NAMES):
@@ -250,7 +268,8 @@ def main():
             else: hair['I'] = np.concatenate([hair['I'], I])
     parts = [body, hair]
     print('body weights (geodesic)…', len(body['P']), 'verts', flush=True)
-    Wb = region_weights(body['P'])
+    Wb = region_weights(body['P'], body['I'])
+    ARM = arm_mask(body['P'], body['I'])
     # The model carries a built-in inner ink shell (faces whose normals point INTO the body).
     # Give those vertices the weights of the nearest outer-skin vertex so both layers deform
     # identically (otherwise the black shell pokes through when limbs bend).
@@ -268,7 +287,11 @@ def main():
     print('inner-shell verts', int(inward.sum()), 'of', len(Pb))
     if inward.any() and (~inward).any():
         Wb = Wb.copy()
-        Wb[inward] = knn_transfer(Pb[inward], Pb[~inward], Wb[~inward], k=3)
+        # copy only from the same region (an arm's shell must never borrow from the ribs)
+        reg = np.where(ARM, np.sign(Pb[:, 0]), 0)
+        for r in (-1, 0, 1):
+            q, src = inward & (reg == r), ~inward & (reg == r)
+            if q.any() and src.any(): Wb[q] = knn_transfer(Pb[q], Pb[src], Wb[src], k=3)
     body['W'] = Wb
     hair['W'] = np.zeros((len(hair['P']), len(NAMES))); hair['W'][:, IDX['head']] = 1
     # inverted-hull ink outline (pushed out along the normal, winding flipped)

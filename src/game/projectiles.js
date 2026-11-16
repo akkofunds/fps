@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Simulated fire projectiles. Every client simulates every projectile for visuals; only the
 // owner's client turns collisions into damage reports (shooter-side hit detection, host validates).
 
-const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpD = new THREE.Vector3(), tmpE = new THREE.Vector3(), hitInfo = { t: 0 };
+const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), hcA = new THREE.Vector3(), hcB = new THREE.Vector3(), tmpD = new THREE.Vector3(), tmpE = new THREE.Vector3(), hitInfo = { t: 0 };
 
 // closest distance between segments p1-q1 and p2-q2; returns { d2, s } (s = param on first)
 function segSeg(p1, q1, p2, q2) {
@@ -40,11 +40,11 @@ export const PROJ = {
 // character hit test: body capsule + head sphere. returns {s, head} or null
 export function hitCharacter(e, a, b, radius) {
   const p = e.pos;
-  tmpA.set(p.x, p.y + 0.3, p.z); tmpB.set(p.x, p.y + 1.42, p.z);
-  const body = segSeg(a, b, tmpA, tmpB);
+  hcA.set(p.x, p.y + 0.3, p.z); hcB.set(p.x, p.y + 1.42, p.z);
+  const body = segSeg(a, b, hcA, hcB);
   const br = 0.3 + radius; // torso half-width: you have to actually be on them
-  tmpA.set(p.x, p.y + 1.62, p.z); tmpB.set(p.x, p.y + 1.64, p.z);
-  const head = segSeg(a, b, tmpA, tmpB);
+  hcA.set(p.x, p.y + 1.62, p.z); hcB.set(p.x, p.y + 1.64, p.z);
+  const head = segSeg(a, b, hcA, hcB);
   const hr = 0.16 + radius;
   const hb = body.d2 <= br * br, hh = head.d2 <= hr * hr;
   if (!hb && !hh) return null;
