@@ -3,15 +3,15 @@ import { DEFAULT_BALANCE, loadBalance, saveBalance, ADMIN } from '../game/balanc
 import { MAGE_LIST } from '../game/mages.js';
 import { Audio } from '../core/audio.js';
 
-import { isAdmin, myToken, maskToken, adminSession, saveSession, api, setLocalGrant } from '../core/adminAccess.js';
+import { isAdmin, isOwner, myToken, maskToken, ownerSignIn, ownerSignOut, adminList, addAdmin, removeAdmin, tokenHash } from '../core/adminAccess.js';
 
-// Admin panel, built into the normal game client and opened at /admin (or #admin), or from the
-// ADMIN badge in the lobby once you are an admin.
+// Owner panel, built into the normal game client and opened at /admin (or #admin), or from the
+// OWNER badge in the lobby once signed in.
 //
-// Sign-in: password, then the security question — both checked by the server (/api/admin), so
-// neither is in the game's JavaScript. The signed-in session is remembered on this device. Then
-// (optional) paste a player's token from their Settings to make them an admin everywhere.
-export { isAdmin };
+// The OWNER signs in with the password + dog's name (they unlock the owner key on this device;
+// remembered, so it's a one-time thing). Only the owner gets this panel. The owner can add
+// players as ADMINS by their token (Settings → Account): admins get access to Meteora, nothing else.
+export { isAdmin, isOwner };
 
 export function isAdminRoute() {
   return /\/admin\/?$/.test(location.pathname) || location.hash === '#admin' || new URLSearchParams(location.search).has('admin');
@@ -20,7 +20,7 @@ export function isAdminRoute() {
 export function syncAdminPerks() {
   let pref = '1';
   try { pref = localStorage.getItem('magebreak.adminUlt') ?? '1'; } catch { /* ignore */ }
-  ADMIN.ult = isAdmin() && pref !== '0';
+  ADMIN.ult = isOwner() && pref !== '0';
 }
 
 export class AdminPanel {
@@ -34,14 +34,14 @@ export class AdminPanel {
 
   open() {
     show(this.root, true);
-    if (adminSession()) this.renderPanel(); else this.renderGate(1);
+    if (isOwner()) this.renderPanel(); else this.renderGate(1);
   }
   close() { show(this.root, false); }
 
   _granted() {
     syncAdminPerks();
     if (this.app.lobby) this.app.lobby.refreshAccess();
-    if (this.app.lobby) { if (isAdmin()) this.app.lobby.showAdminBadge(() => this.open()); else this.app.lobby.hideAdminBadge(); }
+    if (this.app.lobby) { if (isOwner()) this.app.lobby.showAdminBadge(() => this.open()); else this.app.lobby.hideAdminBadge(); }
   }
 
   // ---------------------------------------------------------------- sign-in (password → dog's name → optional token)
@@ -49,11 +49,11 @@ export class AdminPanel {
     const r = this.root;
     r.innerHTML = '';
     const box = el('div', 'admin-gate');
-    box.appendChild(el('div', 'ag-title', 'ADMIN ACCESS'));
-    const steps = ['STEP 1 OF 3 · PASSWORD', "STEP 2 OF 3 · SECURITY QUESTION", 'STEP 3 OF 3 · GRANT ADMIN'];
+    box.appendChild(el('div', 'ag-title', 'OWNER ACCESS'));
+    const steps = ['STEP 1 OF 3 · PASSWORD', "STEP 2 OF 3 · SECURITY QUESTION", 'STEP 3 OF 3 · ADD AN ADMIN (OPTIONAL)'];
     box.appendChild(el('div', 'ag-step', steps[step - 1]));
-    box.appendChild(el('label', 'ag-q', step === 1 ? 'Enter the admin password' : step === 2 ? "What is your dog's name?" : 'Paste the token of the account to make admin'));
-    if (step === 3) box.appendChild(el('p', 'muted ag-note', 'Every player has a private token in Settings → Account. Paste yours (or a friend\'s) to give that account admin in the normal game — no /admin needed. You can do this later from the panel.'));
+    box.appendChild(el('label', 'ag-q', step === 1 ? 'Enter the admin password' : step === 2 ? "What is your dog's name?" : 'Paste the token of a player to make them an admin'));
+    if (step === 3) box.appendChild(el('p', 'muted ag-note', 'Every player has a private token in Settings → Account. Admins can play Meteora in the normal game. You can also do this later from the panel.'));
     const form = el('form');
     const inp = el('input');
     inp.type = step === 1 ? 'password' : 'text';
@@ -86,23 +86,23 @@ export class AdminPanel {
       if (step === 1) { this.pw = v; this.renderGate(2); return; }
       go.disabled = true; err.textContent = '';
       if (step === 2) {
-        const res = await api('login', { password: this.pw, pet: v });
+        go.textContent = 'CHECKING…';
+        const ok = await ownerSignIn(this.pw || '', v);
         this.pw = '';
-        if (!res.ok) {
-          if (res.status === 401) { this.renderGate(1); this.root.querySelector('.ag-err').textContent = res.message || 'Incorrect.'; return; }
-          fail(res.message || 'Sign-in failed.'); return;
+        if (!ok) {
+          this.fails = (this.fails || 0) + 1;
+          this.renderGate(1);
+          this.root.querySelector('.ag-err').textContent = 'Incorrect password or answer.';
+          return;
         }
-        saveSession(res);
         this._granted();
-        toast('Signed in as admin on this device.');
+        toast('Signed in as owner. This device stays signed in.');
         this.renderGate(3);
         return;
       }
-      const res = await api('add', { session: adminSession(), token: v, name: nameInp.value.trim() });
-      if (!res.ok) { fail(res.message || 'Could not grant admin.'); return; }
-      if (v === myToken()) setLocalGrant(true);
+      try { await addAdmin(v, nameInp.value.trim()); } catch (ex) { fail(ex.message || 'Could not add admin.'); return; }
       this._granted();
-      toast('Admin granted to ' + (nameInp.value.trim() || maskToken(v)) + '.');
+      toast('Admin added: ' + (nameInp.value.trim() || maskToken(v)) + '.');
       this.renderPanel();
     });
     box.appendChild(form);
@@ -111,51 +111,40 @@ export class AdminPanel {
     setTimeout(() => inp.focus(), 30);
   }
 
-  // ---------------------------------------------------------------- admins (shared list on the server)
+  // ---------------------------------------------------------------- admins (owner-signed list)
   async renderAdmins(sec) {
-    sec.querySelectorAll('.ap-admins, .ap-addadmin, .ap-warn').forEach((n) => n.remove());
+    sec.querySelectorAll('.ap-admins, .ap-addadmin').forEach((n) => n.remove());
     const list = el('div', 'ap-admins');
-    list.appendChild(el('p', 'muted', 'Loading admins…'));
     sec.appendChild(list);
-    const res = await api('list', { session: adminSession() });
-    list.innerHTML = '';
-    if (!res.ok) {
-      if (res.error === 'session') { saveSession(null); this.renderGate(1); return; }
-      const w = el('div', 'ap-warn', res.message || 'Could not load the admin list.');
-      sec.insertBefore(w, list);
-    } else if (!res.admins.length) list.appendChild(el('p', 'muted', 'No admin accounts yet. Add one below.'));
-    for (const a of res.admins || []) {
+    const mine = await tokenHash(myToken());
+    const admins = adminList();
+    if (!admins.length) list.appendChild(el('p', 'muted', 'No admins yet. Add one below with their token.'));
+    for (const a of admins) {
       const row = el('div', 'ap-admin');
       const who = el('div', 'ap-who');
-      who.appendChild(el('b', '', a.name || 'Unnamed'));
-      who.appendChild(el('span', 'mono', maskToken(a.token)));
-      if (a.token === myToken()) who.appendChild(el('span', 'ap-you', 'THIS DEVICE'));
+      who.appendChild(el('b', '', a.n || 'Unnamed'));
+      who.appendChild(el('span', 'mono', a.m || ''));
+      if (a.h === mine) who.appendChild(el('span', 'ap-you', 'THIS DEVICE'));
       row.appendChild(who);
-      row.appendChild(el('span', 'muted', a.added ? new Date(a.added).toLocaleDateString() : ''));
+      row.appendChild(el('span', 'muted', a.a ? new Date(a.a).toLocaleDateString() : ''));
       const rm = el('button', 'btn-side danger', 'REMOVE');
       rm.onclick = async () => {
-        if (!confirm(`Remove admin from ${a.name || maskToken(a.token)}?`)) return;
-        const out = await api('remove', { session: adminSession(), token: a.token });
-        if (!out.ok) { toast(out.message || 'Could not remove.'); return; }
-        if (a.token === myToken()) setLocalGrant(false);
+        if (!confirm(`Remove admin from ${a.n || a.m}?`)) return;
+        try { await removeAdmin(a.h); } catch (ex) { toast(ex.message); return; }
         this._granted(); toast('Admin removed.'); this.renderAdmins(sec);
       };
       row.appendChild(rm);
       list.appendChild(row);
     }
-    // add
     const add = el('form', 'ap-addadmin');
     const ti = el('input'); ti.placeholder = 'Player token (magebreak-…)'; ti.autocomplete = 'off'; ti.spellcheck = false;
     const ni = el('input'); ni.placeholder = 'Name (optional)'; ni.maxLength = 24;
-    const mine = el('button', 'btn-side', 'MY TOKEN'); mine.type = 'button'; mine.onclick = () => { ti.value = myToken(); };
     const go = el('button', 'btn-side primary', 'ADD ADMIN'); go.type = 'submit';
-    add.append(ti, ni, mine, go);
+    add.append(ti, ni, go);
     add.addEventListener('submit', async (e) => {
       e.preventDefault();
       const t = ti.value.trim(); if (!t) return;
-      const out = await api('add', { session: adminSession(), token: t, name: ni.value.trim() });
-      if (!out.ok) { toast(out.message || 'Could not add admin.'); return; }
-      if (t === myToken()) setLocalGrant(true);
+      try { await addAdmin(t, ni.value.trim()); } catch (ex) { toast(ex.message); return; }
       this._granted(); toast('Admin added.'); this.renderAdmins(sec);
     });
     sec.appendChild(add);
@@ -168,7 +157,7 @@ export class AdminPanel {
     r.innerHTML = '';
     const p = el('div', 'admin-panel');
     const head = el('div', 'ap-head');
-    head.appendChild(el('div', 'ap-title', 'MAGEBREAK · ADMIN'));
+    head.appendChild(el('div', 'ap-title', 'MAGEBREAK · OWNER'));
     const x = el('button', 'icon-btn small', '✕'); x.onclick = () => this.close(); head.appendChild(x);
     p.appendChild(head);
     const body = el('div', 'ap-body');
@@ -176,7 +165,7 @@ export class AdminPanel {
 
     const sec = (title, note) => { const s = el('section', 'ap-sec'); s.appendChild(el('h3', '', title)); if (note) s.appendChild(el('p', 'muted', note)); body.appendChild(s); return s; };
     // -- admins
-    const sA = sec('ADMINS', 'Accounts with admin in the normal game (Meteora, admin perks). Players find their token in Settings → Account.');
+    const sA = sec('ADMINS', 'Admins can play Meteora in the normal game (nothing else — this panel is owner-only). Players find their token in Settings → Account. Changes reach other players the next time they are online at the same time as someone who has the new list.');
     this.renderAdmins(sA);
 
     // -- balance
@@ -206,7 +195,7 @@ export class AdminPanel {
     // admin perk (all modes, this browser tab only)
     const au = el('label', 'ap-chk'); const ai = el('input'); ai.type = 'checkbox'; ai.checked = ADMIN.ult;
     ai.onchange = () => { try { localStorage.setItem('magebreak.adminUlt', ai.checked ? '1' : '0'); } catch { /* ignore */ } syncAdminPerks(); toast(ai.checked ? 'Admin: X ultimate always ready.' : 'Admin ultimate perk off.'); };
-    au.appendChild(ai); au.appendChild(document.createTextNode(' ADMIN: X ultimate always ready — no charge, no cooldown (every mode)'));
+    au.appendChild(ai); au.appendChild(document.createTextNode(' OWNER: X ultimate always ready — no charge, no cooldown (every mode)'));
     s1.appendChild(au);
     chk('noCooldowns', 'No cooldowns');
     chk('infiniteUlt', 'Infinite ultimate');
@@ -262,7 +251,7 @@ export class AdminPanel {
     tool('START PRACTICE', () => { this.close(); app.session.startPractice(); });
     tool('CLEAR MATCH HISTORY', () => { localStorage.removeItem('magebreak.history'); app.lobby.renderCareer(); toast('History cleared.'); });
     tool('CLEAR RECENT PLAYERS', () => { localStorage.removeItem('magebreak.recent'); app.lobby.renderSocial(); toast('Recent players cleared.'); });
-    tool('SIGN OUT OF ADMIN PANEL', () => { saveSession(null); this._granted(); this.close(); toast('Signed out of the admin panel on this device.'); });
+    tool('SIGN OUT (OWNER)', () => { ownerSignOut(); this._granted(); this.close(); toast('Signed out of the owner account on this device.'); });
     s5.appendChild(trow);
 
     r.appendChild(p);
