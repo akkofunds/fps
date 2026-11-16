@@ -99,3 +99,8 @@ src/network/     PeerJS identity/party + host/client sessions
 src/ui/          lobby, lobby 3D scene, HUD, chat, icons, styles
 tools/characters rigging pipeline (Python: numpy + Pillow)
 ```
+
+## Owner & admins (no server needed)
+- **Owner:** sign in at `/admin` with the password and the dog's name. They unlock the owner key on that device, which stays signed in. Only the owner gets the admin panel.
+- **Admins:** every player has a private token in **Settings → Account**. The owner pastes it into the panel to make that player an admin (Meteora access), and can remove admins from the same list.
+- **How the list spreads:** it's signed with the owner key and shared between players over PeerJS (`src/network/adminDirectory.js`). Every game verifies the signature, so nobody else can forge or edit it. An update reaches a player the next time they're online at the same time as anyone who has it.

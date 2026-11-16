@@ -466,6 +466,19 @@ def main():
     if ax[1] < 0: ax = -ax  # point toward the orb end
     palm = (JP[IDX['hand_R']] + np.array(TAILS['hand_R'])) / 2
     grip = c + ax * ((palm - c) @ ax)
+    # the staff curves (crook + orb at the top), so its principal axis misses the shaft by a few
+    # units at the hand. Pivot on the real shaft centre next to the palm, and run the axis along
+    # the straight lower shaft, so the staff turns inside her fist instead of swinging off it.
+    SP = staff['P']
+    along = (SP - grip) @ ax
+    near = SP[np.abs(along) < 5.0]
+    if len(near) > 8:
+        grip = near.mean(0)
+        shaft = SP[(along > -40) & (along < 14)]
+        sc = shaft.mean(0)
+        _, _, vt2 = np.linalg.svd(shaft - sc)
+        a2 = vt2[0] if vt2[0] @ ax > 0 else -vt2[0]
+        ax = a2 / np.linalg.norm(a2)
     def shrink(Q):
         t = (Q - grip) @ ax
         return Q - ax[None, :] * (t * 0.25)[:, None]

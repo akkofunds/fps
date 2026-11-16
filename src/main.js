@@ -9,6 +9,8 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { TouchControls } from './ui/touch.js';
 import { AdminPanel, isAdminRoute, isAdmin, syncAdminPerks } from './ui/admin.js';
+import { initAdmin, onAdminChange, isOwner } from './core/adminAccess.js';
+import { AdminDirectory } from './network/adminDirectory.js';
 import { Input } from './core/input.js';
 import { Audio } from './core/audio.js';
 import { loadIdentity, saveIdentity, loadSettings, saveSettings, randomTag } from './core/storage.js';
@@ -149,7 +151,14 @@ class App {
     // admin lives inside the normal client: /admin opens the access check
     if (isAdminRoute()) this.admin.open();
     syncAdminPerks();
-    if (isAdmin() || isAdminRoute()) this.lobby.showAdminBadge(() => this.admin.open());
+    if (isOwner()) this.lobby.showAdminBadge(() => this.admin.open());
+    // admin list: verify the cached signed list, then keep it in sync with other players
+    onAdminChange(() => {
+      syncAdminPerks();
+      this.lobby.refreshAccess();
+      if (isOwner()) this.lobby.showAdminBadge(() => this.admin.open()); else this.lobby.hideAdminBadge();
+    });
+    initAdmin().then(() => { this.adminDir = new AdminDirectory(this.pm); this.adminDir.start(); });
     this._fps = { t: 0, n: 0 };
   }
 

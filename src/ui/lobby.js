@@ -1,6 +1,7 @@
 import { $, el, show, toast } from './dom.js';
 import { ICONS, ABILITY_ICON } from './icons.js';
 import { isAdmin } from './admin.js';
+import { myToken, maskToken } from '../core/adminAccess.js';
 import { MAGES as MAGE_DEFS, mageOf } from '../game/mages.js';
 import { parseTag, sanitizeName, randomTag, saveIdentity, loadRecent } from '../core/storage.js';
 import { Audio } from '../core/audio.js';
@@ -97,6 +98,15 @@ export class Lobby {
     $('sDyn').checked = s.dynamicRes !== false;
     $('sDyn').onchange = () => { s.dynamicRes = $('sDyn').checked; s.autoTune = s.dynamicRes; if (!s.dynamicRes) app.dynScale = 1; app.saveSettings(); app.resize(); };
     $('btnSettingsClose').onclick = () => { show('settings', false); };
+    // account: this device's private admin token
+    const tok = myToken();
+    $('sToken').value = maskToken(tok);
+    let shown = false;
+    $('btnTokenShow').onclick = () => { shown = !shown; $('sToken').value = shown ? tok : maskToken(tok); $('btnTokenShow').textContent = shown ? 'HIDE' : 'SHOW'; };
+    $('btnTokenCopy').onclick = async () => {
+      try { await navigator.clipboard.writeText(tok); toast('Token copied. Only give it to an admin.'); }
+      catch { shown = true; $('sToken').value = tok; $('btnTokenShow').textContent = 'HIDE'; $('sToken').select(); toast('Select and copy the token.'); }
+    };
   }
 
   show(on) {
@@ -342,6 +352,7 @@ export class Lobby {
   }
 
   showAdminBadge(open) { const b = $('adminBadge'); b.classList.remove('hidden'); b.onclick = open; }
+  hideAdminBadge() { $('adminBadge').classList.add('hidden'); }
 
   openSettings() { Audio.play('ui'); show('settings', true); }
   closeModals() { show('settings', false); }
