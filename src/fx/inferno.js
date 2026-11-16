@@ -7,7 +7,7 @@ import { Fx } from './fire.js';
 // burning scar on the ground). HDR colors so bloom makes them glow.
 
 const R = Math.random;
-const WHITE = [4.2, 3.6, 2.6, 1], HOT = [3.2, 2.0, 0.8, 1], FLAME = [2.6, 1.0, 0.24, 0.95], DEEP = [1.8, 0.35, 0.06, 0.6], DARK = [0.5, 0.08, 0.02, 0];
+const WHITE = [3.4, 2.3, 1.0, 1], HOT = [3.0, 1.45, 0.42, 1], FLAME = [2.6, 1.0, 0.24, 0.95], DEEP = [1.8, 0.35, 0.06, 0.6], DARK = [0.5, 0.08, 0.02, 0];
 const SMOKE0 = [0.2, 0.18, 0.17, 0.45], SMOKE1 = [0.38, 0.36, 0.34, 0];
 const tv = new THREE.Vector3();
 
@@ -64,7 +64,7 @@ Object.assign(Fx.prototype, {
       this.fire.emit(c.x, c.y, c.z, Math.cos(a) * sp, up, Math.sin(a) * sp, 0.3 + R() * 0.35, 0.7 + R() * 0.6, 0.1, R() < 0.3 ? WHITE : FLAME, DARK, 3.5, 1);
     }
     for (let i = 0; i < 24; i++) { const a = R() * 6.283, sp = 6 + R() * 8; this.fire.emit(c.x, c.y, c.z, Math.cos(a) * sp, 3 + R() * 7, Math.sin(a) * sp, 0.6 + R() * 0.6, 0.08, 0.03, WHITE, DEEP, 0.6, -14); }
-    this.fire.emit(c.x, c.y, c.z, 0, 0, 0, 0.12, 3.2, 4.2, WHITE, FLAME, 0, 0);
+    this.fire.emit(c.x, c.y, c.z, 0, 0, 0, 0.12, 2.0, 2.8, HOT, FLAME, 0, 0);
     this.ring(c, 3.4, 0.35, new THREE.Color(4, 1.8, 0.5));
     this.light(c, 45, 12, 0.3, 0xffa040);
     for (let i = 0; i < 8; i++) this.smoke.emit(c.x, c.y, c.z, (R() - 0.5) * 3, 1 + R(), (R() - 0.5) * 3, 1.2, 0.5, 1.6, SMOKE0, SMOKE1, 2, 0.4);

@@ -131,3 +131,8 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 .enemy-arrow span { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); font: 700 11px/1 'Rajdhani', sans-serif; color: #ffd0d4; text-shadow: 0 1px 2px #000; white-space: nowrap; }
 .ntag b { color: #ff7a85; }
 .ntag.dummy b { color: #e8d8b8; }
+/* impact frames: radial anime speed lines */
+#impactLines { position: fixed; inset: -20%; pointer-events: none; z-index: 41; opacity: 0;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(0,0,0,0.92) 0deg 0.7deg, transparent 0.7deg 3.1deg, rgba(0,0,0,0.85) 3.1deg 3.5deg, transparent 3.5deg 7deg);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 48%); mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 48%); }
+#impactLines.inv { filter: invert(1); }

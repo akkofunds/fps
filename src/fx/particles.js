@@ -14,15 +14,29 @@ const VERT = /* glsl */`
     gl_Position = projectionMatrix * mv;
     gl_PointSize = min(uMax, asize * uScale / max(0.1, -mv.z));
   }`;
+// Flame-shaped additive sprites: a teardrop that narrows upward, torn by scrolling noise into
+// wispy tongues, with a hot core and redder ragged edges. Young particles are round and hot,
+// older ones thin out and curl (age packed in the fractional part of aseed).
 const FRAG_ADD = /* glsl */`
   varying vec4 vColor; varying float vSeed;
-  uniform float uGain;
+  uniform float uGain, uTime;
+  float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
   void main(){
-    vec2 p = gl_PointCoord - 0.5;
-    float d = length(p);
-    float core = smoothstep(0.5, 0.0, d);
-    float a = core * core * vColor.a * uGain;
-    gl_FragColor = vec4(vColor.rgb * a, a);
+    float age = fract(vSeed), sd = floor(vSeed);
+    vec2 p = gl_PointCoord - 0.5; p.y = -p.y;
+    // teardrop: wider at the bottom, tapering into a tip
+    vec2 q = vec2(p.x * (1.0 + max(p.y, 0.0) * (1.2 + age * 1.6)), p.y * 0.92 + 0.04);
+    float n = vn(p * (3.0 + age * 3.0) + vec2(sd * 3.7, sd * 1.9 - uTime * 2.6)) * 0.65 + vn(p * 7.0 + vec2(-uTime * 3.1, sd)) * 0.35;
+    float r = length(q) + (n - 0.5) * (0.18 + age * 0.34);
+    float shape = smoothstep(0.5, 0.06, r) * smoothstep(0.5, 0.36, length(p)); // round mask: never a square
+    float core = smoothstep(0.28, 0.0, r) * (1.0 - age * 0.6);
+    float a = shape * shape * vColor.a * uGain;
+    // hot white-yellow core, the particle color in the body, deeper red at the torn edges
+    vec3 col = vColor.rgb * mix(vec3(1.0, 0.62, 0.45), vec3(1.0), shape);
+    col += vec3(0.9, 0.75, 0.5) * core * 0.6;
+    gl_FragColor = vec4(col * a, a);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }`;
@@ -55,7 +69,7 @@ export class ParticlePool {
     g.setAttribute('position', this.aPos); g.setAttribute('acolor', this.aCol); g.setAttribute('asize', this.aSize); g.setAttribute('aseed', this.aSeed);
     g.setDrawRange(0, 0);
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { uScale: { value: 400 }, uGain: { value: 1 }, uMax: { value: 400 } },
+      uniforms: { uScale: { value: 400 }, uGain: { value: 1 }, uMax: { value: 400 }, uTime: { value: 0 } },
       vertexShader: VERT, fragmentShader: additive ? FRAG_ADD : FRAG_SMOKE,
       transparent: true, depthWrite: false,
       blending: additive ? THREE.CustomBlending : THREE.NormalBlending,
@@ -76,7 +90,7 @@ export class ParticlePool {
     this.life[i] = life; this.age[i] = 0; this.s0[i] = s0; this.s1[i] = s1;
     this.c0[i4] = c0[0]; this.c0[i4 + 1] = c0[1]; this.c0[i4 + 2] = c0[2]; this.c0[i4 + 3] = c0[3];
     this.c1[i4] = c1[0]; this.c1[i4 + 1] = c1[1]; this.c1[i4 + 2] = c1[2]; this.c1[i4 + 3] = c1[3];
-    this.drag[i] = drag; this.grav[i] = grav; this.seed[i] = Math.random() * 10;
+    this.drag[i] = drag; this.grav[i] = grav; this.seed[i] = Math.random() * 100;
   }
 
   _kill(i) {
@@ -91,6 +105,7 @@ export class ParticlePool {
 
   update(dt, viewportH) {
     this.mat.uniforms.uScale.value = viewportH * 0.9;
+    this.mat.uniforms.uTime.value += dt;
     const P = this.aPos.array, C = this.aCol.array, S = this.aSize.array, SD = this.aSeed.array;
     for (let i = 0; i < this.n; i++) {
       this.age[i] += dt;
@@ -111,7 +126,7 @@ export class ParticlePool {
       C[i4 + 2] = this.c0[i4 + 2] + (this.c1[i4 + 2] - this.c0[i4 + 2]) * t;
       C[i4 + 3] = (this.c0[i4 + 3] + (this.c1[i4 + 3] - this.c0[i4 + 3]) * t) * fade;
       S[i] = this.s0[i] + (this.s1[i] - this.s0[i]) * t;
-      SD[i] = this.seed[i];
+      SD[i] = Math.floor(this.seed[i]) + Math.min(0.999, t);
     }
     const g = this.points.geometry;
     g.setDrawRange(0, this.n);

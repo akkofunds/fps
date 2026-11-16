@@ -24,7 +24,7 @@ export const METEORA = {
 };
 
 // the cutscene timeline (seconds after the cast): circles stack, final word, impact, wide shot
-export const NOVA = { radius: 24, channel: 6.4, cine: 9.2, maxDmg: 500, minDmg: 220, range: 85, exhausted: 3.3 };
+export const NOVA = { radius: 24, channel: 6.6, cine: 10, maxDmg: 500, minDmg: 220, range: 85, exhausted: 3.3 };
 export const STARFALL = { count: 5, spread: 4.2, radius: 2.5, dmg: 26, minDmg: 10, first: 0.55, gap: 0.16 };
 const COOLDOWN = { spark: 0.45, starfall: 8, sigil: 11, blink: 9 };
 // bolt-type fire rates are not shortened below 60% even with admin cooldown tweaks

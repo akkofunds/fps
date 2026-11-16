@@ -46,7 +46,7 @@ export class GameMap {
     s.add(this.sun); s.add(this.sun.target);
 
     this.sky = buildSky(); s.add(this.sky);
-    s.add(buildMountains());
+    this.mountains = buildMountains(); s.add(this.mountains);
     this.Q = Q;
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);

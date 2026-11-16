@@ -13,7 +13,7 @@ export const PYRO = {
   color: '#ff6a2b',
   bio: 'A third-generation fire soldier who fights with his feet. Pyro rockets in with flaming kicks, buries enemies in stacking burns and ends fights with a beam of pure, concentrated flame.',
   abilities: [
-    { key: 'LMB', id: 'bolt', name: 'Ember Fists', desc: 'Throw rapid fire punches that launch ember bolts. 18 damage, 27 on headshots.' },
+    { key: 'LMB', id: 'bolt', name: 'Ember Fists', desc: 'A 3-hit combo of fire punches: two ember bolts (18 damage, 27 on headshots), then a heavy fire blast that explodes on impact.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land. Press jump again in the air to double jump.' },
     { key: 'E', id: 'kick', name: "Devil's Foot", cd: 8, desc: 'Rocket forward with a flaming kick. Hit an enemy to launch them into the air. Leaves a burning trail behind you.' },
     { key: 'C', id: 'ignite', name: 'Rapid Ignition', cd: 9, desc: 'Fire a fan of 7 fireballs in a wide cone. Every hit stacks burn, and 3 hits on the same enemy within 2 seconds set off an explosion.' },
@@ -102,15 +102,21 @@ export class PyroKit {
     this.cd.bolt = cdOf(COOLDOWN.bolt);
     const side = this.side > 0 ? 'R' : 'L';
     this.side = -this.side;
+    // 3-hit combo: punch, punch, then a heavy exploding fire blast (resets if you stop firing)
+    this.combo = m.time - (this.lastBolt || -9) < 0.75 ? ((this.combo || 0) + 1) % 3 : 0;
+    this.lastBolt = m.time;
+    const heavy = this.combo === 2;
+    if (heavy) this.cd.bolt = cdOf(0.42);
     m.playAnim('cast', { anim: side === 'R' ? 'boltR' : 'boltL' });
     this.pending.push({ t: 0.055, fn: () => {
       const o = m.view.palmWorld(side, tmp);
       const dir = this._aimDir(o, tmp2);
-      const v = dir.multiplyScalar(PROJ.bolt.speed);
-      m.fx.castBurst(o, dir.clone().normalize(), 0.5);
-      m.castAbility({ ab: 'bolt', o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
-      m.sound('bolt', o, 0.55, 30);
-      m.cam.kick += 0.006;
+      const kind = heavy ? 'blast' : 'bolt';
+      const v = dir.multiplyScalar(PROJ[kind].speed);
+      m.fx.castBurst(o, dir.clone().normalize(), heavy ? 1.3 : 0.5);
+      m.castAbility({ ab: kind, o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
+      m.sound(heavy ? 'ember' : 'bolt', o, heavy ? 0.9 : 0.55, 30);
+      m.cam.kick += heavy ? 0.018 : 0.006;
     } });
   }
 

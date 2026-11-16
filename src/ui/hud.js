@@ -317,6 +317,30 @@ export class Hud {
     if (big) el.classList.add('big');
   }
   cineDark(k) { if (this.cineEl) this.cineEl.querySelector('.cine-dark').style.opacity = String(k * 0.55); }
+  // anime "impact frames": a few stark, high-contrast negative frames with radial speed lines
+  // right as the spell lands, then cb() (the white flash)
+  impactFrames(cb) {
+    const cv = document.getElementById('game');
+    let lines = document.getElementById('impactLines');
+    if (!lines) { lines = document.createElement('div'); lines.id = 'impactLines'; document.body.appendChild(lines); }
+    const frames = [
+      ['grayscale(1) contrast(9) invert(1)', 1, 70],
+      ['grayscale(1) contrast(9) sepia(1) saturate(12) hue-rotate(-38deg) brightness(0.9)', 1, 70],
+      ['grayscale(1) contrast(9)', 1, 60],
+      ['grayscale(1) contrast(9) invert(1)', 0.6, 60],
+      ['', 0, 0],
+    ];
+    let i = 0;
+    const step = () => {
+      const [flt, ln, ms] = frames[i++];
+      cv.style.filter = flt;
+      lines.style.opacity = String(ln);
+      lines.classList.toggle('inv', i % 2 === 0);
+      if (ms) setTimeout(step, ms); else if (cb) cb();
+    };
+    step();
+  }
+
   cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); }
 
   // full-screen white flash (nova); 0..1

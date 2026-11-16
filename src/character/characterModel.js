@@ -124,13 +124,17 @@ export class MageInstance {
     this.enemy = on;
     for (const m of this.meshes) if (m.userData.outline) { m.material = m.material.clone(); m.material.color.set(on ? 0xff2a36 : 0x0a0505); m.visible = true; }
     if (!on || this.xray) return;
-    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.16, 0.2), transparent: true, opacity: 0.5, depthWrite: false, depthFunc: THREE.GreaterDepth, fog: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    // Draw order does the trick: world (renderOrder 0) → silhouette (1, only where the world is in
+    // FRONT of the body, additive) → the character itself (2) on top. Because the body isn't in the
+    // depth buffer yet when the silhouette draws, overlapping limbs never tint themselves.
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.85, 0.06, 0.1), transparent: false, blending: THREE.AdditiveBlending, depthWrite: false, depthFunc: THREE.GreaterDepth, fog: false });
     this.xray = [];
+    for (const m of this.meshes) m.renderOrder = 2;
     for (const m of this.meshes) {
       if (m.userData.outline || !m.isSkinnedMesh) continue;
       const x = new THREE.SkinnedMesh(m.geometry, mat);
       x.bind(m.skeleton, m.bindMatrix);
-      x.frustumCulled = false; x.renderOrder = 30; x.userData.src = m;
+      x.frustumCulled = false; x.renderOrder = 1; x.userData.src = m;
       m.add(x);
       this.xray.push(x);
     }

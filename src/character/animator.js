@@ -520,10 +520,11 @@ export class Animator {
   _cape(dt, out, s) {
     // damped spring: swings back with forward speed and upward motion, flutters a little
     const fwd = Math.max(0, this.vz);
-    const target = Math.min(55, fwd * 5.5 + Math.max(0, -this.vy) * 2.2 + (this.airW > 0.5 ? 8 : 0));
+    const wind = this.windBoost || 0; // cutscene gale
+    const target = Math.min(70, fwd * 5.5 + Math.max(0, -this.vy) * 2.2 + (this.airW > 0.5 ? 8 : 0) + wind * 42);
     this.capeV = (this.capeV || 0) + ((target - (this.capeA || 0)) * 60 - this.capeV * 9) * dt;
     this.capeA = (this.capeA || 0) + this.capeV * dt;
-    const flutter = Math.sin(this.t * 7.3) * (2 + fwd * 0.6) + Math.sin(this.t * 2.1) * 2;
+    const flutter = (Math.sin(this.t * 7.3) * (2 + fwd * 0.6) + Math.sin(this.t * 2.1) * 2) * (1 + wind * 3) + Math.sin(this.t * 13.7) * wind * 4;
     addE(out, B.cape, this.capeA + flutter, Math.sin(this.t * 1.7) * 3, -this.vx * 1.5);
   }
 
