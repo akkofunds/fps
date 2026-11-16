@@ -5,6 +5,7 @@ import { addRecent } from '../core/storage.js';
 import { groundH } from '../world/terrain.js';
 import { Fx } from '../fx/arcane.js';
 import '../fx/inferno.js';
+import '../fx/novaStage.js';
 import { KICK, STEP, ADOLLA, IGNITE } from './pyro.js';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
 import { Body, stepMovement } from './movement.js';
@@ -123,6 +124,41 @@ export class Match {
     this._placeCamera();
   }
 
+  // ---------------------------------------------------------------- dash afterimages
+  // Glowing copies of the character frozen in its current pose, left behind along the dash.
+  _ghost(e) {
+    this.ghosts = this.ghosts || [];
+    let g = this.ghosts.find((x) => x.t <= 0 && x.mage === e.mage);
+    if (!g) {
+      if (this.ghosts.length >= 10) return;
+      const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
+      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
+      inst.setLod(true);
+      this.scene.add(inst.root);
+      g = { inst, mat, t: 0, mage: e.mage };
+      this.ghosts.push(g);
+    }
+    const src = e.view, dst = g.inst;
+    for (let i = 0; i < src.rig.bones.length; i++) {
+      const a = src.rig.bones[i], b = dst.rig.bones[i];
+      if (a && b) { b.quaternion.copy(a.quaternion); b.position.copy(a.position); }
+    }
+    dst.root.position.copy(src.root.position); dst.root.rotation.copy(src.root.rotation);
+    dst.root.visible = true;
+    g.t = 0.32; g.mat.opacity = 0.55;
+  }
+
+  _updateGhosts(dt) {
+    if (!this.ghosts) return;
+    for (const g of this.ghosts) {
+      if (g.t <= 0) continue;
+      g.t -= dt;
+      g.mat.opacity = Math.max(0, g.t / 0.32) * 0.55;
+      if (g.t <= 0) g.inst.root.visible = false;
+    }
+  }
+
   _makeEnt(p) {
     if (this.byId.has(p.id)) return this.byId.get(p.id);
     const Q = this.map.Q;
@@ -137,6 +173,7 @@ export class Match {
       const f = e.view.rig.bones[side === 'L' ? 16 : 20].getWorldPosition(tmpV2);
       if (f.distanceToSquared(this.camera.position) < 900 && this.world.inWater(f.x, f.z) <= 0) this.fx.dust(f, Math.min(1, speed / 6));
     };
+    if (!e.isLocal) e.view.setEnemy(true); // everyone else is an enemy in FFA
     this.ents.set(e.n, e); this.byId.set(e.id, e);
     return e;
   }
@@ -250,6 +287,7 @@ export class Match {
         this.sound('kickHit', c, 1, 40);
         break;
       }
+      case 'blast': this.proj.spawn(e.n, 'blast', d.o, d.d, local); if (!local) this.sound('ember', tmpV.fromArray(d.o), 0.7, 30); break;
       case 'ember': this.proj.spawn(e.n, 'ember', d.o, d.d, local); if (!local && Math.random() < 0.5) this.sound('ember', tmpV.fromArray(d.o), 0.4, 25); break;
       case 'igniteBoom': {
         const c = new THREE.Vector3().fromArray(d.c);
@@ -358,14 +396,17 @@ export class Match {
       case 'nova': {
         const c = new THREE.Vector3().fromArray(d.c), o = new THREE.Vector3().fromArray(d.o);
         this._startCine(e, c, o);
-        this.fx.nova(c, o, {
-          radius: NOVA.radius, channel: NOVA.channel,
-          stagger: [1.2, 1.72, 2.24, 2.76, 3.28, 3.8, 4.32],
+        const novaFx = this.fx.nova(c, o, {
+          radius: NOVA.radius, channel: NOVA.channel, beam: 0.6,
+          stagger: [3.62, 3.84, 4.06, 4.28, 4.5, 4.72, 4.94],
           onLayer: (i) => Audio.play('circleOn', 0.45 + i * 0.06, 0, 0.9 + i * 0.05),
           onFlash: () => {
-            this.app.hud.flash(1);
-            Audio.play('novaBoom', 1.3);
-            setTimeout(() => Audio.play('rumble', 0.9), 400);
+            // anime impact frames, then the light
+            this.app.hud.impactFrames(() => this.app.hud.flash(1));
+            Audio.play('novaBoom', 1.4);
+            setTimeout(() => Audio.play('rumble', 1), 400);
+            this.fx.shockwave(c, NOVA.radius * 3.2, 1.6);
+            this.fx.debris(c, 110, 34);
           },
           onImpact: () => {
             if (local) this.areaDamage(c, NOVA.radius, NOVA.maxDmg, NOVA.minDmg, 'nova', { kb: 16, up: 12, noCover: true, burn: [8, 3] });
@@ -377,6 +418,7 @@ export class Match {
             }
           },
         });
+        if (this.cine && this.cine.caster === e) this.cine.novaFx = novaFx;
         break;
       }
       case 'leap': {
@@ -406,64 +448,114 @@ export class Match {
   }
 
   // ---------------------------------------------------------------- Crimson Nova cutscene
-  // Universal: every client plays the same shots, all controls are locked until it ends.
+  // Universal: every client plays the same shots and all controls are locked until it ends.
+  //  0.0–3.6  casting stage (the world vanishes: violet cosmos, golden molten circle, light pillars)
+  //  3.6–5.4  the battlefield: seven seals stack in the sky over the target
+  //  5.4–6.6  back on stage: spinning shot, "EXPLOSION!" with a whip zoom
+  //  6.6–7.2  the beam drives down from the seals into the target
+  //  7.2      impact frames → the explosion; wide shot of the catastrophe until 10.6
   _startCine(caster, c, o) {
     if (this.cine) return; // a second nova during one keeps its own effect, not a second camera
     const f = new THREE.Vector3(c.x - o.x, 0, c.z - o.z);
     if (f.lengthSq() < 0.01) f.set(Math.sin(caster.yaw), 0, Math.cos(caster.yaw));
     f.normalize();
-    this.cine = { t: 0, dur: NOVA.cine, caster, c, o: o.clone(), f, side: new THREE.Vector3(-f.z, 0, f.x), subs: 0, orbit: Math.atan2(o.z - c.z, o.x - c.x) };
+    const stage = this.fx.novaStage(o);
+    stage.group.rotation.y = Math.atan2(f.x, f.z);
+    const m = this.map;
+    const world = [m.terrain, m.grass, m.flowers, m.bushes, m.props, m.water, m.village, m.landmarks, m.sky, m.mountains].filter(Boolean);
+    this.cine = { t: 0, dur: NOVA.cine, caster, c, o: o.clone(), f, side: new THREE.Vector3(-f.z, 0, f.x), subs: 0, stage, world, stageOn: null };
+    caster.view.anim.windBoost = 1;
     this.app.hud.cineStart();
-    Audio.play('rumble', 0.6);
+    Audio.play('rumble', 0.5);
     Audio.play('novaChant', 0.9);
-    setTimeout(() => { if (this.cine) Audio.play('novaChant', 1, 0, 1.25); }, 2600);
-    setTimeout(() => { if (this.cine) Audio.play('rumble', 0.9); }, 3200);
-    setTimeout(() => { if (this.cine) Audio.play('novaWord', 1); }, 5300);
+    setTimeout(() => { if (this.cine) Audio.play('novaChant', 1, 0, 1.2); }, 2500);
+    setTimeout(() => { if (this.cine) Audio.play('rumble', 0.9); }, 3600);
+    setTimeout(() => { if (this.cine) Audio.play('novaWord', 1); }, 5900);
+  }
+
+  _cineSetStage(on) {
+    const C = this.cine;
+    if (C.stageOn === on) return;
+    C.stageOn = on;
+    C.stage.setOn(on);
+    if (C.novaFx) C.novaFx.visible = !on;
+    for (const o of C.world) o.visible = !on;
+    for (const e of this.ents.values()) if (e !== C.caster && e.alive) e.view.root.visible = !on;
+    this.scene.fog.far = on ? 1e5 : 650;
   }
 
   _cineUpdate(dt) {
     const C = this.cine;
     C.t += dt;
+    const t = C.t;
     const subs = [
-      [0.25, 'Crimson stars that sleep beneath the world…'],
-      [1.95, 'Seven seals of ruin, open at my word.'],
-      [3.5, 'Let the sky remember fire… and the earth remember fear.'],
-      [5.25, 'EXPLOSION!', true],
-      [6.5, ''],
+      [0.3, 'Crimson stars that sleep beneath the world…'],
+      [2.0, 'Seven seals of ruin, open at my word.'],
+      [3.7, 'Let the sky remember fire… and the earth remember fear.'],
+      [5.4, ''],
+      [5.95, 'EXPLOSION!', true],
+      [6.6, ''],
     ];
-    while (C.subs < subs.length && C.t >= subs[C.subs][0]) { const [, text, big] = subs[C.subs]; this.app.hud.cineSub(text, !!big); C.subs++; }
-    this.app.hud.cineDark(Math.min(1, C.t / 3.5) * (C.t < 6.4 ? 1 : Math.max(0, 1 - (C.t - 6.4) / 1.5)));
-    if (C.t >= C.dur) { this.cine = null; this.app.hud.cineEnd(); this.cam.pivotY = null; }
+    if (t >= 6.6 && !C.beamSnd) { C.beamSnd = true; Audio.play('adollaBeam', 1.2, 0, 0.7); }
+    while (C.subs < subs.length && t >= subs[C.subs][0]) { const [, text, big] = subs[C.subs]; this.app.hud.cineSub(text, !!big); C.subs++; }
+    const onStage = t < 3.6 || (t >= 5.4 && t < 6.6);
+    this._cineSetStage(onStage);
+    if (C.novaFx) C.novaFx.visible = !onStage;
+    const I = t < 3.6 ? Math.min(1, t / 3.2) : Math.min(1, 0.7 + (t - 5.4) / 1.2);
+    C.stage.update(dt, I);
+    this.app.hud.cineDark(onStage ? 0 : t < 7.2 ? 0.3 : Math.max(0, 0.45 - (t - 7.2) / 2));
+    if (t >= C.dur) this._endCine();
+  }
+
+  _endCine() {
+    const C = this.cine;
+    if (!C) return;
+    this._cineSetStage(false);
+    C.stage.dispose();
+    C.caster.view.anim.windBoost = 0;
+    for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;
+    this.cine = null;
+    this.app.hud.cineEnd();
+    this.cam.pivotY = null;
   }
 
   _cineCamera() {
     const C = this.cine, t = C.t, o = C.caster.pos, c = C.c, f = C.f, sd = C.side, cam = this.camera;
     const P = tmpV, L = tmpV2;
+    const face = Math.atan2(f.x, f.z);
     let fov = 50;
-    if (t < 1.6) { // close-up: her face and staff as the chant begins
-      const d = 2.3 - t * 0.2;
-      P.set(o.x + f.x * d + sd.x * 1.3, o.y + 0.95, o.z + f.z * d + sd.z * 1.3);
-      L.set(o.x, o.y + 1.45, o.z); fov = 40;
-    } else if (t < 3.2) { // over the shoulder, tilting up to the seals forming over the target
-      const k = (t - 1.6) / 1.6;
-      P.set(o.x - f.x * 3.2 + sd.x * 1.4, o.y + 1.6, o.z - f.z * 3.2 + sd.z * 1.4);
-      L.set(c.x, c.y + 3 + k * 12, c.z); fov = 60;
-    } else if (t < 5.0) { // slow orbit around the target: the full tower of circles
-      const a = C.orbit + (t - 3.2) * 0.32, r = NOVA.radius * 2.1;
-      P.set(c.x + Math.cos(a) * r, c.y + 36 + (t - 3.2) * 4, c.z + Math.sin(a) * r);
-      L.set(c.x, c.y + 16, c.z); fov = 64;
-    } else if (t < 6.4) { // side profile: the final word
-      const k = (t - 5.0) / 1.4;
-      P.set(o.x + sd.x * (3.4 - k * 0.8) + f.x * 0.9, o.y + 1.2, o.z + sd.z * (3.4 - k * 0.8) + f.z * 0.9);
-      L.set(o.x + f.x * 0.6, o.y + 1.35, o.z + f.z * 0.6); fov = 45;
-    } else { // the catastrophe, from far away
-      const k = t - 6.4;
-      P.set(c.x - f.x * NOVA.radius * 3.0 + sd.x * NOVA.radius * 1.1, c.y + 16 + k * 2.5, c.z - f.z * NOVA.radius * 3.0 + sd.z * NOVA.radius * 1.1);
-      L.set(c.x, c.y + 10 + k * 4, c.z); fov = 66;
-      const sh = this.fx.shakeAmt * 0.6;
+    if (t < 2.2) { // stage: slow low orbit in front of her as the circle ignites
+      const a = face + 0.5 - t * 0.32, r = 3.6 - t * 0.25;
+      P.set(o.x + Math.sin(a) * r, o.y + 0.55 + t * 0.12, o.z + Math.cos(a) * r);
+      L.set(o.x, o.y + 1.2, o.z); fov = 46;
+    } else if (t < 3.6) { // stage: close-up from below, face and staff
+      const k = (t - 2.2) / 1.4;
+      P.set(o.x + f.x * (2.0 - k * 0.35) + sd.x * 0.8, o.y + 1.15, o.z + f.z * (2.0 - k * 0.35) + sd.z * 0.8);
+      L.set(o.x, o.y + 1.5, o.z); fov = 40;
+    } else if (t < 5.4) { // the battlefield: behind her, tilting up as the seals stack over the target
+      const k = (t - 3.6) / 1.8;
+      const back = NOVA.radius * 1.9;
+      P.set(c.x - f.x * back + sd.x * 8, c.y + 4 + k * 4, c.z - f.z * back + sd.z * 8);
+      L.set(c.x, c.y + 14 + k * 10, c.z); fov = 62;
+    } else if (t < 6.6) { // stage: fast spin, then a whip zoom on the final word
+      const k = (t - 5.4) / 1.2;
+      const a = face + Math.PI * 0.2 + k * Math.PI * 1.6, r = 4.6 - k * 1.8;
+      P.set(o.x + Math.sin(a) * r, o.y + 1.0 + k * 0.6, o.z + Math.cos(a) * r);
+      L.set(o.x, o.y + 1.35, o.z);
+      fov = t < 5.95 ? 58 : Math.max(30, 58 - (t - 5.95) * 70);
+    } else if (t < 7.2) { // the beam: looking up from the battlefield as it drives down into the target
+      const k = (t - 6.6) / 0.6;
+      P.set(c.x - f.x * NOVA.radius * 1.7 + sd.x * 7, c.y + 3, c.z - f.z * NOVA.radius * 1.7 + sd.z * 7);
+      L.set(c.x, c.y + 22 - k * 12, c.z); fov = 66;
+    } else { // the catastrophe, from far away, slowly pushing in
+      const k = t - 7.2;
+      const back = NOVA.radius * (3.0 - k * 0.15);
+      P.set(c.x - f.x * back + sd.x * NOVA.radius * 1.1, c.y + 30 + k * 2.5, c.z - f.z * back + sd.z * NOVA.radius * 1.1);
+      L.set(c.x, c.y + 12 + k * 4, c.z); fov = 66;
+      const sh = this.fx.shakeAmt * 0.7;
       P.x += Math.sin(t * 47) * sh; P.y += Math.sin(t * 59 + 1) * sh;
     }
-    P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 50) + 0.6);
+    if (t >= 3.6 && (t < 5.4 || t >= 6.6)) P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 50) + 1.2);
     cam.position.copy(P); cam.lookAt(L);
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     return L;
@@ -799,7 +891,11 @@ export class Match {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
         if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
         else if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
-        if (e.dashFx > 0) { e.dashFx -= dt; this.fx.dashStreak(e.pos, e.vel, e.mage); }
+        if (e.dashFx > 0) {
+          e.dashFx -= dt; this.fx.dashStreak(e.pos, e.vel, e.mage);
+          e.ghostT = (e.ghostT || 0) - dt;
+          if (e.ghostT <= 0) { e.ghostT = 0.045; this._ghost(e); }
+        }
         if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
         if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
         if (e.slowT > 0) { e.slowT -= dt; this.fx.slowFx(e.pos); }
@@ -809,6 +905,7 @@ export class Match {
     this.view.root.visible = me.alive || (me.hideAt && this.time < me.hideAt) ? (this.cine ? true : !this.cam.tooClose) : this.view.root.visible;
 
     this.proj.update(dt);
+    this._updateGhosts(dt);
     this._updateAreas(dt);
     this._checkSigils();
     // altar brazier
@@ -895,7 +992,7 @@ export class Match {
   sendChat(text) { this.sendToHost({ t: 'chat', msg: text }); }
 
   dispose() {
-    if (this.cine) { this.cine = null; this.app.hud.cineEnd(); }
+    if (this.cine) this._endCine();
     for (const off of this._offs || []) off();
     for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);
     Audio.stopLoop('brazier');
@@ -908,6 +1005,7 @@ export class Match {
       this.scene.remove(e.view.root);
       for (const mesh of e.view.meshes) mesh.material.dispose();
     }
+    for (const g of this.ghosts || []) { this.scene.remove(g.inst.root); g.mat.dispose(); }
   }
 }
 

@@ -110,7 +110,7 @@ function groundCircle(tex, radius, x, z, color, world) {
 // ---------------------------------------------------------------- fireball shader (nova)
 function fireballMaterial() {
   return new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    transparent: true, depthWrite: false, blending: THREE.NormalBlending, fog: false,
     uniforms: { uT: { value: 0 }, uHeat: { value: 1 } },
     vertexShader: /* glsl */`
       uniform float uT; varying vec3 vN; varying vec3 vW; varying float vNz;
@@ -120,9 +120,10 @@ function fireballMaterial() {
                    mix(mix(h(i+vec3(0,0,1)),h(i+vec3(1,0,1)),f.x),mix(h(i+vec3(0,1,1)),h(i+vec3(1,1,1)),f.x),f.y),f.z); }
       void main(){
         vec3 p = position;
-        float n = n3(normal * 3.0 + uT * 2.0) * 0.6 + n3(normal * 7.0 - uT * 3.0) * 0.4;
+        // billowing, cauliflower-like surface: big lobes + small churning detail
+        float n = n3(normal * 2.2 + uT * 1.2) * 0.55 + n3(normal * 5.5 - uT * 2.4) * 0.3 + n3(normal * 12.0 + uT * 3.5) * 0.15;
         vNz = n;
-        p += normal * n * 0.22;
+        p += normal * (n - 0.35) * 0.55;
         vN = normalize(normalMatrix * normal);
         vec4 w = modelMatrix * vec4(p, 1.0); vW = w.xyz;
         gl_Position = projectionMatrix * viewMatrix * w;
@@ -132,12 +133,17 @@ function fireballMaterial() {
       void main(){
         float facing = abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0)));
         float core = pow(facing, 1.5);
-        vec3 hot = vec3(4.0, 3.2, 2.2), mid = vec3(3.2, 1.3, 0.35), cool = vec3(1.4, 0.2, 0.06);
+        vec3 hot = vec3(2.1, 0.95, 0.22), mid = vec3(1.35, 0.32, 0.05), cool = vec3(0.38, 0.05, 0.02);
         float k = clamp(core * uHeat + vNz * 0.3, 0.0, 1.0);
         vec3 col = mix(cool, mid, smoothstep(0.1, 0.55, k));
         col = mix(col, hot, smoothstep(0.55, 1.0, k));
-        float a = (0.35 + core * 0.65) * clamp(uHeat * 1.2, 0.0, 1.0);
-        gl_FragColor = vec4(col * a, a);
+        // a solid ball of fire (not a glow bubble): turbulent dark-red edges, orange-gold core,
+        // cooling into black-brown smoke as the heat drops
+        float smoke = smoothstep(0.75, 0.15, uHeat) * (0.6 + 0.4 * (1.0 - vNz));
+        col = mix(col, vec3(0.12, 0.08, 0.07), smoke);
+        col *= 0.45 + 0.9 * vNz; // churning bright and dark patches
+        float a = clamp(0.55 + core * 0.4, 0.0, 0.95) * clamp(uHeat * 2.0 + 0.15, 0.0, 1.0);
+        gl_FragColor = vec4(col, a);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
@@ -245,12 +251,13 @@ Object.assign(Fx.prototype, {
   nova(target, caster, opts) {
     const { radius, channel, onImpact, onFlash, onLayer } = opts;
     const stagger = opts.stagger || [0.12, 0.44, 0.76, 1.08, 1.4];
-    const scene = this.scene;
+    // everything lives in one group so the cutscene can hide it during the casting-stage shots
+    const scene = new THREE.Group(); this.scene.add(scene);
     const layers = [];
     const n = stagger.length;
     for (let i = 0; i < n; i++) {
       const s = radius * (0.98 - (i / (n - 1)) * 0.66);
-      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(2.6, 0.5 - i * 0.04, 0.08));
+      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(1.7, 0.32 - i * 0.025, 0.05));
       m.position.set(target.x, target.y + 8 + i * (40 / (n - 1)), target.z);
       m.scale.setScalar(0.001);
       scene.add(m);
@@ -263,18 +270,26 @@ Object.assign(Fx.prototype, {
     // caster's circle under her feet
     const own = groundCircle(circleTexture(3, 512), 2.6, caster.x, caster.z, new THREE.Color(1.9, 0.4, 0.1), this.world);
     scene.add(own);
-    // light column
-    const colGeo = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true);
-    const colMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 1.4, 0.7), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    // the beam: once the seals are complete, a pillar of light drives DOWN from the highest seal
+    // into the target (geometry hangs from its top so scaling y extends it downward)
+    const topY = target.y + 8 + 40;
+    const beamT = opts.beam || 0.6;
+    const colGeo = new THREE.CylinderGeometry(1, 1, 1, 32, 1, true); colGeo.translate(0, -0.5, 0);
+    const colMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.2, 1.4), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
     const column = new THREE.Mesh(colGeo, colMat);
-    column.position.set(target.x, target.y + 22, target.z); column.scale.set(0.6, 44, 0.6);
-    scene.add(column);
+    column.position.set(target.x, topY, target.z); column.scale.set(1.6, 0.01, 1.6);
+    const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.35, 0.2), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+    const beamGlow = new THREE.Mesh(colGeo, glowMat);
+    beamGlow.position.copy(column.position); beamGlow.scale.set(4.5, 0.01, 4.5);
+    scene.add(column); scene.add(beamGlow);
     const glow = this.light(new THREE.Vector3(target.x, target.y + 6, target.z), 0, radius * 3, channel + 2.5, 0xff5020);
     let t = 0, boomed = false, ball = null, ballMat = null, cleanupAt = 0;
     const cleanup = () => {
       for (const L of layers) { scene.remove(L.m); L.m.geometry.dispose(); L.m.material.dispose(); }
       for (const o of [warn, own, column]) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); }
+      scene.remove(beamGlow); glowMat.dispose();
       if (ball) { scene.remove(ball); ball.geometry.dispose(); ballMat.dispose(); }
+      this.scene.remove(scene);
     };
     this.effects.push({ update: (dt) => {
       t += dt;
@@ -312,13 +327,27 @@ Object.assign(Fx.prototype, {
           const a = t * 4 + i * 1.57, rr = 2.5;
           this.fire.emit(caster.x + Math.cos(a) * rr, caster.y + 0.2 + R() * 2.5, caster.z + Math.sin(a) * rr, 0, 1.5, 0, 0.5, 0.25, 0.04, GOLD, DARKR, 0.5, 0.5);
         }
-        if (t > channel - 0.6) colMat.opacity = (t - (channel - 0.6)) / 0.6 * 0.5;
+        if (t > channel - beamT) {
+          // the beam descends, its tip blazing, sparks spiralling down around it
+          const k = Math.min(1, (t - (channel - beamT)) / beamT), e = k * k;
+          const len = Math.max(0.01, (topY - target.y) * e);
+          column.scale.set(1.6 + Math.sin(t * 60) * 0.15, len, 1.6 + Math.sin(t * 60) * 0.15); colMat.opacity = 1;
+          beamGlow.scale.set(4.5, len, 4.5); glowMat.opacity = 0.35;
+          const tipY = topY - len;
+          for (let i = 0; i < 18; i++) {
+            const a = R() * 6.283, rr = 1.5 + R() * 2.5;
+            this.fire.emit(target.x + Math.cos(a) * rr, tipY + R() * 3, target.z + Math.sin(a) * rr, Math.cos(a) * 6, 6 + R() * 6, Math.sin(a) * 6, 0.4 + R() * 0.3, 1.2, 0.2, R() < 0.5 ? GOLD : [3.6, 2.8, 2.0, 1], DARKR, 2, 0);
+          }
+          this.fire.emit(target.x, tipY, target.z, 0, 0, 0, 0.08, 9, 7, [3.6, 2.6, 1.6, 1], GOLD, 0, 0);
+          if (R() < 0.6) this.light(new THREE.Vector3(target.x, tipY, target.z), 120, 60, 0.1, 0xffd0a0);
+          this.shake(0.12 * k);
+        }
         this.shake(ch * 0.05);
       }
       // ---- impact
       if (!boomed && t >= channel) {
         boomed = true;
-        colMat.opacity = 1; column.scale.set(radius * 0.35, 44, radius * 0.35);
+        colMat.opacity = 1; column.scale.set(radius * 0.35, topY - target.y, radius * 0.35); glowMat.opacity = 0.5; beamGlow.scale.set(radius * 0.6, topY - target.y, radius * 0.6);
         ballMat = fireballMaterial();
         ball = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 5), ballMat);
         ball.position.set(target.x, target.y, target.z);
@@ -346,18 +375,29 @@ Object.assign(Fx.prototype, {
         this.shake(1.6);
         if (onFlash) onFlash();
         if (onImpact) onImpact();
-        cleanupAt = t + 3.2;
+        cleanupAt = t + 4.2;
       }
       if (boomed) {
         const bt = t - channel;
         // the fireball swells, rises and cools into a mushroom
-        const s = radius * (0.9 * (1 - Math.exp(-bt * 5)) + bt * 0.12);
-        ball.scale.set(s, s * (0.85 + bt * 0.12), s);
-        ball.position.y = target.y + s * 0.25 + bt * 3.5;
+        const s = radius * (1.05 * (1 - Math.exp(-bt * 4)) + bt * 0.14);
+        ball.scale.set(s, s * (0.8 + bt * 0.14), s);
+        ball.position.y = target.y + s * 0.25 + bt * 4.5;
         ballMat.uniforms.uT.value = t;
-        ballMat.uniforms.uHeat.value = Math.max(0, 1.15 - bt * 0.42);
+        ballMat.uniforms.uHeat.value = Math.max(0, 1.15 - bt * 0.4);
         colMat.opacity = Math.max(0, 1 - bt / 0.35);
         column.scale.x = column.scale.z = radius * 0.35 * Math.max(0.05, 1 - bt * 2);
+        glowMat.opacity = Math.max(0, 0.5 - bt); beamGlow.scale.x = beamGlow.scale.z = radius * 0.6 * Math.max(0.05, 1 - bt * 1.5);
+        if (bt < 3.2) {
+          // a column of fire rising into a burning mushroom cap
+          const capY = ball.position.y + s * 0.55;
+          for (let i = 0; i < 14 * Math.max(0.2, 1 - bt / 3.2); i++) {
+            const a = R() * 6.283, rr = s * (0.15 + R() * 0.25);
+            this.fire.emit(target.x + Math.cos(a) * rr, target.y + R() * capY, target.z + Math.sin(a) * rr, Math.cos(a) * 1.5, 8 + R() * 6, Math.sin(a) * 1.5, 0.7 + R() * 0.6, 2.5 + R() * 2.5, 1.5, R() < 0.3 ? [2.4, 0.9, 0.2, 0.9] : [1.8, 0.45, 0.08, 0.85], DARKR, 0.8, 2);
+            const b = R() * 6.283, cr = s * (0.5 + R() * 0.5);
+            this.fire.emit(target.x + Math.cos(b) * cr, capY + (R() - 0.3) * s * 0.4, target.z + Math.sin(b) * cr, Math.cos(b) * 5, 2 + R() * 3, Math.sin(b) * 5, 0.8 + R() * 0.6, 3 + R() * 3, 2, [1.9, 0.5, 0.1, 0.85], DARKR, 1, 1);
+          }
+        }
         if (bt < 2.6) {
           for (let i = 0; i < 10; i++) {
             const a = R() * 6.283, rr = s * (0.4 + R() * 0.6);
@@ -369,6 +409,7 @@ Object.assign(Fx.prototype, {
       }
       return true;
     } });
+    return scene;
   },
 
   // E — Starfall barrage: telegraphs on every point, then stars streak down one after another

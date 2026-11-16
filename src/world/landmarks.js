@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { groundH, PATH, PLAZA, terrainNoise as N } from './terrain.js';
+import { groundH, PATH, PLAZA, LAKE, WATER_Y, terrainNoise as N } from './terrain.js';
 import { mulberry32 } from './noise.js';
 import { stylize } from './stylize.js';
 
@@ -11,6 +11,8 @@ import { stylize } from './stylize.js';
 // Everything is merged per material: 4 draw calls in total.
 
 export const ELDER = { x: -17, z: 49, r: 1.5 };
+// waterfall cliff on the far shore of the lake
+export const FALLS = { x: -44.2, z: 32.2, w: 11, d: 6, h: 13 };
 const LANTERN_T = [0.1, 0.2, 0.3, 0.42, 0.56, 0.68, 0.8, 0.9];
 const PILLARS = [0, 3, 5, 7]; // indices of the tall plaza pillars (see props.js)
 const PILLAR_H = [4.6, 1.4, 3.2, 5.2, 2.1, 4.0, 1.0, 3.6];
@@ -41,7 +43,7 @@ function pathPoint(t) {
 }
 
 export function landmarkFootprints() {
-  const out = [{ x: ELDER.x, z: ELDER.z, r: 6 }];
+  const out = [{ x: ELDER.x, z: ELDER.z, r: 6 }, { x: FALLS.x, z: FALLS.z, r: 9 }];
   for (const t of LANTERN_T) { const [x, z, a] = pathPoint(t); out.push({ x: x + Math.cos(a) * 2.2, z: z - Math.sin(a) * 2.2, r: 0.8 }); }
   return out;
 }
@@ -173,6 +175,108 @@ export function buildLandmarks(world, Q = {}) {
     root.add(lampMesh);
   }
 
-  root.userData.update = (t) => { uTime.value = t; };
+  // ---------------------------------------------------------------- waterfall cliff
+  const fall = buildFalls(world);
+  root.add(fall.group);
+
+  root.userData.update = (t) => { uTime.value = t; fall.update(t); };
   return root;
+}
+
+function buildFalls(world) {
+  const g = new THREE.Group(); g.name = 'falls';
+  const rnd = mulberry32(777);
+  const toLake = new THREE.Vector2(LAKE.x - FALLS.x, LAKE.z - FALLS.z).normalize();
+  const yaw = Math.atan2(toLake.x, toLake.y); // local +z faces the lake
+  const base = groundH(FALLS.x, FALLS.z) - 1.5;
+  const rocks = [];
+  // stacked, jittered boulders form a mossy cliff with a notch at the top where the water spills
+  for (let i = 0; i < 26; i++) {
+    const lx = (rnd() - 0.5) * FALLS.w, lz = -rnd() * FALLS.d, ly = rnd() * FALLS.h * 0.85;
+    const s = 2.2 + rnd() * 2.4 - ly * 0.06;
+    const r = jitter(new THREE.IcosahedronGeometry(s, 1), s * 0.35, 900 + i);
+    r.scale(1.2, 1, 1); r.translate(Math.abs(lx) < 1.6 && ly > FALLS.h * 0.6 ? lx * 2.2 : lx, ly + s * 0.4, lz);
+    rocks.push(r);
+  }
+  const rg = mergeGeometries(rocks.map((r) => colorize(r, (x, y, z, c) => {
+    c.setRGB(0.5, 0.5, 0.48).multiplyScalar(0.75 + N.n2(x * 0.6 + y * 0.3, z * 0.6) * 0.25);
+    if (N.n2(x * 0.4, z * 0.4 + y * 0.2) > 0.1 + y * 0.02) c.lerp(new THREE.Color(0.24, 0.42, 0.14), 0.7); // moss
+  })));
+  rg.computeVertexNormals();
+  const cliff = new THREE.Mesh(rg, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.35, band: 0.12 }));
+  cliff.castShadow = true; cliff.receiveShadow = true;
+  g.add(cliff);
+  // the falling water: a curved ribbon with racing streaks
+  // where the water lands (local +z toward the lake): on the water, or on the shore if it is dry
+  const landZ = 3.6;
+  const lx = FALLS.x + toLake.x * landZ, lzw = FALLS.z + toLake.y * landZ;
+  const landY = Math.max(WATER_Y, groundH(lx, lzw)) - base;
+  const H = FALLS.h + 1.2 - landY;
+  const ribbon = new THREE.PlaneGeometry(3.4, 1, 6, 24);
+  const p = ribbon.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const v = 0.5 - p.getY(i); // 0 top → 1 bottom
+    p.setXYZ(i, p.getX(i) * (1 + v * 0.35), FALLS.h + 1.2 - v * H, 1.4 + Math.sin(v * Math.PI * 0.5) * 2.2 - (1 - v) * 0.6);
+  }
+  ribbon.computeVertexNormals();
+  const uT = { value: 0 };
+  const waterMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uT },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: /* glsl */`
+      uniform float uT; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+      void main(){
+        float v = 1.0 - vUv.y;
+        float s = n2(vec2(vUv.x * 14.0, v * 6.0 - uT * 4.5)) * 0.6 + n2(vec2(vUv.x * 30.0, v * 12.0 - uT * 7.0)) * 0.4;
+        vec3 col = mix(vec3(0.35, 0.62, 0.72), vec3(0.95, 0.98, 1.0), smoothstep(0.35, 0.8, s));
+        float edge = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x);
+        float a = edge * (0.55 + 0.4 * s) * smoothstep(1.0, 0.92, v);
+        gl_FragColor = vec4(col, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+  });
+  const water = new THREE.Mesh(ribbon, waterMat);
+  g.add(water);
+  // foam and mist where it lands
+  const foamMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uT },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: /* glsl */`
+      uniform float uT; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+      void main(){
+        vec2 p = vUv * 2.0 - 1.0; float r = length(p);
+        float n = n2(p * 6.0 + vec2(0.0, -uT * 1.5)) * 0.6 + n2(vec2(atan(p.y, p.x) * 3.0, r * 8.0 - uT * 2.5)) * 0.4;
+        float a = smoothstep(1.0, 0.2, r) * smoothstep(0.35, 0.7, n) * 0.85;
+        gl_FragColor = vec4(vec3(0.95, 0.98, 1.0), a);
+      }`,
+  });
+  const foam = new THREE.Mesh(new THREE.CircleGeometry(3.6, 32), foamMat);
+  foam.rotation.x = -Math.PI / 2; foam.position.set(0, landY + 0.08, landZ);
+  g.add(foam);
+  const mistTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,0.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+  const mists = [];
+  for (let i = 0; i < 5; i++) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, depthWrite: false, opacity: 0.35 }));
+    sp.position.set((rnd() - 0.5) * 3, landY + 1 + rnd() * 1.5, landZ + (rnd() - 0.5) * 2);
+    sp.scale.setScalar(3 + rnd() * 2); sp.userData.ph = rnd() * 6;
+    mists.push(sp); g.add(sp);
+  }
+  g.position.set(FALLS.x, base, FALLS.z); g.rotation.y = yaw;
+  world.addBox(FALLS.x - toLake.x * 2.5, FALLS.z - toLake.y * 2.5, FALLS.w / 2, FALLS.d / 2 + 1, -yaw, base, base + FALLS.h + 2);
+  return {
+    group: g,
+    update: (t) => {
+      uT.value = t;
+      for (const m of mists) { const k = 0.5 + 0.5 * Math.sin(t * 0.8 + m.userData.ph); m.material.opacity = 0.22 + k * 0.2; m.scale.setScalar(3 + k * 1.6); }
+    },
+  };
 }

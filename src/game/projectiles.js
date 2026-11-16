@@ -29,10 +29,11 @@ function segSeg(p1, q1, p2, q2) {
 }
 
 export const PROJ = {
-  bolt: { speed: 58, grav: 0, radius: 0.16, life: 1.3, dmg: 18, head: 1.5 },
+  bolt: { speed: 58, grav: 0, radius: 0.07, life: 1.3, dmg: 18, head: 1.5 },
   orb: { speed: 33, grav: 7, radius: 0.38, life: 3, dmg: 20, head: 1 },
-  spark: { speed: 46, grav: 0, radius: 0.2, life: 1.6, dmg: 16, head: 1.5 },
-  ember: { speed: 50, grav: 2, radius: 0.22, life: 0.62, dmg: 9, head: 1 },
+  spark: { speed: 46, grav: 0, radius: 0.08, life: 1.6, dmg: 20, head: 1.5 },
+  ember: { speed: 50, grav: 2, radius: 0.1, life: 0.62, dmg: 9, head: 1 },
+  blast: { speed: 46, grav: 0, radius: 0.14, life: 1.2, dmg: 26, head: 1.3 },
 };
 
 // character hit test: body capsule + head sphere. returns {s, head} or null
@@ -40,10 +41,10 @@ export function hitCharacter(e, a, b, radius) {
   const p = e.pos;
   tmpA.set(p.x, p.y + 0.3, p.z); tmpB.set(p.x, p.y + 1.42, p.z);
   const body = segSeg(a, b, tmpA, tmpB);
-  const br = 0.4 + radius;
+  const br = 0.3 + radius; // torso half-width: you have to actually be on them
   tmpA.set(p.x, p.y + 1.62, p.z); tmpB.set(p.x, p.y + 1.64, p.z);
   const head = segSeg(a, b, tmpA, tmpB);
-  const hr = 0.2 + radius;
+  const hr = 0.16 + radius;
   const hb = body.d2 <= br * br, hh = head.d2 <= hr * hr;
   if (!hb && !hh) return null;
   if (hh && (!hb || head.s <= body.s + 0.02)) return { s: head.s, head: true };
@@ -91,11 +92,12 @@ export class Projectiles {
       }
       p.pos.copy(end);
       if (p.age > p.def.life) {
-        if (p.kind === 'orb' || p.kind === 'spark') this._impact(p, p.pos, null, false); else if (p.kind === 'ember') m.fx.emberHit(p.pos); else m.fx.hitSpark(p.pos);
+        if (p.kind === 'orb' || p.kind === 'spark' || p.kind === 'blast') this._impact(p, p.pos, null, false); else if (p.kind === 'ember') m.fx.emberHit(p.pos); else m.fx.hitSpark(p.pos);
         this.list.splice(i, 1); continue;
       }
       // trail
       if (p.kind === 'bolt') m.fx.boltTrail(p.pos, p.vel);
+      else if (p.kind === 'blast') m.fx.boltTrail(p.pos, p.vel, 2);
       else if (p.kind === 'spark') m.fx.sparkTrail(p.pos, p.vel);
       else if (p.kind === 'ember') m.fx.emberTrail(p.pos, p.vel);
       else m.fx.orbTrail(p.pos, p.vel, p.age);
@@ -108,6 +110,13 @@ export class Projectiles {
       m.fx.hitSpark(pos);
       m.sound('boltHit', pos, 0.7, 22);
       if (p.local && target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'bolt', { head, at: pos });
+    } else if (p.kind === 'blast') {
+      m.fx.igniteBoom(pos, 2.4);
+      m.sound('explode', pos, 0.7, 35);
+      if (p.local) {
+        if (target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'blast', { head, at: pos, burn: [3, 2] });
+        m.areaDamage(pos, 1.6, 10, 4, 'blast', { skip: target, kb: 4 });
+      }
     } else if (p.kind === 'ember') {
       m.fx.emberHit(pos);
       if (target) m.sound('boltHit', pos, 0.5, 20);
@@ -117,7 +126,6 @@ export class Projectiles {
       m.sound('boltHit', pos, 0.8, 24);
       if (p.local) {
         if (target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'spark', { head, at: pos });
-        m.areaDamage(pos, 2.2, 10, 5, 'spark', { skip: target });
       }
     } else {
       m.fx.explosion(pos, 4.2, 1);

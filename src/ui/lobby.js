@@ -1,5 +1,6 @@
 import { $, el, show, toast } from './dom.js';
 import { ICONS, ABILITY_ICON } from './icons.js';
+import { isAdmin } from './admin.js';
 import { MAGES as MAGE_DEFS, mageOf } from '../game/mages.js';
 import { parseTag, sanitizeName, randomTag, saveIdentity, loadRecent } from '../core/storage.js';
 import { Audio } from '../core/audio.js';
@@ -16,7 +17,7 @@ const MODE_DESC = {
 };
 const MAGES = [
   { id: 'pyro', name: 'PYRO', icon: ICONS.flame, open: true },
-  { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true },
+  { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true, admin: true }, // admin-only
   { id: 'tide', name: 'TIDE', icon: ICONS.water },
   { id: 'terra', name: 'TERRA', icon: ICONS.earth },
   { id: 'volt', name: 'VOLT', icon: ICONS.storm },
@@ -29,7 +30,7 @@ export class Lobby {
     this.pm = app.pm; this.session = app.session;
     this.mode = 'ffa';
     this.queue = { searching: false };
-    this.mage = MAGE_DEFS[app.settings.mage] ? app.settings.mage : 'pyro';
+    this.mage = MAGE_DEFS[app.settings.mage] && this.canUse(app.settings.mage) ? app.settings.mage : 'pyro';
     this.pm.setMage(this.mage);
     this._bind();
     this.renderParty(); this.renderSocial(); this.renderMages(); this.renderCareer();
@@ -91,8 +92,10 @@ export class Lobby {
     $('sShoulder').onchange = () => { s.shoulder = Number($('sShoulder').value); app.saveSettings(); app.applySettings(); };
     $('sInvert').checked = !!s.invertY;
     $('sInvert').onchange = () => { s.invertY = $('sInvert').checked; app.saveSettings(); };
+    $('sPerf').value = s.perfMode || 'off';
+    $('sPerf').onchange = () => { s.perfMode = $('sPerf').value; app.saveSettings(); toast('Reloading to apply optimization…'); setTimeout(() => location.reload(), 700); };
     $('sDyn').checked = s.dynamicRes !== false;
-    $('sDyn').onchange = () => { s.dynamicRes = $('sDyn').checked; if (!s.dynamicRes) app.dynScale = 1; app.saveSettings(); app.resize(); };
+    $('sDyn').onchange = () => { s.dynamicRes = $('sDyn').checked; s.autoTune = s.dynamicRes; if (!s.dynamicRes) app.dynScale = 1; app.saveSettings(); app.resize(); };
     $('btnSettingsClose').onclick = () => { show('settings', false); };
   }
 
@@ -261,8 +264,14 @@ export class Lobby {
   }
 
   // ---------------------------------------------------------------- mages + career
+  // Meteora is reserved for the unlocked admin client
+  canUse(id) { const m = MAGES.find((x) => x.id === id); return !!m && m.open && (!m.admin || isAdmin()); }
+  // re-check after the admin unlocks / locks
+  refreshAccess() { if (!this.canUse(this.mage)) this.selectMage('pyro'); this.renderMages(); }
+
   selectMage(id) {
     if (!MAGE_DEFS[id] || id === this.mage) return;
+    if (!this.canUse(id)) { toast('Meteora is admin-only.'); return; }
     if (this.queue.searching) { toast('Cancel the queue to switch mages.'); return; }
     this.mage = id;
     this.app.settings.mage = id; this.app.saveSettings();
@@ -276,10 +285,12 @@ export class Lobby {
     const ro = $('mageRoster');
     ro.textContent = '';
     for (const m of MAGES) {
-      const t = el('div', 'mage-tile' + (m.open ? '' : ' locked') + (m.id === this.mage ? ' sel' : ''));
+      const usable = this.canUse(m.id);
+      const t = el('div', 'mage-tile' + (usable ? '' : ' locked') + (m.id === this.mage ? ' sel' : ''));
       t.innerHTML = m.icon;
       t.appendChild(document.createTextNode(m.name));
       if (!m.open) t.appendChild(el('span', 'soon', 'SOON'));
+      else if (!usable) { t.appendChild(el('span', 'soon', 'ADMIN')); t.onclick = () => toast('Meteora is admin-only.'); }
       else t.onclick = () => this.selectMage(m.id);
       ro.appendChild(t);
     }

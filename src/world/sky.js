@@ -35,17 +35,21 @@ export function buildSky() {
         // warm band toward the sun near the horizon
         float sd = max(dot(d, uSun), 0.0);
         col = mix(col, vec3(1.0, 0.78, 0.55), pow(sd, 6.0) * (1.0 - h) * 0.55);
-        // clouds projected on a flat layer
+        // puffy cumulus on a flat layer, self-shadowed: compare density with a sample shifted
+        // toward the sun → bright sunlit rims, soft blue-grey bellies
         if (d.y > 0.0) {
-          vec2 uv = d.xz / (d.y + 0.12) * 1.6;
-          float t = uTime * 0.012;
-          float c = fbm(uv + vec2(t, t * 0.4));
-          float c2 = fbm(uv * 2.3 - vec2(t * 1.7, 0.0));
-          float cov = smoothstep(0.48, 0.78, c * 0.75 + c2 * 0.35);
-          vec3 cloudLit = mix(vec3(1.0, 0.95, 0.88), vec3(1.0, 0.82, 0.62), pow(sd, 3.0));
-          vec3 cloudShade = vec3(0.62, 0.66, 0.76);
-          vec3 cc = mix(cloudShade, cloudLit, smoothstep(0.3, 0.85, c2 + sd * 0.4));
-          col = mix(col, cc, cov * smoothstep(0.0, 0.18, d.y) * 0.92);
+          vec2 uv = d.xz / (d.y + 0.14) * 1.15;
+          float t = uTime * 0.01;
+          vec2 o1 = vec2(t, t * 0.35), o2 = vec2(-t * 1.6, t * 0.2);
+          float dens = fbm(uv * 0.75 + o1) * 0.8 + fbm(uv * 2.4 + o2) * 0.32;
+          vec2 sh = normalize(uSun.xz + vec2(1e-4)) * 0.09;
+          float dens2 = fbm((uv + sh) * 0.75 + o1) * 0.8 + fbm((uv + sh) * 2.4 + o2) * 0.32;
+          float cov = smoothstep(0.5, 0.7, dens);
+          float lit = clamp(0.55 + (dens - dens2) * 5.0, 0.0, 1.0);
+          vec3 cc = mix(vec3(0.58, 0.64, 0.78), vec3(1.08, 1.05, 1.0), lit);
+          cc = mix(cc, vec3(1.15, 0.98, 0.82), pow(sd, 5.0) * 0.6);
+          cc += vec3(0.25, 0.22, 0.18) * smoothstep(0.62, 0.52, dens) * cov; // bright thin edges
+          col = mix(col, cc, cov * smoothstep(0.0, 0.16, d.y) * 0.96);
         }
         // sun
         col += uSunCol * (pow(sd, 900.0) * 5.0 + pow(sd, 90.0) * 0.3 + pow(sd, 10.0) * 0.08);
