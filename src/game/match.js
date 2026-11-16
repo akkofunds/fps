@@ -25,6 +25,8 @@ import { Rules } from './rules.js';
 //   host → all      S (all states) · ev (relayed) · hp · kill · spawn · kb · board · phase · end · chat
 // The host runs Rules (HP, kills, respawns, burning, scoring) and also plays as a normal client.
 
+// small deterministic RNG (mulberry32) so every client derives the same random layout
+function seeded(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), rayHit = { t: 0 };
 const wrapPi = (a) => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
 
@@ -232,7 +234,7 @@ export class Match {
     this.app.hud.hitMarker(extra.head, dmg);
     this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
     Audio.play(extra.head ? 'head' : 'hit', 0.6);
-    if (ab !== 'nova' && ab !== 'meteor' && ab !== 'adolla' && ab !== 'adollaPath') this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
+    if (!/^(nova|meteor|adolla|zero)/.test(ab)) this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
   }
 
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
@@ -503,6 +505,23 @@ export class Match {
           },
           onImpact: () => {
             if (local) this.areaDamage(c, NOVA.radius, NOVA.maxDmg, NOVA.minDmg, 'nova', { kb: 16, up: 12, noCover: true, burn: [8, 3] });
+            // …and it keeps going: aftershocks reach past the kill radius, the crater burns, and
+            // burning fragments of the sky rain down across the area (same spots on every client)
+            const rnd = seeded(Math.floor(c.x * 131 + c.z * 977 + c.y * 31));
+            const frags = [];
+            for (let i = 0; i < NOVA.frags; i++) {
+              const a = rnd() * Math.PI * 2, r = NOVA.radius * (0.35 + rnd() * 1.25);
+              frags.push([c.x + Math.cos(a) * r, c.z + Math.sin(a) * r, 0.5 + i * (4.2 / NOVA.frags) + rnd() * 0.3]);
+            }
+            this.fx.novaAftermath(c, NOVA.radius, frags, (p) => {
+              this.sound('explode', p, 0.9, 60);
+              if (local) this.areaDamage(p, 3.2, NOVA.fragDmg, 25, 'novaFrag', { kb: 8, up: 7, burn: [5, 2] });
+            });
+            if (local) {
+              setTimeout(() => { if (this.local) this.areaDamage(c, NOVA.radius * 1.8, NOVA.shockDmg, 30, 'novaShock', { kb: 12, up: 6, noCover: true }); }, 900);
+              this.areas.push({ kind: 'crater', c: c.clone(), r: NOVA.radius * 0.5, t: 0, life: 7, tick: 0.4, owner: e.n, local, dmg: 9, ab: 'novaBurn', burn: [6, 2] });
+            }
+            setTimeout(() => Audio.play('rumble', 0.8), 1500);
             // the shockwave shoves the local player even outside the kill radius
             const me = this.local;
             if (me.alive && e !== me) {
@@ -705,6 +724,17 @@ export class Match {
               if (distToSegXZ(e.pos, ar.a, ar.b) < ar.w && e.pos.y < Math.max(ar.a.y, ar.b.y) + 2.2 && e.pos.y > Math.min(ar.a.y, ar.b.y) - 1.5) this.reportHit(e, ar.dmg, ar.ab, { burn: ar.burn, at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
               void gy;
             }
+          }
+        }
+        if (ar.t >= ar.life) this.areas.splice(i, 1);
+      } else if (ar.kind === 'crater') {
+        // the Nova's crater keeps burning anyone who walks in
+        ar.tick -= dt;
+        if (ar.local && ar.tick <= 0) {
+          ar.tick = 0.5;
+          for (const e of this.ents.values()) {
+            if (e === this.local || !e.alive) continue;
+            if (Math.hypot(e.pos.x - ar.c.x, e.pos.z - ar.c.z) < ar.r && Math.abs(e.pos.y - ar.c.y) < 4) this.reportHit(e, ar.dmg, ar.ab, { burn: ar.burn, at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
           }
         }
         if (ar.t >= ar.life) this.areas.splice(i, 1);
