@@ -19,6 +19,7 @@ export class ShoulderCamera {
     this.baseFov = 80;
     this.shakeT = 0;
     this.kick = 0; // small recoil/feedback pitch offset
+    this.dashKick = 0; // FOV punch on dashes
   }
 
   look(dx, dy, sens, invertY) {
@@ -63,7 +64,8 @@ export class ShoulderCamera {
       this.cam.position.x += Math.sin(this.shakeT * 1.3) * a; this.cam.position.y += Math.sin(this.shakeT * 1.7 + 1) * a; this.cam.position.z += Math.cos(this.shakeT * 1.1) * a;
     }
     this.cam.lookAt(this.cam.position.x + this.fwd.x, this.cam.position.y + this.fwd.y, this.cam.position.z + this.fwd.z);
-    const fov = this.baseFov * (1 - this.aimT * 0.22);
+    this.dashKick *= Math.exp(-7 * dt);
+    const fov = this.baseFov * (1 - this.aimT * 0.22) + this.dashKick * 9;
     if (Math.abs(this.cam.fov - fov) > 0.01) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
   }
 

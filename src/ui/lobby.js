@@ -82,7 +82,8 @@ export class Lobby {
     bindRange('sFov', 'vFov', 'fov', (v) => `${v}°`);
     bindRange('sVol', 'vVol', 'volume', (v) => `${Math.round(v * 100)}%`);
     $('sQuality').value = s.quality;
-    $('sQuality').onchange = () => { s.quality = $('sQuality').value; app.saveSettings(); toast('Reloading to apply graphics quality…'); setTimeout(() => location.reload(), 700); };
+    $('sGpu').textContent = `GPU: ${app.gpu || 'unknown'}${s.autoTier ? ` · auto-tuned ×${s.autoTier}` : ''}`;
+    $('sQuality').onchange = () => { s.quality = $('sQuality').value; s.autoTier = 0; app.saveSettings(); toast('Reloading to apply graphics quality…'); setTimeout(() => location.reload(), 700); };
     $('sScale').value = String(s.renderScale || 0);
     $('sScale').onchange = () => { s.renderScale = Number($('sScale').value); app.saveSettings(); app.resize(); };
     $('btnSocial').onclick = () => { $('social').classList.toggle('open'); app.resize(); };

@@ -36,6 +36,10 @@ const ACTIONS = {
   nova: { clip: C.M_NOVA, in: 0.1, out: 0.2 },
   exhausted: { clip: C.M_EXHAUSTED, in: 0.05, out: 0.25, aimOff: true },
   respawn: { clip: C.RESPAWN, in: 0.02, out: 0.2, aimOff: true, freeProp: true },
+  kick: { clip: C.KICK_CLIP, in: 0.03, out: 0.14, aimOff: true },
+  stomp: { clip: C.STOMP_CLIP, in: 0.04, out: 0.16 },
+  adolla: { clip: C.ADOLLA_CLIP, in: 0.06, out: 0.2 },
+  doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true },
 };
 const CASTS = {
   boltR: { clip: C.BOLT_R, in: 0.035, out: 0.12 },
@@ -46,6 +50,8 @@ const CASTS = {
   mRaise: { clip: C.M_RAISE, in: 0.06, out: 0.2 },
   mBlink: { clip: C.M_BLINK, in: 0.04, out: 0.15 },
   mBolt2: { clip: C.M_BOLT2, in: 0.04, out: 0.16 },
+  jabR: { clip: C.JAB_R, in: 0.02, out: 0.08 },
+  jabL: { clip: C.JAB_L, in: 0.02, out: 0.08 },
   fidgetP: { clip: C.FIDGET_P, in: 0.3, out: 0.4, fidget: true },
   fidgetM: { clip: C.FIDGET_M, in: 0.3, out: 0.4, fidget: true },
 };
@@ -128,6 +134,7 @@ export class Animator {
       this._startAction(name, back ? wrapPi(a + Math.PI) : a);
       return;
     }
+    if (kind === 'doubleJump') { const a = data.dir || 0; this._startAction('doubleJump', Math.abs(a) > 1.95 ? wrapPi(a + Math.PI) * 0 : a * 0.6); return; }
     if (ACTIONS[kind] && !ACTIONS[kind].turn) { this._startAction(kind, 0); return; }
     if (kind === 'cast') {
       let anim = data.anim;
@@ -360,7 +367,8 @@ export class Animator {
     for (const side of ['L', 'R']) {
       const sg = side === 'L' ? 1 : -1;
       const sw = (Ls > 1e-3 ? feet[side].along / (Ls * 0.5) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
-      const idleX = side === 'R' ? -14 : -8, idleZ = side === 'R' ? 16 : 11, idleE = side === 'R' ? -72 : -36;
+      // relaxed ready stance: arms close to the body, casting hand slightly raised
+      const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
       const ax = lerp(idleX, 8 + sw, wRun);
       const az = lerp(idleZ, 10 + 4 * wFast, wRun);
       const ex = lerp(idleE, -(48 + 42 * wFast) - Math.max(0, -sw) * 0.5, wRun);
@@ -380,7 +388,7 @@ export class Animator {
       const width = lerp(hw, hw * 0.9, wFast);
       // base under the hip, turned with the pelvis
       const bx = f.sg * width * cyaw, bz = -f.sg * width * syaw;
-      tgt[side] = tmpV.set(bx + mx * f.along, ankleH + f.lift, bz + mz * f.along).clone();
+      tgt[side] = (this._tg || (this._tg = { L: new THREE.Vector3(), R: new THREE.Vector3() }))[side].set(bx + mx * f.along, ankleH + f.lift, bz + mz * f.along);
       tgt[side].pitch = f.pitch;
       tgt[side].yaw = (hipYawD * 0.7 + f.sg * 7);
     }
@@ -431,7 +439,7 @@ export class Animator {
     for (const side of ['L', 'R']) {
       const pl = this.plant[side];
       const r = rest[side];
-      const want = toWorld(r[0], r[1], tmpV2).clone();
+      const want = toWorld(r[0], r[1], (this._want || (this._want = { L: new THREE.Vector3(), R: new THREE.Vector3() }))[side]);
       const wantYaw = s.yaw + r[2] / R2D;
       err[side] = { want, wantYaw, d: Math.hypot(want.x - pl.p.x, want.z - pl.p.z) + Math.abs(wrapPi(wantYaw - pl.yaw)) * 0.22 };
       if (pl.step >= 0) {
@@ -460,7 +468,7 @@ export class Animator {
         yaw = pl.fromYaw + wrapPi(pl.toYaw - pl.fromYaw) * e;
         lift = Math.sin(Math.PI * u) * 0.07; pitch = Math.sin(Math.PI * u) * 12;
       } else wpos.copy(pl.p);
-      const loc = toLocal(wpos, new THREE.Vector3());
+      const loc = toLocal(wpos, (this._loc || (this._loc = { L: new THREE.Vector3(), R: new THREE.Vector3() }))[side]);
       loc.y = ankleH + lift;
       loc.pitch = pitch; loc.yaw = wrapPi(yaw - s.yaw) * R2D;
       res[side] = loc;
@@ -532,7 +540,7 @@ export class Animator {
     const w = A.ikW;
     for (const side of ['L', 'R']) for (const b of ['upperLeg', 'lowerLeg', 'foot']) {
       const i = B[b + side];
-      getQ(A, i, tmpQ); const qb = new THREE.Quaternion(); getQ(ik, i, qb);
+      getQ(A, i, tmpQ); const qb = this._qb || (this._qb = new THREE.Quaternion()); getQ(ik, i, qb);
       tmpQ.slerp(qb, w); putQ(A, i, tmpQ);
     }
   }

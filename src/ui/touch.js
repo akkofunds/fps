@@ -35,12 +35,18 @@ export class TouchControls {
       b.innerHTML = html;
       if (label) b.appendChild(el('span', 'tlbl', label));
       const cdv = el('div', 'tcd hidden'); b.appendChild(cdv);
+      // fire the action FIRST: on iOS Safari setPointerCapture can throw for touch pointers,
+      // which used to swallow the press entirely
+      const press = () => { const now = performance.now(); if (now - (b._t || 0) < 250) return; b._t = now; b.classList.add('down'); onDown && onDown(); };
       b.addEventListener('pointerdown', (e) => {
         e.preventDefault(); e.stopPropagation();
-        b.setPointerCapture(e.pointerId); b.classList.add('down');
-        onDown && onDown();
+        press();
+        try { b.setPointerCapture(e.pointerId); } catch { /* ignore */ }
         if (look) this.lookPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
       });
+      // fallback for browsers that deliver touches without pointer events
+      b.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); press(); }, { passive: false });
+      b.addEventListener('touchend', (e) => { e.preventDefault(); b.classList.remove('down'); onUp && onUp(); }, { passive: false });
       const up = (e) => { b.classList.remove('down'); onUp && onUp(); this.lookPtrs.delete(e.pointerId); };
       b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
       b.addEventListener('pointermove', (e) => { if (look) this._look(e); });
@@ -70,7 +76,7 @@ export class TouchControls {
     this.moveZone.addEventListener('pointerdown', (e) => {
       if (this.movePtr !== null) return;
       e.preventDefault();
-      this.movePtr = e.pointerId; this.moveZone.setPointerCapture(e.pointerId);
+      this.movePtr = e.pointerId; try { this.moveZone.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       this.ox = e.clientX; this.oy = e.clientY;
       Object.assign(this.stick.style, { left: `${e.clientX}px`, top: `${e.clientY}px` });
       this.knob.style.transform = 'translate(-50%,-50%)';
@@ -84,14 +90,15 @@ export class TouchControls {
       if (l > R) { dx *= R / l; dy *= R / l; }
       this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
       const k = Math.min(1, l / R);
-      const dead = 0.12;
-      const mag = k < dead ? 0 : (k - dead) / (1 - dead);
+      // full run speed from ~60% deflection (thumbs rarely push to the very edge)
+      const dead = 0.1;
+      const mag = k < dead ? 0 : Math.min(1, (k - dead) / 0.5);
       t().side = l > 0 ? (dx / Math.max(l, 1e-6)) * mag : 0;
       t().fwd = l > 0 ? (-dy / Math.max(l, 1e-6)) * mag : 0;
     });
     const endMove = (e) => { if (e.pointerId !== this.movePtr) return; this.movePtr = null; t().fwd = t().side = 0; show(this.stick, false); };
     this.moveZone.addEventListener('pointerup', endMove); this.moveZone.addEventListener('pointercancel', endMove);
-    this.lookZone.addEventListener('pointerdown', (e) => { e.preventDefault(); this.lookZone.setPointerCapture(e.pointerId); this.lookPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+    this.lookZone.addEventListener('pointerdown', (e) => { e.preventDefault(); try { this.lookZone.setPointerCapture(e.pointerId); } catch { /* ignore */ } this.lookPtrs.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
     this.lookZone.addEventListener('pointermove', (e) => this._look(e));
     const endLook = (e) => this.lookPtrs.delete(e.pointerId);
     this.lookZone.addEventListener('pointerup', endLook); this.lookZone.addEventListener('pointercancel', endLook);

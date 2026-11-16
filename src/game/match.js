@@ -4,12 +4,14 @@ import { Audio } from '../core/audio.js';
 import { addRecent } from '../core/storage.js';
 import { groundH } from '../world/terrain.js';
 import { Fx } from '../fx/arcane.js';
+import '../fx/inferno.js';
+import { KICK, STEP, ADOLLA, IGNITE } from './pyro.js';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
 import { Body, stepMovement } from './movement.js';
 import { ShoulderCamera } from './camera.js';
 import { Projectiles, hitCharacter } from './projectiles.js';
 import { mageOf } from './mages.js';
-import { NOVA } from './meteora.js';
+import { NOVA, STARFALL } from './meteora.js';
 import { BAL, applyBalance } from './balance.js';
 import { Rules } from './rules.js';
 
@@ -74,7 +76,7 @@ export class Match {
     } else {
       this._offs = [
         net.on('msg', (msg) => { if (this._ready) this.clientHandle(msg); else this._queue.push(['c', msg]); }),
-        net.on('close', () => { if (!this.ended) this.app.leaveMatch('Disconnected from the match host.'); }),
+        net.on('close', () => { if (!this.ended && this.app.match === this) { if (this.phase === 'queue') this.app.leaveMatch('Lost the lobby host — searching again…', { requeue: true }); else this.app.leaveMatch('Disconnected from the match host.'); } }),
       ];
     }
   }
@@ -87,29 +89,15 @@ export class Match {
     const Q = this.map.Q;
     this.fx = new Fx(this.scene, this.world, Q.lights, Q.particles);
     // without bloom, additive HDR fire saturates to white; tone it down
-    if (!app.composer) this.fx.fire.mat.uniforms.uGain.value = 0.55;
+    if (!app.composer || app.noPost) this.fx.fire.mat.uniforms.uGain.value = 0.55;
     this.proj = new Projectiles(this);
-    const templates = {};
-    for (const p of this.players) { const md = mageOf(p.mage); if (!templates[md.id]) templates[md.id] = await loadMageModel(md.model); }
-    if (!templates.pyro) templates.pyro = await loadMageModel(mageOf('pyro').model);
-    const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);
+    this.templates = {};
+    for (const md of [mageOf('pyro'), mageOf('meteora')]) this.templates[md.id] = await loadMageModel(md.model);
     const list = [...this.players];
     if (this.cfg.mode === 'practice') {
       for (let i = 0; i < 5; i++) list.push({ n: 100 + i, id: `dummy-${i}`, name: 'Training Dummy', tag: '', dummy: true });
     }
-    for (const p of list) {
-      const e = new Ent(p, p.id === this.localId);
-      e.view = new MageInstance(templates[mageOf(e.mage).id] || templates.pyro, { groundAt, outlines: Q.outlines, lowPoly: !Q.outlines }).uniqueMaterials();
-      if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
-      e.view.setVisible(false);
-      this.scene.add(e.view.root);
-      // footfall dust puffs (close to the camera only)
-      e.view.anim.onFootPlant = (side, speed) => {
-        const f = e.view.rig.bones[side === 'L' ? 16 : 20].getWorldPosition(tmpV2);
-        if (f.distanceToSquared(this.camera.position) < 900 && this.world.inWater(f.x, f.z) <= 0) this.fx.dust(f, Math.min(1, speed / 6));
-      };
-      this.ents.set(e.n, e); this.byId.set(e.id, e);
-    }
+    for (const p of list) this._makeEnt(p);
     this.local = this.byId.get(this.localId);
     this.view = this.local.view;
     this.body = new Body();
@@ -133,6 +121,44 @@ export class Match {
     this._queue.length = 0;
     // camera starts behind the local spawn
     this._placeCamera();
+  }
+
+  _makeEnt(p) {
+    if (this.byId.has(p.id)) return this.byId.get(p.id);
+    const Q = this.map.Q;
+    const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);
+    const e = new Ent(p, p.id === this.localId);
+    e.view = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { groundAt, outlines: Q.outlines, lowPoly: !Q.outlines }).uniqueMaterials();
+    if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
+    e.view.setVisible(false);
+    this.scene.add(e.view.root);
+    // footfall dust puffs (close to the camera only)
+    e.view.anim.onFootPlant = (side, speed) => {
+      const f = e.view.rig.bones[side === 'L' ? 16 : 20].getWorldPosition(tmpV2);
+      if (f.distanceToSquared(this.camera.position) < 900 && this.world.inWater(f.x, f.z) <= 0) this.fx.dust(f, Math.min(1, speed / 6));
+    };
+    this.ents.set(e.n, e); this.byId.set(e.id, e);
+    return e;
+  }
+
+  // ---------------------------------------------------------------- queue lobby (FFA)
+  // While matchmaking, the queue host runs this match in a 'queue' phase: everyone who joins
+  // spawns in immediately and can roam/fight. When the lobby fills, goLive() starts the match.
+  hostAddPlayer(p) {
+    if (!this.isHost || this.byId.has(p.id)) return;
+    const e = this._makeEnt(p);
+    this.players.push(p);
+    this.net.broadcast({ t: 'join', p }, p.id);
+    // catch the newcomer up: where everyone is, the phase, the board
+    for (const o of this.ents.values()) {
+      if (o === e || !o.alive) continue;
+      const pos = o.isLocal ? this.body.pos : o.pos;
+      this.net.send(p.id, { t: 'spawn', n: o.n, x: pos.x, y: pos.y, z: pos.z, yaw: o.isLocal ? this.body.yaw : o.yaw, quiet: 1 });
+    }
+    this.net.send(p.id, { t: 'phase', p: this.rules.phase, tl: 0 });
+    this.rules.spawn(e);
+    this.rules.sendBoard();
+    this.app.chat.system(`${p.name} joined the lobby.`);
   }
 
   _placeCamera() {
@@ -161,12 +187,13 @@ export class Match {
     const msg = { t: 'hit', v: target.n, dmg, ab, head: extra.head ? 1 : 0 };
     if (extra.burn) msg.burn = extra.burn;
     if (extra.kb) msg.kb = extra.kb;
+    if (extra.slow) msg.slow = extra.slow;
     this.sendToHost(msg);
     // instant feedback (host confirms HP)
     this.app.hud.hitMarker(extra.head, dmg);
     this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
     Audio.play(extra.head ? 'head' : 'hit', 0.6);
-    if (ab !== 'nova' && ab !== 'meteor') this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
+    if (ab !== 'nova' && ab !== 'meteor' && ab !== 'adolla' && ab !== 'adollaPath') this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
   }
 
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
@@ -185,6 +212,7 @@ export class Match {
       const dmg = Math.round(maxD + (minD - maxD) * k);
       const extra = { at: new THREE.Vector3(e.pos.x, e.pos.y + 1.4, e.pos.z) };
       if (opts.burn) extra.burn = opts.burn;
+      if (opts.slow) extra.slow = opts.slow;
       if (opts.kb) {
         const hx = e.pos.x - c.x, hz = e.pos.z - c.z, hl = Math.hypot(hx, hz) || 1;
         const s = opts.kb * (1 - k * 0.5);
@@ -204,13 +232,92 @@ export class Match {
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
       case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
+      // ---- Pyro: Fire Force kit
+      case 'kick': {
+        const o = new THREE.Vector3().fromArray(d.o);
+        const dx = d.d[0], dz = d.d[1], L = Math.min(KICK.speed * KICK.time, Number(d.l) || 0);
+        const a = new THREE.Vector3(o.x, o.y, o.z), b = new THREE.Vector3(o.x + dx * L, 0, o.z + dz * L);
+        b.y = this.world.groundAt(b.x, b.z, o.y + 3);
+        e.kickT = KICK.time + 0.05;
+        this.fx.fireTrail(a, b, 3.5, KICK.time, 0.55);
+        this.areas.push({ kind: 'trail', a, b, w: 1.0, t: 0, life: 3.5, tick: 0.3, owner: e.n, local, dmg: 6, ab: 'trail', burn: [3, 1.5] });
+        this.sound('kick', o, 1, 35);
+        break;
+      }
+      case 'kickHit': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.kickImpact(c, d.d[0], d.d[1]);
+        this.sound('kickHit', c, 1, 40);
+        break;
+      }
+      case 'ember': this.proj.spawn(e.n, 'ember', d.o, d.d, local); if (!local && Math.random() < 0.5) this.sound('ember', tmpV.fromArray(d.o), 0.4, 25); break;
+      case 'igniteBoom': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.igniteBoom(c, IGNITE.boomR);
+        this.sound('explode', c, 0.8, 35);
+        if (local) this.areaDamage(c, IGNITE.boomR, IGNITE.boomDmg, 18, 'igniteBoom', { kb: 5, up: 5 });
+        break;
+      }
+      case 'step': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.infernalStep(c, STEP.radius);
+        e.boostT = STEP.boost;
+        this.sound('stomp', c, 1, 45);
+        if (local) this.areaDamage(c, STEP.radius, STEP.maxDmg, STEP.minDmg, 'step', { kb: 13, up: 6, slow: [STEP.slow, STEP.slowT], burn: [3, 2] });
+        break;
+      }
+      case 'adolla': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3().fromArray(d.d).normalize();
+        const L = Math.min(ADOLLA.range, Number(d.l) || ADOLLA.range);
+        this.sound('adollaCharge', o, 1.1, 80);
+        this.fx.adolla(o, dir, L, {
+          charge: ADOLLA.charge, beam: ADOLLA.beam,
+          onFire: () => {
+            this.sound('adollaBeam', o, 1.4, 160);
+            // burning scar on the ground under the beam
+            const a = new THREE.Vector3(o.x, 0, o.z), b = new THREE.Vector3(o.x + dir.x * L, 0, o.z + dir.z * L);
+            a.y = this.world.groundAt(a.x, a.z, o.y + 2); b.y = this.world.groundAt(b.x, b.z, o.y + dir.y * L + 4);
+            this.fx.fireTrail(a, b, ADOLLA.path, 0.12, 1.1);
+            this.areas.push({ kind: 'trail', a, b, w: 1.6, t: 0, life: ADOLLA.path, tick: 0.2, owner: e.n, local, dmg: 8, ab: 'adollaPath', burn: [5, 2] });
+            if (local) {
+              // pierces: everyone along the beam, once
+              const end = tmpV2.copy(o).addScaledVector(dir, L);
+              for (const t of this.ents.values()) {
+                if (t === this.local || !t.alive) continue;
+                if (distToSeg3(t.pos, o, end) < ADOLLA.width) this.reportHit(t, ADOLLA.dmg, 'adolla', { kb: [dir.x * 11, 5, dir.z * 11], burn: [7, 3], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.3, t.pos.z) });
+              }
+              // recoil
+              this.body.vel.x -= dir.x * 3; this.body.vel.z -= dir.z * 3;
+            }
+          },
+        });
+        break;
+      }
       case 'starfall': {
         const c = new THREE.Vector3().fromArray(d.c);
-        this.sound('meteorFall', c, 0.5, 40);
-        this.fx.starfall(c, 3.8, 0.75, () => {
-          this.sound('explode', c, 0.9, 40);
-          if (local) this.areaDamage(c, 3.8, 55, 20, 'starfall', { kb: 6 });
-        });
+        const raw = Array.isArray(d.p) ? d.p.slice(0, STARFALL.count * 3) : [c.x, c.y, c.z];
+        const pts = [];
+        for (let i = 0; i + 2 < raw.length; i += 3) pts.push(new THREE.Vector3(+raw[i], +raw[i + 1], +raw[i + 2]));
+        this.sound('starCall', c, 0.9, 60);
+        this.fx.starfallBarrage(pts, { first: STARFALL.first, gap: STARFALL.gap, radius: STARFALL.radius, onImpact: (p) => {
+          this.sound('starHit', p, 0.8, 45);
+          if (local) this.areaDamage(p, STARFALL.radius, STARFALL.dmg, STARFALL.minDmg, 'starfall', { kb: 4, up: 4 });
+        } });
+        break;
+      }
+      case 'sigilPull': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.sigilVortex(c, 1.9, 0.4);
+        this.sound('vortex', c, 0.9, 35);
+        if (local) {
+          for (const t of this.ents.values()) {
+            if (t === this.local || !t.alive) continue;
+            const dx = c.x - t.pos.x, dz = c.z - t.pos.z, dl = Math.hypot(dx, dz);
+            if (dl > 5.5 || Math.abs(t.pos.y - c.y) > 2.5) continue;
+            const k = Math.min(12, dl * 3.4) / (dl || 1);
+            this.reportHit(t, 5, 'sigil', { kb: [dx * k, 3, dz * k], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.2, t.pos.z) });
+          }
+        }
         break;
       }
       case 'sigil': {
@@ -239,23 +346,26 @@ export class Match {
       case 'blink': {
         const a = new THREE.Vector3().fromArray(d.o), b = new THREE.Vector3().fromArray(d.t);
         this.fx.blinkFx(a, b);
-        this.fx.sparkBurst(new THREE.Vector3(a.x, a.y + 0.6, a.z), 3);
+        this.fx.ring(b, 2.4, 0.3, new THREE.Color(3, 0.6, 0.4));
         this.sound('blink', b, 0.8, 30);
-        if (local) this.areaDamage(new THREE.Vector3(a.x, a.y + 0.6, a.z), 3, 30, 15, 'blink', {});
+        this.fx.blinkEcho(a, 0.65, (c) => {
+          this.sound('explode', c, 0.8, 35);
+          if (local) this.areaDamage(c, 3.2, 42, 18, 'blink', { kb: 6, up: 5 });
+        });
         if (!local) e.snaps.length = 0;
         break;
       }
       case 'nova': {
         const c = new THREE.Vector3().fromArray(d.c), o = new THREE.Vector3().fromArray(d.o);
-        this.sound('novaChant', o, 1.2, 120);
-        this.app.hud.novaWarning(c, NOVA.radius, e === this.local);
+        this._startCine(e, c, o);
         this.fx.nova(c, o, {
           radius: NOVA.radius, channel: NOVA.channel,
+          stagger: [1.2, 1.72, 2.24, 2.76, 3.28, 3.8, 4.32],
+          onLayer: (i) => Audio.play('circleOn', 0.45 + i * 0.06, 0, 0.9 + i * 0.05),
           onFlash: () => {
-            // everyone who can see it gets blinded for a moment
-            const dist = this.camera.position.distanceTo(c);
-            this.app.hud.flash(Math.max(0, Math.min(1, 1.3 - dist / 140)));
-            this.sound('novaBoom', c, 1.5, 300);
+            this.app.hud.flash(1);
+            Audio.play('novaBoom', 1.3);
+            setTimeout(() => Audio.play('rumble', 0.9), 400);
           },
           onImpact: () => {
             if (local) this.areaDamage(c, NOVA.radius, NOVA.maxDmg, NOVA.minDmg, 'nova', { kb: 16, up: 12, noCover: true, burn: [8, 3] });
@@ -293,6 +403,70 @@ export class Match {
       }
       default: break;
     }
+  }
+
+  // ---------------------------------------------------------------- Crimson Nova cutscene
+  // Universal: every client plays the same shots, all controls are locked until it ends.
+  _startCine(caster, c, o) {
+    if (this.cine) return; // a second nova during one keeps its own effect, not a second camera
+    const f = new THREE.Vector3(c.x - o.x, 0, c.z - o.z);
+    if (f.lengthSq() < 0.01) f.set(Math.sin(caster.yaw), 0, Math.cos(caster.yaw));
+    f.normalize();
+    this.cine = { t: 0, dur: NOVA.cine, caster, c, o: o.clone(), f, side: new THREE.Vector3(-f.z, 0, f.x), subs: 0, orbit: Math.atan2(o.z - c.z, o.x - c.x) };
+    this.app.hud.cineStart();
+    Audio.play('rumble', 0.6);
+    Audio.play('novaChant', 0.9);
+    setTimeout(() => { if (this.cine) Audio.play('novaChant', 1, 0, 1.25); }, 2600);
+    setTimeout(() => { if (this.cine) Audio.play('rumble', 0.9); }, 3200);
+    setTimeout(() => { if (this.cine) Audio.play('novaWord', 1); }, 5300);
+  }
+
+  _cineUpdate(dt) {
+    const C = this.cine;
+    C.t += dt;
+    const subs = [
+      [0.25, 'Crimson stars that sleep beneath the world…'],
+      [1.95, 'Seven seals of ruin, open at my word.'],
+      [3.5, 'Let the sky remember fire… and the earth remember fear.'],
+      [5.25, 'EXPLOSION!', true],
+      [6.5, ''],
+    ];
+    while (C.subs < subs.length && C.t >= subs[C.subs][0]) { const [, text, big] = subs[C.subs]; this.app.hud.cineSub(text, !!big); C.subs++; }
+    this.app.hud.cineDark(Math.min(1, C.t / 3.5) * (C.t < 6.4 ? 1 : Math.max(0, 1 - (C.t - 6.4) / 1.5)));
+    if (C.t >= C.dur) { this.cine = null; this.app.hud.cineEnd(); this.cam.pivotY = null; }
+  }
+
+  _cineCamera() {
+    const C = this.cine, t = C.t, o = C.caster.pos, c = C.c, f = C.f, sd = C.side, cam = this.camera;
+    const P = tmpV, L = tmpV2;
+    let fov = 50;
+    if (t < 1.6) { // close-up: her face and staff as the chant begins
+      const d = 2.3 - t * 0.2;
+      P.set(o.x + f.x * d + sd.x * 1.3, o.y + 0.95, o.z + f.z * d + sd.z * 1.3);
+      L.set(o.x, o.y + 1.45, o.z); fov = 40;
+    } else if (t < 3.2) { // over the shoulder, tilting up to the seals forming over the target
+      const k = (t - 1.6) / 1.6;
+      P.set(o.x - f.x * 3.2 + sd.x * 1.4, o.y + 1.6, o.z - f.z * 3.2 + sd.z * 1.4);
+      L.set(c.x, c.y + 3 + k * 12, c.z); fov = 60;
+    } else if (t < 5.0) { // slow orbit around the target: the full tower of circles
+      const a = C.orbit + (t - 3.2) * 0.32, r = NOVA.radius * 2.1;
+      P.set(c.x + Math.cos(a) * r, c.y + 36 + (t - 3.2) * 4, c.z + Math.sin(a) * r);
+      L.set(c.x, c.y + 16, c.z); fov = 64;
+    } else if (t < 6.4) { // side profile: the final word
+      const k = (t - 5.0) / 1.4;
+      P.set(o.x + sd.x * (3.4 - k * 0.8) + f.x * 0.9, o.y + 1.2, o.z + sd.z * (3.4 - k * 0.8) + f.z * 0.9);
+      L.set(o.x + f.x * 0.6, o.y + 1.35, o.z + f.z * 0.6); fov = 45;
+    } else { // the catastrophe, from far away
+      const k = t - 6.4;
+      P.set(c.x - f.x * NOVA.radius * 3.0 + sd.x * NOVA.radius * 1.1, c.y + 16 + k * 2.5, c.z - f.z * NOVA.radius * 3.0 + sd.z * NOVA.radius * 1.1);
+      L.set(c.x, c.y + 10 + k * 4, c.z); fov = 66;
+      const sh = this.fx.shakeAmt * 0.6;
+      P.x += Math.sin(t * 47) * sh; P.y += Math.sin(t * 59 + 1) * sh;
+    }
+    P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 50) + 0.6);
+    cam.position.copy(P); cam.lookAt(L);
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    return L;
   }
 
   _wall(e, d, local) {
@@ -334,6 +508,21 @@ export class Match {
           }
         }
         if (ar.t >= ar.life) { Audio.stopLoop('wall' + ar.id); this.areas.splice(i, 1); }
+      } else if (ar.kind === 'trail') {
+        // burning ground along a segment (Devil's Foot trail, Adolla scar)
+        if (ar.local) {
+          ar.tick -= dt;
+          if (ar.tick <= 0) {
+            ar.tick = 0.5;
+            for (const e of this.ents.values()) {
+              if (e === this.local || !e.alive) continue;
+              const gy = ar.a.y + (ar.b.y - ar.a.y) * 0.5;
+              if (distToSegXZ(e.pos, ar.a, ar.b) < ar.w && e.pos.y < Math.max(ar.a.y, ar.b.y) + 2.2 && e.pos.y > Math.min(ar.a.y, ar.b.y) - 1.5) this.reportHit(e, ar.dmg, ar.ab, { burn: ar.burn, at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
+              void gy;
+            }
+          }
+        }
+        if (ar.t >= ar.life) this.areas.splice(i, 1);
       } else if (ar.kind === 'field') {
         ar.tick -= dt;
         if (ar.local && ar.tick <= 0) {
@@ -371,7 +560,8 @@ export class Match {
         if (e === this.local || !e.alive) continue;
         if (Math.hypot(e.pos.x - h.pos.x, e.pos.z - h.pos.z) < 2.0 && Math.abs(e.pos.y - h.pos.y) < 2) {
           h.fired = true;
-          this.castAbility({ ab: 'sigilBoom', id: h.id, c: [h.pos.x, h.pos.y, h.pos.z] });
+          this.castAbility({ ab: 'sigilPull', id: h.id, c: [h.pos.x, h.pos.y, h.pos.z] });
+          this.kit.pending.push({ t: 0.42, fn: () => this.castAbility({ ab: 'sigilBoom', id: h.id, c: [h.pos.x, h.pos.y, h.pos.z] }) });
           break;
         }
       }
@@ -426,7 +616,11 @@ export class Match {
       case 'ev': {
         const e = this.ents.get(msg.n);
         if (!e || e === this.local) return;
-        if (msg.k === 'anim') e.view.anim.play(msg.a, msg.d || {});
+        if (msg.k === 'anim') {
+          e.view.anim.play(msg.a, msg.d || {});
+          if (msg.a === 'dash') { e.dashFx = 0.24; this.fx.dashBurst(e.pos, tmpV.set(e.vel.x, 0, e.vel.z).normalize(), e.mage); this.sound('dash', e.pos, 0.7, 25); }
+          if (msg.a === 'doubleJump') { this.fx.doubleJumpFx(e.pos, e.mage); this.sound('doubleJump', e.pos, 0.6, 25); }
+        }
         else if (msg.k === 'ab') this.spawnAbility(e, msg, false);
         break;
       }
@@ -456,6 +650,13 @@ export class Match {
         break;
       }
       case 'burn': { const e = this.ents.get(msg.n); if (e) e.burnT = msg.s; break; }
+      case 'slow': {
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        e.slowT = msg.s;
+        if (e === this.local) { this.body.slowT = msg.s; this.body.slowK = msg.k; hud.status && hud.status('SLOWED', msg.s); }
+        break;
+      }
       case 'kill': {
         const v = this.ents.get(msg.v), k = this.ents.get(msg.k);
         if (v) {
@@ -476,10 +677,8 @@ export class Match {
         if (!e) return;
         e.alive = true; e.hp = BAL.hp; e.burnT = 0; e.hideAt = 0;
         e.pos.set(msg.x, msg.y, msg.z); e.vel.set(0, 0, 0); e.yaw = msg.yaw; e.snaps.length = 0;
-        e.view.anim.play('respawn');
+        if (!msg.quiet) { e.view.anim.play('respawn'); this.fx.spawnPillar(e.pos); e.spawnProt = this.time + 1.5; }
         e.view.setVisible(true);
-        e.spawnProt = this.time + 1.5;
-        this.fx.spawnPillar(e.pos);
         if (e === this.local) {
           this.body.teleport(msg.x, msg.y, msg.z, msg.yaw);
           this.cam.yaw = msg.yaw; this.cam.pitch = -0.08; this.cam.pivotY = null;
@@ -511,7 +710,14 @@ export class Match {
         e.alive = false; e.left = true; e.view.setVisible(false);
         break;
       }
-      case 'hostLeft': this.app.leaveMatch('The match host left.'); break;
+      case 'join': {
+        if (!msg.p || this.byId.has(msg.p.id)) break;
+        this._makeEnt(msg.p); this.players.push(msg.p);
+        this.app.chat.system(`${msg.p.name} joined the lobby.`);
+        break;
+      }
+      case 'qlive': this.app.hud.queueState(null); break;
+      case 'hostLeft': if (this.phase === 'queue') this.app.leaveMatch('Lobby host left — searching again…', { requeue: true }); else this.app.leaveMatch('The match host left.'); break;
       default: break;
     }
   }
@@ -532,8 +738,9 @@ export class Match {
     const st = input.poll();
     const [dx, dy] = input.consumeLook();
     const me = this.local;
-    if (!app.paused && !app.chat.isOpen) this.cam.look(dx, dy, app.settings.sens, app.settings.invertY);
-    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup';
+    if (!app.paused && !app.chat.isOpen && !this.cine) this.cam.look(dx, dy, app.settings.sens, app.settings.invertY);
+    if (this.cine) this._cineUpdate(dt);
+    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup' && !this.cine;
 
     // ---- local player
     if (me.alive) {
@@ -592,11 +799,14 @@ export class Match {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
         if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
         else if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
-        if (this.body.dashT > 0 && e === this.local) this.fx.dashTrail(e.pos);
+        if (e.dashFx > 0) { e.dashFx -= dt; this.fx.dashStreak(e.pos, e.vel, e.mage); }
+        if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
+        if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
+        if (e.slowT > 0) { e.slowT -= dt; this.fx.slowFx(e.pos); }
       }
     }
     // local view fades when the camera is jammed against it
-    this.view.root.visible = me.alive || (me.hideAt && this.time < me.hideAt) ? !this.cam.tooClose : this.view.root.visible;
+    this.view.root.visible = me.alive || (me.hideAt && this.time < me.hideAt) ? (this.cine ? true : !this.cam.tooClose) : this.view.root.visible;
 
     this.proj.update(dt);
     this._updateAreas(dt);
@@ -607,8 +817,9 @@ export class Match {
     Audio.loop('brazier', 'fireLoop', 0.35 / (1 + (dA / 10) ** 2));
 
     // ---- camera + aim
-    const focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);
-    this.cam.update(dt, focus, st.aim && me.alive, this.fx.shakeAmt);
+    let focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);
+    if (this.cine) focus = this._cineCamera();
+    else this.cam.update(dt, focus, st.aim && me.alive, this.fx.shakeAmt);
     this._computeAim();
     this.fx.update(dt, this.camera, app.height);
     this.map.update(dt, this.camera, focus, pushers);
@@ -630,8 +841,9 @@ export class Match {
     const me = this.local, b = this.body;
     switch (k) {
       case 'jump': this.view.anim.play('jumpStart'); this.sound('jump', b.pos, 0.5, 20); break;
+      case 'doubleJump': this.playAnim('doubleJump', d); this.sound('doubleJump', b.pos, 0.7, 25); this.fx.doubleJumpFx(b.pos, this.local.mage); break;
       case 'land': this.view.anim.play('land', d); if (d.vy < -6) this.sound('land', b.pos, Math.min(1, -d.vy / 14), 20); break;
-      case 'dash': this.playAnim('dash', d); this.sound('dash', b.pos, 0.8, 25); this.fx.dashTrail(b.pos); break;
+      case 'dash': this.playAnim('dash', d); this.sound('dash', b.pos, 0.8, 25); me.dashFx = 0.24; this.fx.dashBurst(b.pos, b.dashDir, me.mage); this.cam.dashKick = 1; break;
       case 'roll': this.playAnim('roll', d); this.sound('roll', b.pos, 0.8, 20); break;
       case 'step': this.sound(d.water > 0.1 ? 'splash' : 'step', b.pos, d.water > 0.1 ? 0.4 : 0.25, 15); break;
       default: break;
@@ -683,6 +895,7 @@ export class Match {
   sendChat(text) { this.sendToHost({ t: 'chat', msg: text }); }
 
   dispose() {
+    if (this.cine) { this.cine = null; this.app.hud.cineEnd(); }
     for (const off of this._offs || []) off();
     for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);
     Audio.stopLoop('brazier');
@@ -698,6 +911,12 @@ export class Match {
   }
 }
 
+function distToSeg3(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const py = p.y + 0.9;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (py - a.y) * dy + (p.z - a.z) * dz) / (dx * dx + dy * dy + dz * dz || 1)));
+  return Math.hypot(p.x - (a.x + dx * t), py - (a.y + dy * t), p.z - (a.z + dz * t));
+}
 function distToSegXZ(p, a, b) {
   const dx = b.x - a.x, dz = b.z - a.z;
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz)));

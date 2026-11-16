@@ -112,8 +112,9 @@ export class Hud {
       ult.pct.textContent = up >= ULT_COST ? 'READY' : `${up}%`;
       ult.d.classList.toggle('full', up >= ULT_COST);
     }
+    if (this.q) this.set('qt', Math.floor((performance.now() - this.q.start) / 1000), (v) => { document.querySelector('#queueBar .qt').textContent = fmtTime(v); });
     // top center
-    if (m.cfg.mode !== 'practice') {
+    if (m.cfg.mode !== 'practice' && !this.q) {
       const t = m.phase === 'warmup' ? m.timeLeft : m.timeLeft;
       this.set('time', fmtTime(t), (v) => { $('tcTime').textContent = v; });
       this.set('meK', me.kills, (v) => { $('tcMe').textContent = v; });
@@ -251,7 +252,18 @@ export class Hud {
   }
   respawned() { show('deathScreen', false); this.deathAt = 0; }
 
+  // matchmaking lobby bar (shown while the queue is still filling); q = null hides it
+  queueState(q) {
+    let el = document.getElementById('queueBar');
+    if (!el) { el = document.createElement('div'); el.id = 'queueBar'; el.innerHTML = '<b>FINDING PLAYERS</b><span class="qn"></span><span class="qt"></span><i>Warm up while the lobby fills · Esc to leave the queue</i>'; document.getElementById('hud').appendChild(el); }
+    this.q = q && q.searching ? q : null;
+    el.classList.toggle('on', !!this.q);
+    if (this.q) el.querySelector('.qn').textContent = `${q.found || 1} / ${q.size || 8}`;
+    show('topCenter', !this.q && this.match && this.match.cfg.mode !== 'practice');
+  }
+
   phase(p, tl) {
+    if (p === 'queue') { this.banner('QUEUE LOBBY', 'ROAM AND WARM UP WHILE PLAYERS JOIN', 2.4); return; }
     if (p === 'warmup') this.banner('GET READY', `MATCH STARTS IN ${Math.ceil(tl)}`, Math.max(1, tl - 0.3));
     if (p === 'live' && this.match && this.match.cfg.mode !== 'practice') this.banner('FIGHT', this.match.killsToWin ? `FIRST TO ${this.match.killsToWin} KILLS` : '', 1.6);
   }
@@ -261,6 +273,30 @@ export class Hud {
     if (mine) this.banner('CRIMSON NOVA', 'CHANTING…', 2.2);
     else if (me && Math.hypot(me.pos.x - c.x, me.pos.z - c.z) < radius + 8) this.banner('CRIMSON NOVA INCOMING', 'GET OUT OF THE CIRCLE!', 2.2, 'kill');
   }
+
+  // ---------------------------------------------------------------- cutscene (Crimson Nova)
+  cineStart() {
+    if (!this.cineEl) {
+      const c = document.createElement('div'); c.id = 'cine';
+      c.innerHTML = '<div class="cine-dark"></div><div class="cine-bar top"></div><div class="cine-bar bot"></div><div class="cine-sub"></div><div class="cine-tag">CRIMSON NOVA</div>';
+      document.body.appendChild(c);
+      this.cineEl = c;
+    }
+    this.cineEl.className = 'on';
+    this.cineEl.querySelector('.cine-sub').textContent = '';
+    document.body.classList.add('cine-on');
+  }
+  cineSub(text, big) {
+    if (!this.cineEl) return;
+    const el = this.cineEl.querySelector('.cine-sub');
+    el.classList.remove('show', 'big');
+    void el.offsetWidth;
+    el.textContent = text;
+    if (text) el.classList.add('show');
+    if (big) el.classList.add('big');
+  }
+  cineDark(k) { if (this.cineEl) this.cineEl.querySelector('.cine-dark').style.opacity = String(k * 0.55); }
+  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); }
 
   // full-screen white flash (nova); 0..1
   flash(k) {

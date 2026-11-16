@@ -54,7 +54,7 @@ export function buildWater() {
         float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, v), 0.0), 5.0);
         vec3 r = reflect(-v, n);
         vec3 sky = mix(uHor, uSky, pow(max(r.y, 0.0), 0.5));
-        vec3 deep = vec3(0.03, 0.14, 0.2), shallow = vec3(0.16, 0.36, 0.36);
+        vec3 deep = vec3(0.02, 0.16, 0.24), shallow = vec3(0.1, 0.46, 0.46);
         vec3 body = mix(shallow, deep, smoothstep(0.0, 0.9, vDepth));
         vec3 col = mix(body, sky * 0.85, fres * 0.6);
         float spec = pow(max(dot(r, uSun), 0.0), 220.0);

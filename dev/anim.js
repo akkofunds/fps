@@ -46,6 +46,8 @@ function sim(inst) {
   if (['plant', 'nova', 'exhausted'].includes(st)) a.play(st);
   if (st === 'fidget') a.castA = { def: { clip: a.rig.hasProp ? C.FIDGET_M : C.FIDGET_P, in: 0.3, out: 0.4, fidget: true }, t: 0, w: 0 };
   if (st === 'respawn') a.play('respawn');
+  if (st === 'djump') { s.grounded = false; s.vel.set(0, 6, 3); for (let k = 0; k < 10; k++) a.update(dtt, s); a.play('doubleJump', { dir: 0 }); }
+  if (['kick', 'stomp', 'adolla'].includes(st)) a.play(st);
   if (st === 'mbolt2') { a.play('cast', { anim: 'mBolt' }); for (let k = 0; k < 20; k++) a.update(dtt, s); a.play('cast', { anim: 'mBolt' }); }
   if (st === 'hitf') a.play('hit', { dir: 0, dmg: 30 });
   if (st === 'hitl') a.play('hit', { dir: 1.57, dmg: 30 });

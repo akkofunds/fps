@@ -29,15 +29,23 @@ import { $, show, toast } from './ui/dom.js';
 const KEY_HIST = 'magebreak.history';
 
 // first run: pick a graphics preset from the GPU string
-function detectQuality() {
+export function gpuName() {
   try {
     const gl = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl');
     const ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
-    const r = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
-    if (/swiftshader|llvmpipe|software|mali|adreno|powervr|apple gpu/i.test(r) || /Android|iPhone|iPad|CrOS/i.test(navigator.userAgent)) return 'low';
-    if (/intel|iris|uhd|hd graphics|radeon\(tm\) graphics|vega/i.test(r)) return 'medium';
-    return 'high';
-  } catch { return 'medium'; }
+    return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+  } catch { return ''; }
+}
+// integrated GPUs (incl. the small Radeon iGPU inside Ryzen 7000 desktop CPUs, which browsers
+// sometimes pick instead of the graphics card)
+const IGPU = /intel|iris|uhd|hd graphics|radeon\(tm\) graphics|radeon graphics|vega \d|680m|780m|610m/i;
+const isIPad = () => /iPad/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function detectQuality() {
+  const r = gpuName();
+  if (/swiftshader|llvmpipe|software|mali|adreno|powervr/i.test(r) || /Android|iPhone|CrOS/i.test(navigator.userAgent) || isIPad()) return 'low';
+  if (IGPU.test(r)) return 'low';
+  if (/apple/i.test(r)) return 'medium'; // Apple silicon Macs
+  return 'medium'; // dedicated GPUs: medium + dynamic resolution; High/Ultra are opt-in
 }
 
 // colour grade (HDR, before tone mapping): gentle saturation/contrast lift + vignette
@@ -70,7 +78,11 @@ class App {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.shadowMap.enabled = Q.shadows;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.settings.quality === 'medium' ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    // the sun's shadow map is re-rendered every other frame (half the shadow cost, invisible at 60 FPS)
+    this.renderer.shadowMap.autoUpdate = false;
+    this._frame = 0;
+    this.gpu = gpuName();
     this.width = 1; this.height = 1; this.aspect = 1;
     this.input = new Input(this.canvas);
     this.chat = new Chat(this.input);
@@ -100,6 +112,9 @@ class App {
     await new Promise((r) => setTimeout(r, 30));
     this.map = new GameMap(this.settings.quality);
     this._setupComposer();
+    // re-apply what the auto-tuner learned last time on this device
+    for (let i = 0; i < (this.settings.autoTier || 0); i++) this._degrade(true);
+    if (IGPU.test(this.gpu) && !/Mac/.test(navigator.platform) && !isIPad()) setTimeout(() => toast('Your browser is using integrated graphics. For much smoother play, set your browser to use your graphics card (Windows: Settings → Display → Graphics → your browser → High performance).', 9000), 4000);
     this.progress(0.55, 'Summoning Pyro…');
     try { await Promise.all(MAGE_LIST.map((m) => loadMageModel(m.model))); } catch (e) { console.error(e); toast('Failed to load a character model.'); }
     await this.lobbyScene.init(this.map);
@@ -121,6 +136,7 @@ class App {
     });
     this.session = new SessionController(this);
     this.session.on('start', (opts) => this.startMatch(opts));
+    this.session.on('queue', (q) => { if (this.match && this.match.cfg.queue) this.hud.queueState(q); });
     this.lobby = new Lobby(this);
     this.chat.setContext('lobby', (text) => this.pm.chat(text));
     this.lobby.show(true);
@@ -162,7 +178,8 @@ class App {
   }
 
   renderScene(scene, camera) {
-    if (this.composer) {
+    if (this.renderer.shadowMap.enabled && (this._frame++ & 1) === 0) this.renderer.shadowMap.needsUpdate = true;
+    if (this.composer && !this.noPost) {
       this.renderPass.scene = scene; this.renderPass.camera = camera;
       if (this.gtao) { this.gtao.scene = scene; this.gtao.camera = camera; }
       this.composer.render();
@@ -247,12 +264,50 @@ class App {
     else if (fps >= 59) { p.good++; if (p.good >= 4 && p.cool === 0 && this.dynScale < 1) { next = Math.min(1, this.dynScale * 1.06); p.good = 0; } }
     else p.good = 0;
     if (Math.abs(next - this.dynScale) > 0.005) { this.dynScale = next; this.resize(); }
-    // still slow at the resolution floor → suggest a lighter preset (once per session)
-    if (fps < 45 && this.dynScale <= Q.minScale + 0.01) {
+    // still slow at the resolution floor → the auto-tuner switches off the next most expensive
+    // feature (remembered for next time on this device)
+    if (fps < 50 && this.dynScale <= Q.minScale + 0.01 && !document.hidden) {
       p.slow = (p.slow || 0) + 1;
-      if (p.slow === 4 && !this._slowHint && this.settings.quality !== 'low') { this._slowHint = true; toast('Running slow — try a lower Graphics quality in Settings (Low is tuned for Chromebooks).', 6000); }
+      if (p.slow >= 3 && this.settings.autoTune !== false) {
+        p.slow = 0;
+        if (this._degrade()) {
+          this.settings.autoTier = (this.settings.autoTier || 0) + 1; this.saveSettings();
+          this.dynScale = Math.min(1, this.dynScale * 1.25); this.resize();
+          if (!this._tuneHint) { this._tuneHint = true; toast('Auto-tuning graphics for a smoother frame rate…', 3500); }
+        }
+      }
     } else p.slow = 0;
     this.lastFps = fps;
+  }
+
+  // One step down the "what costs the most for the least visual loss" ladder. Returns false when
+  // nothing is left to turn off.
+  _degrade(silent) {
+    const steps = [
+      () => { if (this.map.lodScale <= 0.75) return false; this.map.lodScale = 0.72; return true; },
+      () => { if (!this.gtao || !this.gtao.enabled) return false; this.gtao.enabled = false; return true; },
+      () => {
+        if (!this.composer || !this.composer.renderTarget1.samples) return false;
+        for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) { t.samples = 0; t.dispose(); }
+        return true;
+      },
+      () => { if (this.map.lodScale <= 0.55) return false; this.map.lodScale = 0.52; return true; },
+      () => {
+        if (!this.renderer.shadowMap.enabled) return false;
+        this.renderer.shadowMap.enabled = false; this.map.sun.castShadow = false;
+        this.map.scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
+        return true;
+      },
+      () => {
+        if (!this.composer || this.noPost) return false;
+        this.noPost = true;
+        if (this.match) this.match.fx.fire.mat.uniforms.uGain.value = 0.55;
+        return true;
+      },
+      () => { if (this.map.lodScale <= 0.4) return false; this.map.lodScale = 0.38; return true; },
+    ];
+    for (const f of steps) if (f()) { if (!silent) console.info('auto-tune step'); return true; }
+    return false;
   }
 
   pause(on) {
@@ -286,6 +341,11 @@ class App {
     this.chat.setContext('match', (text) => m.sendChat(text));
     this.match = m;
     m.resize(this.width, this.height);
+    this.session.matchReady(m);
+    if (m.cfg.queue) {
+      this.hud.queueState({ searching: true, start: this.session.queueStart, found: (this.session.humans || []).length || m.players.length, size: 8 });
+      $('btnLeave').textContent = 'LEAVE QUEUE';
+    } else $('btnLeave').textContent = 'LEAVE MATCH';
     this.input.enabled = true;
     Audio.init(); Audio.resume();
     document.body.classList.add('in-match');
@@ -301,8 +361,9 @@ class App {
     $('btnResume').textContent = 'PLAY';
   }
 
-  leaveMatch(reason) {
+  leaveMatch(reason, opts = {}) {
     if (!this.match) return;
+    this.hud.queueState(null);
     const m = this.match;
     this.match = null;
     m.dispose();
@@ -319,6 +380,7 @@ class App {
     this.lobby.setTab('play');
     $('btnResume').textContent = 'RESUME';
     if (reason) toast(reason, 3500);
+    if (opts.requeue) setTimeout(() => { if (!this.match && this.session && !this.session.busy) this.session.startQueue(); }, 600);
   }
 
   loop(tMs) {

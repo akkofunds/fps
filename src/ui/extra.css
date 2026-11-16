@@ -96,3 +96,31 @@ body.touch .top-center { transform: translateX(-50%) scale(0.8); transform-origi
   .mode-tabs { top: 8px; }
   .chat { display: none; }
 }
+
+/* ---------------- Crimson Nova cutscene */
+#cine { position: fixed; inset: 0; pointer-events: none; z-index: 40; opacity: 0; transition: opacity 0.35s; }
+#cine.on { opacity: 1; }
+#cine .cine-dark { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at 50% 40%, rgba(80, 0, 10, 0.2) 0%, rgba(40, 0, 6, 0.75) 70%, rgba(10, 0, 2, 0.95) 100%); }
+#cine .cine-bar { position: absolute; left: 0; right: 0; height: 11vh; background: #000; transition: transform 0.6s cubic-bezier(.2,.8,.2,1); }
+#cine .cine-bar.top { top: 0; transform: translateY(-100%); }
+#cine .cine-bar.bot { bottom: 0; transform: translateY(100%); }
+#cine.on .cine-bar { transform: translateY(0); }
+#cine .cine-sub { position: absolute; left: 50%; bottom: 14vh; transform: translateX(-50%); max-width: 86vw; text-align: center; color: #ffe7d6; font: italic 600 clamp(15px, 2.3vw, 26px)/1.35 'Rajdhani', 'Segoe UI', sans-serif; letter-spacing: 0.04em; text-shadow: 0 0 18px rgba(255, 60, 40, 0.8), 0 2px 4px #000; opacity: 0; transition: opacity 0.4s; }
+#cine .cine-sub.show { opacity: 1; }
+#cine .cine-sub.big { bottom: 40vh; font: 800 clamp(42px, 9vw, 120px)/1 'Rajdhani', 'Segoe UI', sans-serif; font-style: normal; letter-spacing: 0.12em; color: #fff3e0; text-shadow: 0 0 30px #ff3a20, 0 0 80px #ff2010, 0 4px 8px #000; animation: cineShout 1.1s cubic-bezier(.2,1.4,.3,1) both; }
+@keyframes cineShout { from { transform: translateX(-50%) scale(2.2); opacity: 0; filter: blur(8px); } 40% { opacity: 1; filter: blur(0); } to { transform: translateX(-50%) scale(1); } }
+#cine .cine-tag { position: absolute; top: 3vh; left: 50%; transform: translateX(-50%); color: #ff9a8a; font: 700 12px/1 'Rajdhani', sans-serif; letter-spacing: 0.5em; opacity: 0.85; }
+body.cine-on #hud > *:not(#flash) { visibility: hidden; }
+body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
+
+/* ---------------- queue lobby bar */
+#queueBar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 14px; padding: 9px 18px; background: rgba(12, 16, 22, 0.78); border: 1px solid rgba(255, 140, 90, 0.45); border-radius: 4px; color: #f2ece4; font: 600 14px/1 'Rajdhani', sans-serif; letter-spacing: 0.12em; backdrop-filter: blur(4px); }
+#queueBar.on { display: flex; }
+#queueBar b { color: #ff9a63; letter-spacing: 0.2em; animation: qPulse 1.6s ease-in-out infinite; }
+#queueBar .qn { font-size: 18px; }
+#queueBar .qt { color: #b9c2cc; min-width: 40px; }
+#queueBar i { font-style: normal; font-size: 11px; color: #9aa4ad; letter-spacing: 0.06em; }
+@keyframes qPulse { 50% { opacity: 0.55; } }
+@media (max-width: 700px) { #queueBar i { display: none; } }
+/* tablets: bigger ability buttons */
+@media (min-width: 900px) and (pointer: coarse) { .tbtns { transform: scale(1.28); transform-origin: 100% 100%; } }

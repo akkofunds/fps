@@ -3,7 +3,7 @@ import { BAL } from './balance.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, spark: 30, starfall: 60, sigil: 70, blink: 35, nova: 400 };
+const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 30, starfall: 40, sigil: 80, blink: 45, nova: 500 };
 
 export class Rules {
   constructor(match) {
@@ -27,12 +27,31 @@ export class Rules {
   }
 
   start() {
+    if (this.m.cfg.queue) {
+      // matchmaking lobby: free roam + warm-up fights until the lobby fills
+      this.phase = 'queue'; this.phaseEnd = 0;
+      this.spawnAll();
+      this.bcast({ t: 'phase', p: 'queue', tl: 0 });
+      return;
+    }
     const practice = this.m.cfg.mode === 'practice';
     this.phase = practice ? 'live' : 'warmup';
     this.phaseEnd = this.now + (practice ? 0 : 4);
     this.spawnAll();
     if (practice) this.spawnDummies();
     this.bcast({ t: 'phase', p: this.phase, tl: practice ? 0 : 4 });
+  }
+
+  // lobby full → reset the warm-up scores and start the real match in place
+  goLive() {
+    if (this.phase !== 'queue') return;
+    for (const e of this.m.ents.values()) { e.kills = 0; e.deaths = 0; e.dmg = 0; }
+    this.burns.clear(); this.respawnAt.clear();
+    this.phase = 'warmup'; this.phaseEnd = this.now + 5;
+    this.bcast({ t: 'qlive' });
+    this.spawnAll();
+    this.bcast({ t: 'phase', p: 'warmup', tl: 5 });
+    this.sendBoard();
   }
 
   spawnAll() { for (const e of this.m.ents.values()) if (!e.dummy && !e.left) this.spawn(e); }
@@ -75,7 +94,7 @@ export class Rules {
   }
 
   onHit(from, msg) {
-    if (this.phase !== 'live') return;
+    if (this.phase !== 'live' && this.phase !== 'queue') return;
     const v = this.m.ents.get(msg.v);
     if (!v || !v.alive || v === from) return;
     if (v.spawnProt && this.m.time < v.spawnProt) return;
@@ -90,6 +109,10 @@ export class Rules {
       const cur = this.burns.get(v.n);
       this.burns.set(v.n, { dps, until: this.now + secs, by: from.n, acc: cur ? cur.acc : 0 });
       this.bcast({ t: 'burn', n: v.n, s: secs });
+    }
+    if (v.alive && Array.isArray(msg.slow)) {
+      const k = Math.max(0.3, Math.min(1, Number(msg.slow[0]) || 1)), s = Math.max(0, Math.min(3, Number(msg.slow[1]) || 0));
+      if (s > 0) this.bcast({ t: 'slow', n: v.n, k, s });
     }
     if (v.alive && Array.isArray(msg.kb)) {
       const k = msg.kb.map((x) => Math.max(-16, Math.min(16, Number(x) || 0)));
@@ -110,12 +133,12 @@ export class Rules {
     v.alive = false;
     v.deaths++;
     if (k && k !== v && !v.dummy) k.kills++;
-    const rt = v.dummy ? 2 : BAL.respawn;
+    const rt = v.dummy ? 2 : this.phase === 'queue' ? 1.5 : BAL.respawn;
     this.respawnAt.set(v.n, this.now + rt);
     this.burns.delete(v.n);
     this.bcast({ t: 'kill', k: k ? k.n : -1, v: v.n, ab, kk: k ? k.kills : 0, vd: v.deaths, rt });
     this.sendBoard();
-    if (this.killsToWin && k && k.kills >= this.killsToWin) this.end();
+    if (this.phase === 'live' && this.killsToWin && k && k.kills >= this.killsToWin) this.end();
   }
 
   end() {

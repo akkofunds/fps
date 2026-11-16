@@ -7,9 +7,9 @@ import { stylize } from './stylize.js';
 
 export const SUN_DIR = new THREE.Vector3(-0.55, 0.42, -0.72).normalize();
 export const SKY = {
-  zenith: new THREE.Color(0.09, 0.27, 0.72),
-  horizon: new THREE.Color(0.6, 0.72, 0.86),
-  fog: new THREE.Color(0.62, 0.72, 0.82),
+  zenith: new THREE.Color(0.06, 0.24, 0.74),
+  horizon: new THREE.Color(0.62, 0.76, 0.92),
+  fog: new THREE.Color(0.66, 0.77, 0.9),
   sun: new THREE.Color(1.0, 0.86, 0.66),
 };
 
@@ -63,33 +63,64 @@ export function buildSky() {
   return mesh;
 }
 
+// The Alps: a ring of jagged, snow-capped peaks far beyond the meadow. Ridged multifractal noise
+// around the ring, rock on steep faces, snow above the treeline, dark conifer forest at the
+// foot, and aerial perspective baked into the vertex colors (they are unfogged so they stay crisp).
 export function buildMountains() {
   const n = makeNoise(2024);
   const g = new THREE.BufferGeometry();
-  const seg = 220, rings = 7;
-  const pos = [], col = [], idx = [];
-  const near = new THREE.Color(0.32, 0.42, 0.36), far = new THREE.Color(0.58, 0.66, 0.78), snow = new THREE.Color(0.92, 0.94, 0.98);
-  for (let r = 0; r < rings; r++) {
-    const rad = 620 + r * 90;
+  const seg = 360, rings = 40;
+  const R0 = 620, R1 = 1450;
+  const pos = [], idx = [];
+  const ridged = (x, z) => {
+    let s = 0, a = 1, f = 1, w = 1;
+    for (let o = 0; o < 5; o++) {
+      let v = 1 - Math.min(1, Math.abs(n.n2(x * f, z * f))); // n2 is ~[-1, 1]
+      v = v * v * w; w = Math.min(1, v * 1.6);
+      s += v * a; a *= 0.5; f *= 2.05;
+    }
+    return s;
+  };
+  for (let r = 0; r <= rings; r++) {
+    const u = r / rings;
+    const rad = R0 + (R1 - R0) * u;
     for (let i = 0; i <= seg; i++) {
       const a = (i / seg) * Math.PI * 2;
       const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-      const ridge = 1 - Math.abs(n.n2(Math.cos(a) * 4 + 3, Math.sin(a) * 4));
-      let h = r === 0 || r === rings - 1 ? -20 : (90 + 170 * Math.pow(ridge, 2.2) * (0.5 + 0.5 * n.fbm(Math.cos(a) * 9, Math.sin(a) * 9, 4))) * Math.sin((r / (rings - 1)) * Math.PI);
-      pos.push(x, h, z);
-      const c = near.clone().lerp(far, 0.35 + r / rings * 0.4);
-      if (h > 170) c.lerp(snow, Math.min(1, (h - 170) / 60));
-      col.push(c.r, c.g, c.b);
+      // two ranges: a nearer, lower one and the high snowy wall behind it
+      const near = Math.exp(-((u - 0.22) ** 2) / 0.012), far = Math.exp(-((u - 0.62) ** 2) / 0.05);
+      const nx = x / 620, nz = z / 620;
+      const rf = ridged(nx * 0.9 - 3, nz * 0.9 + 11);
+      let h = near * (30 + 85 * ridged(nx + 7, nz)) + far * (110 + 300 * Math.pow(rf / 1.6, 1.4) * 1.6);
+      h *= 0.75 + 0.25 * (n.n2(Math.cos(a) * 3 + 1, Math.sin(a) * 3) * 0.5 + 0.5);
+      if (r === 0 || r === rings) h = -30;
+      pos.push(x, h - 25, z);
     }
   }
-  for (let r = 0; r < rings - 1; r++) for (let i = 0; i < seg; i++) {
+  for (let r = 0; r < rings; r++) for (let i = 0; i < seg; i++) {
     const a = r * (seg + 1) + i, b = a + 1, c = a + seg + 1, d = c + 1;
-    idx.push(a, b, c, b, d, c);
+    idx.push(a, c, b, b, c, d);
   }
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx); g.computeVertexNormals();
-  const m = new THREE.Mesh(g, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.5, band: 0.1 }));
+  // colors from height, slope and distance
+  const P = g.attributes.position, Nn = g.attributes.normal, col = new Float32Array(P.count * 3), c = new THREE.Color();
+  const forest = new THREE.Color(0.1, 0.22, 0.12), meadow = new THREE.Color(0.28, 0.42, 0.16), rock = new THREE.Color(0.42, 0.42, 0.44), snow = new THREE.Color(0.97, 0.98, 1.0), haze = new THREE.Color(0.66, 0.76, 0.9);
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), ny = Nn.getY(i);
+    const d = Math.hypot(x, z);
+    const jit = n.n2(x / 40, z / 40) * 30;
+    c.copy(forest).lerp(meadow, Math.min(1, Math.max(0, (y - 30 + jit) / 50)) * 0.7);
+    c.lerp(rock, Math.min(1, Math.max(0, (y - 85 + jit) / 45)));
+    c.lerp(rock, Math.min(1, Math.max(0, (0.6 - ny) / 0.3)) * 0.55);
+    const snowK = Math.min(1, Math.max(0, (y - 135 + jit * 1.5) / 30)) * Math.min(1, Math.max(0, (ny - 0.1) / 0.2));
+    c.lerp(snow, snowK);
+    c.lerp(haze, Math.min(0.6, Math.max(0, (d - 600) / 1400)));
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.Mesh(g, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }), { wrap: 0.45, band: 0.08, clouds: true }));
   m.name = 'mountains';
+  m.frustumCulled = false;
   return m;
 }

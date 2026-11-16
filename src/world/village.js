@@ -54,31 +54,63 @@ function roofGeo(w, d, h) {
 }
 const box = (w, h, d, x, y, z, ry = 0) => { const g = new THREE.BoxGeometry(w, h, d); g.rotateY(ry); g.translate(x, y, z); return g; };
 
+// Swiss chalet: whitewashed stone ground floor, warm timber upper floor, a wide low roof with a
+// deep overhang, a front balcony with red geranium boxes and green shutters.
+const WOOD = C(0.52, 0.31, 0.16), WOOD_D = C(0.36, 0.2, 0.1), SHUTTER = C(0.16, 0.42, 0.24), GERANIUM = C(0.92, 0.1, 0.12), LEAF = C(0.2, 0.45, 0.14);
+const CHALET_ROOFS = [C(0.34, 0.22, 0.15), C(0.36, 0.35, 0.36), C(0.46, 0.27, 0.16), C(0.3, 0.3, 0.32)];
 function cottage(rnd, parts) {
-  const w = 4 + rnd() * 1.6, d = 3.2 + rnd() * 0.8, h = 2.5 + rnd() * 0.5, two = rnd() < 0.35;
-  const H = two ? h * 1.75 : h;
-  const roof = ROOFS[Math.floor(rnd() * ROOFS.length)];
-  // stone foundation (sunk into the slope), plaster walls, timber frame
-  parts.push(paint(box(w + 0.3, 2.2, d + 0.3, 0, -0.8, 0), STONE, 0.18));
-  parts.push(paint(box(w, H, d, 0, H / 2 + 0.3, 0), PLASTER, 0.05));
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(paint(box(0.22, H, 0.22, sx * w / 2, H / 2 + 0.3, sz * d / 2), TIMBER));
-  parts.push(paint(box(w + 0.05, 0.18, d + 0.05, 0, 0.4, 0), TIMBER));
-  parts.push(paint(box(w + 0.05, 0.18, d + 0.05, 0, H + 0.25, 0), TIMBER));
-  if (two) parts.push(paint(box(w + 0.05, 0.16, d + 0.05, 0, h + 0.3, 0), TIMBER));
-  // diagonal braces on the front
-  for (const sx of [-1, 1]) { const g = new THREE.BoxGeometry(0.14, H * 0.9, 0.05); g.rotateZ(sx * 0.55); g.translate(sx * w * 0.32, H / 2 + 0.3, d / 2 + 0.02); parts.push(paint(g, TIMBER)); }
-  // door + windows (warm glass)
-  parts.push(paint(box(0.85, 1.6, 0.08, -w * 0.1, 1.1, d / 2 + 0.03), TIMBER));
-  for (const sx of [-1, 1]) {
-    parts.push(paint(box(0.7, 0.7, 0.06, sx * w * 0.3 + (sx < 0 ? 0 : 0), 1.55, d / 2 + 0.04), GLASS, 0.02));
-    parts.push(paint(box(0.06, 0.7, 0.62, sx * (w / 2 + 0.03), 1.55, 0), GLASS, 0.02));
-  }
-  if (two) for (const sx of [-1, 1]) parts.push(paint(box(0.6, 0.6, 0.06, sx * w * 0.25, h + 1.2, d / 2 + 0.04), GLASS, 0.02));
-  // overhanging tiled roof + chimney
-  const r = roofGeo(w + 0.9, d + 1.0, 1.7 + rnd() * 0.5); r.translate(0, H + 0.3, 0);
-  parts.push(paint(r, roof, 0.12, rnd() * 50));
-  parts.push(paint(box(0.55, 2.2, 0.55, w * 0.28, H + 1.4, -d * 0.18), STONE, 0.12));
+  const w = 5 + rnd() * 1.6, d = 4.2 + rnd() * 1.0, h1 = 2.4, h2 = 2.3;
+  const H = h1 + h2;
+  const roof = CHALET_ROOFS[Math.floor(rnd() * CHALET_ROOFS.length)];
+  parts.push(paint(box(w + 0.3, 2.4, d + 0.3, 0, -0.9, 0), STONE, 0.18));
+  parts.push(paint(box(w, h1, d, 0, h1 / 2 + 0.3, 0), PLASTER, 0.04));
+  parts.push(paint(box(w + 0.06, h2, d + 0.06, 0, h1 + h2 / 2 + 0.3, 0), WOOD, 0.08));
+  // horizontal plank lines on the timber floor
+  for (let k = 1; k < 5; k++) parts.push(paint(box(w + 0.1, 0.05, d + 0.1, 0, h1 + 0.3 + k * (h2 / 5), 0), WOOD_D));
+  // door + windows with shutters (front), side windows
+  parts.push(paint(box(1.0, 1.9, 0.08, -w * 0.18, 1.25, d / 2 + 0.03), WOOD_D));
+  const win = (x, y, z, face) => {
+    const g = box(0.75, 0.8, 0.06, 0, 0, 0); g.rotateY(face); g.translate(x, y, z); parts.push(paint(g, GLASS, 0.02));
+    for (const sx of [-1, 1]) { const sh = box(0.36, 0.84, 0.05, sx * 0.58, 0, 0.02); sh.rotateY(face); sh.translate(x, y, z); parts.push(paint(sh, SHUTTER, 0.05)); }
+  };
+  win(w * 0.22, 1.5, d / 2 + 0.05, 0);
+  win(-w * 0.22, h1 + 1.35, d / 2 + 0.06, 0); win(w * 0.22, h1 + 1.35, d / 2 + 0.06, 0);
+  win(w / 2 + 0.05, 1.5, 0, Math.PI / 2); win(-w / 2 - 0.05, h1 + 1.35, 0, -Math.PI / 2);
+  // balcony with railing and geranium boxes
+  const by = h1 + 0.3;
+  parts.push(paint(box(w * 0.85, 0.12, 1.0, 0, by, d / 2 + 0.5), WOOD_D));
+  for (let k = 0; k <= 8; k++) parts.push(paint(box(0.06, 0.8, 0.06, -w * 0.42 + (k / 8) * w * 0.84, by + 0.45, d / 2 + 0.97), WOOD));
+  parts.push(paint(box(w * 0.86, 0.08, 0.1, 0, by + 0.86, d / 2 + 0.97), WOOD_D));
+  parts.push(paint(box(w * 0.8, 0.22, 0.2, 0, by + 0.98, d / 2 + 1.02), WOOD_D));
+  for (let k = 0; k < 9; k++) { const f = new THREE.IcosahedronGeometry(0.17 + rnd() * 0.06, 0); f.translate(-w * 0.38 + (k / 8) * w * 0.76, by + 1.16, d / 2 + 1.04); parts.push(paint(f, k % 3 === 2 ? LEAF : GERANIUM, 0.15)); }
+  // window box on the ground floor too
+  parts.push(paint(box(1.0, 0.18, 0.22, w * 0.22, 1.05, d / 2 + 0.14), WOOD_D));
+  for (let k = 0; k < 4; k++) { const f = new THREE.IcosahedronGeometry(0.15, 0); f.translate(w * 0.22 - 0.36 + k * 0.24, 1.2, d / 2 + 0.16); parts.push(paint(f, k % 2 ? LEAF : GERANIUM, 0.15)); }
+  // wide low roof with a deep overhang + carved gable board
+  const r = roofGeo(d + 2.6, w + 2.4, 1.5 + rnd() * 0.3); r.rotateY(Math.PI / 2); r.translate(0, H + 0.3, 0);
+  parts.push(paint(r, roof, 0.1, rnd() * 50));
+  parts.push(paint(box(0.5, 1.6, 0.5, w * 0.25, H + 1.1, -d * 0.2), STONE, 0.12));
+  // firewood stacked against the side wall
+  parts.push(paint(box(0.6, 1.2, d * 0.7, -w / 2 - 0.35, 0.9, 0), WOOD_D, 0.25));
   return { w, d };
+}
+
+// Swiss cow (brown-and-white Simmental style) with a bell; built in local space, grazing pose
+function cow(rnd, parts) {
+  const WHITE = C(0.93, 0.9, 0.84), BROWN = C(0.55, 0.28, 0.13), HOOF = C(0.15, 0.12, 0.1), HORN = C(0.9, 0.86, 0.72), BELL = C(0.95, 0.75, 0.25);
+  const body = paint(box(0.9, 0.85, 1.9, 0, 1.05, 0), WHITE, 0.05);
+  // brown patches: recolor vertices by noise
+  const cb = body.attributes.color, pb = body.attributes.position;
+  const seed = rnd() * 40;
+  for (let i = 0; i < pb.count; i++) if (N.n2(pb.getX(i) * 2.2 + seed, pb.getZ(i) * 1.6 + pb.getY(i)) > 0.5) cb.setXYZ(i, BROWN.r, BROWN.g, BROWN.b);
+  parts.push(body);
+  for (const [lx, lz] of [[-0.3, 0.7], [0.3, 0.7], [-0.3, -0.7], [0.3, -0.7]]) { parts.push(paint(box(0.18, 0.7, 0.18, lx, 0.35, lz), WHITE)); parts.push(paint(box(0.2, 0.1, 0.2, lx, 0.05, lz), HOOF)); }
+  // head lowered to graze
+  const head = box(0.5, 0.5, 0.75, 0, 0, 0); head.rotateX(0.7); head.translate(0, 0.72, 1.18); parts.push(paint(head, BROWN, 0.1));
+  const muzzle = box(0.42, 0.3, 0.25, 0, 0, 0); muzzle.rotateX(0.7); muzzle.translate(0, 0.42, 1.48); parts.push(paint(muzzle, C(0.92, 0.78, 0.72)));
+  for (const sx of [-1, 1]) { const h = new THREE.ConeGeometry(0.05, 0.28, 5); h.rotateZ(-sx * 1.1); h.translate(sx * 0.3, 1.0, 1.0); parts.push(paint(h, HORN)); }
+  const bell = new THREE.CylinderGeometry(0.08, 0.13, 0.2, 6); bell.translate(0, 0.62, 0.92); parts.push(paint(bell, BELL));
+  const tail = box(0.06, 0.7, 0.06, 0, 0.85, -0.98); parts.push(paint(tail, WHITE));
 }
 
 function windmill(parts) {
@@ -147,6 +179,16 @@ export function buildVillage() {
     if (rnd() < 0.6) for (let k = 0; k < 2; k++) { const h = new THREE.CylinderGeometry(0.55, 0.55, 1.0, 10); h.rotateZ(Math.PI / 2); h.translate(w / 2 + 1.2, 0.5, -0.6 + k * 1.2); parts.push(paint(h, C(0.86, 0.72, 0.36), 0.1)); }
     const ry = face(x, z) + (rnd() - 0.5) * 0.9;
     place(parts, x, baseY(x, z, Math.max(w, d) * 0.6) - 0.05, z, ry);
+  }
+  // grazing cows scattered on the alpine meadows around the hamlets
+  for (let i = 0; i < 9; i++) {
+    const [hx, hz] = COTTAGES[Math.floor(rnd() * COTTAGES.length)];
+    const a = rnd() * Math.PI * 2, r = 9 + rnd() * 7;
+    const x = hx + Math.cos(a) * r, z = hz + Math.sin(a) * r;
+    if (Math.hypot(x, z) < 92) continue;
+    const parts = [];
+    cow(rnd, parts);
+    place(parts, x, baseY(x, z, 1.0) + 0.02, z, rnd() * Math.PI * 2);
   }
   const g = mergeGeometries(world);
   g.computeBoundingSphere();

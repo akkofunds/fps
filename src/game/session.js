@@ -68,7 +68,8 @@ export class SessionController extends Emitter {
     const host = this.host = new HostSession();
     const me = pm.me;
     const partyIds = new Set(pm.party.members.map((m) => m.id));
-    this.humans = [{ id: me.id, name: me.name, tag: me.tag, mage: me.mage }];
+    this.humans = [{ id: me.id, name: me.name, tag: me.tag, mage: me.mage, n: 0 }];
+    this.nextN = 1; this.pendingJoins = [];
     if (mmPeer) mmPeer.on('connection', (conn) => { if (conn.metadata && conn.metadata.kind === 'match') host.attach(conn); else conn.close(); });
     host.on('hello', (conn, msg) => {
       if (this.state !== 'hostQueue' || token !== this.token) { host.reject(conn, 'closed'); return; }
@@ -76,13 +77,36 @@ export class SessionController extends Emitter {
       if (!isParty && msg.mode !== this.mode) { host.reject(conn, 'mode'); return; }
       if (this.humans.length >= M.size || this.humans.some((h) => h.id === msg.id)) { host.reject(conn, 'full'); return; }
       host.accept(conn, msg.id, { mode: this.mode });
-      this.humans.push({ id: msg.id, name: String(msg.name).slice(0, 14), tag: String(msg.tag).slice(0, 4), mage: String(msg.mage || 'pyro').slice(0, 16) });
+      const h = { id: msg.id, name: String(msg.name).slice(0, 14), tag: String(msg.tag).slice(0, 4), mage: String(msg.mage || 'pyro').slice(0, 16), n: this.nextN++ };
+      this.humans.push(h);
+      // drop them straight into the lobby match
+      this.host.send(h.id, { t: 'start', cfg: { ...this.cfg, queue: true }, players: this.humans.map((x) => ({ ...x })), you: h.id });
+      const m = this.app.match;
+      if (m && m.isHost && m.cfg.queue && m.rules) m.hostAddPlayer({ ...h }); else this.pendingJoins.push(h);
       if (!isParty) this.emit('playerFound');
       this._broadcastQueue();
     });
     host.on('leave', (pid) => { if (this.state === 'hostQueue') { this.humans = this.humans.filter((h) => h.id !== pid); this._broadcastQueue(); } });
     if (pm.inParty) pm.sendGo(me.id, { queue: this.mode });
     this._broadcastQueue();
+    // the queue host plays in the lobby match right away
+    this.emit('start', { cfg: { ...this.cfg, queue: true }, net: host, isHost: true, localId: me.id, players: this.humans.map((x) => ({ ...x })) });
+  }
+
+  // called by the app once a match object is running
+  matchReady(m) {
+    if (!this.pendingJoins || !m.isHost || !m.cfg.queue) return;
+    for (const h of this.pendingJoins.splice(0)) if (this.humans.some((x) => x.id === h.id)) m.hostAddPlayer({ ...h });
+  }
+
+  // lobby filled: start the real match in place
+  _goLive() {
+    this.state = 'match';
+    this._readyAt = 0;
+    if (this.mmPeer) { try { this.mmPeer.disconnect(); } catch { /* ignore */ } }
+    const m = this.app.match;
+    if (m && m.rules) m.rules.goLive();
+    this.emit('queue', { searching: false });
   }
 
   _broadcastQueue() {
@@ -98,7 +122,11 @@ export class SessionController extends Emitter {
     const off = cs.on('msg', (msg) => {
       if (token !== this.token) return;
       if (msg.t === 'qstate') this.emit('queue', { searching: true, start: this.queueStart, found: msg.found, size: msg.size, names: msg.names });
-      else if (msg.t === 'start') { off(); offC(); this._beginClient(cs, msg); }
+      else if (msg.t === 'start') {
+        if (msg.cfg && msg.cfg.queue) { this.emit('start', { cfg: msg.cfg, net: cs, isHost: false, localId: msg.you, players: msg.players }); return; }
+        off(); offC(); this._beginClient(cs, msg);
+      } else if (msg.t === 'qlive') { off(); offC(); this.state = 'match'; this.emit('queue', { searching: false }); }
+      else if (this.app.match && (msg.t === 'hostLeft')) { off(); offC(); /* the running lobby match handles it */ }
       else if (msg.t === 'reject' || msg.t === 'hostLeft') {
         off(); offC(); cs.close(); this.client = null; this.state = 'idle';
         this.emit('toast', 'Match host left — searching again');
@@ -107,7 +135,7 @@ export class SessionController extends Emitter {
       }
     });
     const offC = cs.on('close', () => {
-      if (token !== this.token || this.state !== 'clientQueue') return;
+      if (token !== this.token || this.state !== 'clientQueue' || this.app.match) return;
       off(); offC(); this.client = null; this.state = 'idle';
       this.emit('queue', { searching: false }); this.emit('toast', 'Lost connection to the match host.');
     });
@@ -188,11 +216,13 @@ export class SessionController extends Emitter {
     const M = MODES[this.mode];
     const el = (performance.now() - this.queueStart) / 1000;
     const n = this.humans.length;
-    if (n >= M.size) { this.emit('found'); this._beginHost(); return; }
+    const m = this.app.match;
+    if (!m || !m.rules || !m.cfg.queue) return; // lobby match still loading
+    if (n >= M.size) { this.emit('found'); this._goLive(); return; }
     if (n >= M.minPlayers) {
       if (!this._readyAt) { this._readyAt = performance.now(); }
       const wait = (performance.now() - this._readyAt) / 1000;
-      if (wait >= QUEUE_START_SECONDS * 0.5 && el >= QUEUE_START_SECONDS) { this._readyAt = 0; this.emit('found'); this._beginHost(); }
+      if (wait >= QUEUE_START_SECONDS * 0.5 && el >= QUEUE_START_SECONDS) { this._readyAt = 0; this.emit('found'); this._goLive(); }
     } else this._readyAt = 0;
   }
 

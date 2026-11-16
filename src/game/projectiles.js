@@ -3,7 +3,7 @@ import * as THREE from 'three';
 // Simulated fire projectiles. Every client simulates every projectile for visuals; only the
 // owner's client turns collisions into damage reports (shooter-side hit detection, host validates).
 
-const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), hitInfo = { t: 0 };
+const tmpA = new THREE.Vector3(), tmpB = new THREE.Vector3(), tmpD = new THREE.Vector3(), tmpE = new THREE.Vector3(), hitInfo = { t: 0 };
 
 // closest distance between segments p1-q1 and p2-q2; returns { d2, s } (s = param on first)
 function segSeg(p1, q1, p2, q2) {
@@ -32,6 +32,7 @@ export const PROJ = {
   bolt: { speed: 58, grav: 0, radius: 0.16, life: 1.3, dmg: 18, head: 1.5 },
   orb: { speed: 33, grav: 7, radius: 0.38, life: 3, dmg: 20, head: 1 },
   spark: { speed: 46, grav: 0, radius: 0.2, life: 1.6, dmg: 16, head: 1.5 },
+  ember: { speed: 50, grav: 2, radius: 0.22, life: 0.62, dmg: 9, head: 1 },
 };
 
 // character hit test: body capsule + head sphere. returns {s, head} or null
@@ -68,10 +69,10 @@ export class Projectiles {
       const a = tmpA.copy(p.pos);
       p.vel.y -= p.def.grav * dt;
       const step = p.vel.length() * dt;
-      const dir = new THREE.Vector3().copy(p.vel).normalize();
+      const dir = tmpD.copy(p.vel).normalize();
       // world
       const tw = world.raycast(a.x, a.y, a.z, dir.x, dir.y, dir.z, step, p.def.radius * 0.6, hitInfo);
-      const end = new THREE.Vector3().copy(a).addScaledVector(dir, Math.min(step, tw));
+      const end = tmpE.copy(a).addScaledVector(dir, Math.min(step, tw));
       // characters
       let best = null, bestS = 2;
       for (const e of m.ents.values()) {
@@ -90,12 +91,13 @@ export class Projectiles {
       }
       p.pos.copy(end);
       if (p.age > p.def.life) {
-        if (p.kind === 'orb' || p.kind === 'spark') this._impact(p, p.pos, null, false); else m.fx.hitSpark(p.pos);
+        if (p.kind === 'orb' || p.kind === 'spark') this._impact(p, p.pos, null, false); else if (p.kind === 'ember') m.fx.emberHit(p.pos); else m.fx.hitSpark(p.pos);
         this.list.splice(i, 1); continue;
       }
       // trail
       if (p.kind === 'bolt') m.fx.boltTrail(p.pos, p.vel);
       else if (p.kind === 'spark') m.fx.sparkTrail(p.pos, p.vel);
+      else if (p.kind === 'ember') m.fx.emberTrail(p.pos, p.vel);
       else m.fx.orbTrail(p.pos, p.vel, p.age);
     }
   }
@@ -106,6 +108,10 @@ export class Projectiles {
       m.fx.hitSpark(pos);
       m.sound('boltHit', pos, 0.7, 22);
       if (p.local && target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'bolt', { head, at: pos });
+    } else if (p.kind === 'ember') {
+      m.fx.emberHit(pos);
+      if (target) m.sound('boltHit', pos, 0.5, 20);
+      if (p.local && target && m.kit.onEmberHit) m.kit.onEmberHit(target, pos.clone());
     } else if (p.kind === 'spark') {
       m.fx.sparkBurst(pos, 2.2);
       m.sound('boltHit', pos, 0.8, 24);
