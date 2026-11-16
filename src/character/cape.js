@@ -9,10 +9,10 @@ import * as THREE from 'three';
 
 const STRANDS = ['L', 'C', 'R'];
 const G = new THREE.Vector3(0, -9.8, 0);
-const _v = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Vector3(), _l = new THREE.Vector3();
+const side = new THREE.Vector3(), _v = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Vector3(), _l = new THREE.Vector3();
 const _pq = new THREE.Quaternion(), _q = new THREE.Quaternion(), _iq = new THREE.Quaternion();
 const _inv = new THREE.Matrix4(), _m = new THREE.Matrix4();
-const STIFF = [0, 0.075, 0.035, 0.02]; // pull toward the draped shape per 60 Hz step (none at the pinned top)
+const STIFF = [0, 0.035, 0.014, 0.007]; // gentle: gravity and the air do most of the work // pull toward the draped shape per 60 Hz step (none at the pinned top)
 
 export class CapeSim {
   constructor(model) {
@@ -24,7 +24,7 @@ export class CapeSim {
     this.strands = STRANDS.map((s) => {
       const bones = [0, 1, 2].map((k) => by[`cape_${s}${k}`]);
       const offs = [by[`cape_${s}1`].position, by[`cape_${s}2`].position, by[`cape_${s}2_end`].position].map((p) => p.clone());
-      return { bones, offs, p: [0, 1, 2, 3].map(() => new THREE.Vector3()), prev: [0, 1, 2, 3].map(() => new THREE.Vector3()), rest: [0, 1, 2, 3].map(() => new THREE.Vector3()), restR: [0, 0, 0, 0], restZ: [0, 0, 0, 0] };
+      return { seed: Math.random() * 6, bones, offs, p: [0, 1, 2, 3].map(() => new THREE.Vector3()), prev: [0, 1, 2, 3].map(() => new THREE.Vector3()), rest: [0, 1, 2, 3].map(() => new THREE.Vector3()), restR: [0, 0, 0, 0], restZ: [0, 0, 0, 0] };
     });
     this.init = false;
     this.wind = 0;
@@ -65,10 +65,11 @@ export class CapeSim {
     const n = Math.min(4, Math.max(1, Math.ceil(dt / (1 / 60))));
     const h = Math.min(dt, 0.1) / n;
     const damp = Math.pow(0.988, h * 60);
-    const drag = 1 - Math.min(0.5, 2.4 * h); // linear air drag on each point's own velocity
+    const drag = 1 - Math.min(0.5, 3.0 * h); // linear air drag on each point's own velocity
     // backward in the chest frame (the cape's local -z points away from her back)
     const back = _r.set(0, 0, -1).applyQuaternion(this.root.getWorldQuaternion(_q)).setY(0).normalize();
     for (let it = 0; it < n; it++) {
+      this.t = (this.t || 0) + h;
       for (const st of this.strands) {
         st.p[0].copy(st.rest[0]); st.prev[0].copy(st.rest[0]);
         for (let k = 1; k < 4; k++) {
@@ -78,8 +79,12 @@ export class CapeSim {
           _v.subVectors(p, q).multiplyScalar(damp * drag);
           q.copy(p);
           p.add(_v).addScaledVector(G, h * h);
+          // always a little breeze, so the cape never hangs dead still
+          const breeze = 1.2 + Math.sin(this.t * 1.7 + k) * 0.8 + Math.sin(this.t * 4.3 + st.seed) * 0.6;
+          p.addScaledVector(back, breeze * k * 0.33 * h * h);
+          p.addScaledVector(side.set(-back.z, 0, back.x), Math.sin(this.t * 2.9 + st.seed * 2 + k) * 0.7 * k * 0.33 * h * h);
           if (wind > 0) {
-            const gust = wind * (9 + Math.sin(this.t = (this.t || 0) + h * 7.3) * 4 + k * 2);
+            const gust = wind * (9 + Math.sin(this.t * 7.3) * 4 + k * 2);
             p.addScaledVector(back, gust * h * h).y += wind * 3 * h * h;
           }
           // soft shape memory

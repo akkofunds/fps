@@ -99,3 +99,14 @@ src/network/     PeerJS identity/party + host/client sessions
 src/ui/          lobby, lobby 3D scene, HUD, chat, icons, styles
 tools/characters rigging pipeline (Python: numpy + Pillow)
 ```
+
+## Admin (Vercel)
+- Sign in at `/admin` with the admin password and the security answer. They are checked by the serverless function `api/admin.js`, and the sign-in is remembered on that device for 60 days.
+- Every player has a private token in **Settings → Account**. Paste a token into the admin panel to give that account admin in the normal game, or remove it again. The admin list is shared between devices.
+- **One-time setup for the shared admin list:**
+  1. In Vercel, open **Storage → Create Database → Upstash (Redis)** (the free plan is fine) and connect it to this project. This adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+  2. Redeploy.
+- **Optional environment variables:**
+  - `ADMIN_PASSWORD` and `ADMIN_PET` replace the built-in password and dog's name.
+  - `ADMIN_SECRET` signs admin sessions.
+- **Local testing:** `npm run dev` and `npm run preview` serve the same API with an in-memory admin list.
