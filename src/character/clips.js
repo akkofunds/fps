@@ -280,9 +280,9 @@ export const M_BOLT = compileClip([
 export const M_RAISE = compileClip([
   { t: 0, b: SGUARD },
   { t: 0.22, ease: 'out', b: {
-    spine: [-8, -6, 0], chest: [-8, -6, 0], neck: [-10, 0, 0], head: [-14, 0, 0],
-    upperArmR: [-168, 0, -8], foreArmR: [-8, 0, 0], propR: [180, 0, 0],
-    upperArmL: [-20, 0, 46], foreArmL: [-50, 0, 0],
+    spine: [-6, -6, 0], chest: [-6, -6, 0], neck: [-8, 0, 0], head: [-12, 0, 0],
+    upperArmR: [-118, 0, 8], foreArmR: [-40, 0, 0], propR: [150, 0, 0],
+    upperArmL: [-80, 0, 10], foreArmL: [-60, 0, 0],
   } },
   { t: 0.38, ease: 'in', b: {
     spine: [10, 8, 0], chest: [6, 10, 0], neck: [-6, -8, 0], head: [-4, -8, 0],
@@ -325,32 +325,36 @@ export const M_BLINK = compileClip([
   { t: 0.45, ease: 'smooth', b: SGUARD },
 ]);
 
-// X — Crimson Nova: brace, both hands raise the staff to the sky for the long incantation…
-// standing tall: staff held straight up overhead in the right hand, left palm raised toward the sky
-const NOVA_UP = {
-  hips: [0, 0, 0], spine: [-2, 0, 0], chest: [-1, 0, 0], upperChest: [0, 0, 0], neck: [-3, 0, 0], head: [-8, 0, 0],
-  upperArmR: [-158, 0, -10], foreArmR: [-10, 0, 0], handR: [0, 0, 0], propR: [180, 0, 0],
-  upperArmL: [-118, 0, 30], foreArmL: [-18, 0, 0], handL: [-10, 0, 0],
+// X — Crimson Nova. Both hands on the staff the whole time (the animator's grip IK puts her left
+// hand on the shaft under the right), held perfectly upright while she chants, raised high for the
+// climax, then levelled at the target with both hands for the release.
+const NOVA_HOLD = {
+  hips: [0, 0, 0], spine: [1, 0, 0], chest: [-1, 0, 0], upperChest: [0, 0, 0], neck: [-2, 0, 0], head: [-5, 0, 0],
+  upperArmR: [-56, 0, 10], foreArmR: [-70, 0, 0], handR: [0, 0, 0],
+  upperArmL: [-40, 0, 10], foreArmL: [-60, 0, 0],
 };
-const NOVA_UP2 = { ...NOVA_UP, head: [-10, 0, 0], upperArmR: [-162, 0, -10], upperArmL: [-124, 0, 28] };
+const NOVA_HIGH = {
+  hips: [0, 0, 0], spine: [-3, 0, 0], chest: [-3, 0, 0], upperChest: [-2, 0, 0], neck: [-4, 0, 0], head: [-10, 0, 0],
+  upperArmR: [-104, 0, 6], foreArmR: [-50, 0, 0], handR: [0, 0, 0],
+  upperArmL: [-80, 0, 10], foreArmL: [-60, 0, 0],
+};
+const NOVA_AIM = {
+  hips: [5, 0, 0], spine: [7, 0, 0], chest: [4, 0, 0], neck: [-6, 0, 0], head: [-8, 0, 0],
+  upperArmR: [-98, 0, 4], foreArmR: [-6, 0, 0], handR: [0, 0, 0], propR: [186, 0, 0],
+  upperArmL: [-70, 0, 20], foreArmL: [-40, 0, 0],
+};
 const WIDE = { L: [0.2, 0, 0.12, 0], R: [-0.2, 0, -0.1, 0] };
+const LUNGE = { L: [0.2, 0, 0.3, -6], R: [-0.2, 0, -0.2, 14] };
 export const M_NOVA = compileClip([
   { t: 0, hip: [0, -0.03, 0], ik: STAND, b: SGUARD },
-  { t: 0.5, ease: 'out', hip: [0, -0.05, -0.01], ik: WIDE, b: NOVA_UP },
-  { t: 2.0, ease: 'smooth', hip: [0, -0.06, -0.01], ik: WIDE, b: { ...NOVA_UP2, spine: [-3, 4, 0], head: [-9, 4, 0] } },
-  { t: 3.8, ease: 'smooth', hip: [0, -0.06, -0.01], ik: WIDE, b: { ...NOVA_UP, spine: [-3, -4, 0], head: [-9, -4, 0] } },
-  { t: 5.7, ease: 'smooth', hip: [0, -0.07, -0.01], ik: WIDE, b: { ...NOVA_UP2, spine: [-4, 0, 0], chest: [-2, 0, 0], head: [-10, 0, 0] } },
-  // …then hurls it forward at the target
-  { t: 6.3, ease: 'in', hip: [0, -0.16, 0.05], ik: { L: [0.2, 0, 0.26, -6], R: [-0.2, 0, -0.18, 16] }, b: {
-    hips: [10, 0, 0], spine: [16, 0, 0], chest: [10, 0, 0], neck: [-12, 0, 0], head: [-14, 0, 0],
-    upperArmR: [-88, 0, -12], foreArmR: [-4, 0, 0], propR: [180, 0, 0],
-    upperArmL: [-84, 0, -18], foreArmL: [-10, 0, 0],
-  } },
-  { t: 6.7, ease: 'linear', hip: [0, -0.16, 0.05], ik: { L: [0.2, 0, 0.26, -6], R: [-0.2, 0, -0.18, 16] }, b: {
-    hips: [9, 0, 0], spine: [15, 0, 0], chest: [10, 0, 0], neck: [-12, 0, 0], head: [-14, 0, 0],
-    upperArmR: [-86, 0, -12], foreArmR: [-6, 0, 0], propR: [180, 0, 0],
-    upperArmL: [-80, 0, -18], foreArmL: [-12, 0, 0],
-  } },
+  { t: 0.45, ease: 'out', hip: [0, -0.06, 0], ik: WIDE, b: NOVA_HOLD },
+  { t: 2.0, ease: 'smooth', hip: [0, -0.07, 0], ik: WIDE, b: { ...NOVA_HOLD, spine: [1, 3, 0], head: [-6, 4, 0] } },
+  { t: 3.6, ease: 'smooth', hip: [0, -0.07, 0], ik: WIDE, b: { ...NOVA_HOLD, spine: [1, -3, 0], head: [-6, -4, 0] } },
+  { t: 5.0, ease: 'smooth', hip: [0, -0.06, 0], ik: WIDE, b: NOVA_HIGH },
+  { t: 5.9, ease: 'smooth', hip: [0, -0.05, 0], ik: WIDE, b: { ...NOVA_HIGH, upperArmR: [-110, 0, 6], head: [-12, 0, 0] } },
+  // …then levels it at the target and lets go
+  { t: 6.3, ease: 'in', hip: [0, -0.15, 0.05], ik: LUNGE, b: NOVA_AIM },
+  { t: 6.7, ease: 'linear', hip: [0, -0.15, 0.05], ik: LUNGE, b: { ...NOVA_AIM, spine: [6, 0, 0] } },
 ]);
 
 // …and the price: she collapses face-down, completely spent, then struggles back up
