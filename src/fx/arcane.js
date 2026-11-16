@@ -132,11 +132,11 @@ function fireballMaterial() {
       void main(){
         float facing = abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0)));
         float core = pow(facing, 1.5);
-        vec3 hot = vec3(4.0, 3.2, 2.2), mid = vec3(3.2, 1.3, 0.35), cool = vec3(1.4, 0.2, 0.06);
+        vec3 hot = vec3(3.0, 1.7, 0.6), mid = vec3(2.3, 0.75, 0.16), cool = vec3(0.9, 0.12, 0.03);
         float k = clamp(core * uHeat + vNz * 0.3, 0.0, 1.0);
         vec3 col = mix(cool, mid, smoothstep(0.1, 0.55, k));
         col = mix(col, hot, smoothstep(0.55, 1.0, k));
-        float a = (0.35 + core * 0.65) * clamp(uHeat * 1.2, 0.0, 1.0);
+        float a = (0.3 + core * 0.5) * clamp(uHeat * 1.2, 0.0, 1.0);
         gl_FragColor = vec4(col * a, a);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -245,7 +245,8 @@ Object.assign(Fx.prototype, {
   nova(target, caster, opts) {
     const { radius, channel, onImpact, onFlash, onLayer } = opts;
     const stagger = opts.stagger || [0.12, 0.44, 0.76, 1.08, 1.4];
-    const scene = this.scene;
+    // everything lives in one group so the cutscene can hide it during the casting-stage shots
+    const scene = new THREE.Group(); this.scene.add(scene);
     const layers = [];
     const n = stagger.length;
     for (let i = 0; i < n; i++) {
@@ -275,6 +276,7 @@ Object.assign(Fx.prototype, {
       for (const L of layers) { scene.remove(L.m); L.m.geometry.dispose(); L.m.material.dispose(); }
       for (const o of [warn, own, column]) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); }
       if (ball) { scene.remove(ball); ball.geometry.dispose(); ballMat.dispose(); }
+      this.scene.remove(scene);
     };
     this.effects.push({ update: (dt) => {
       t += dt;
@@ -379,6 +381,7 @@ Object.assign(Fx.prototype, {
       }
       return true;
     } });
+    return scene;
   },
 
   // E — Starfall barrage: telegraphs on every point, then stars streak down one after another

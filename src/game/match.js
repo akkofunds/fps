@@ -396,7 +396,7 @@ export class Match {
       case 'nova': {
         const c = new THREE.Vector3().fromArray(d.c), o = new THREE.Vector3().fromArray(d.o);
         this._startCine(e, c, o);
-        this.fx.nova(c, o, {
+        const novaFx = this.fx.nova(c, o, {
           radius: NOVA.radius, channel: NOVA.channel,
           stagger: [3.62, 3.84, 4.06, 4.28, 4.5, 4.72, 4.94],
           onLayer: (i) => Audio.play('circleOn', 0.45 + i * 0.06, 0, 0.9 + i * 0.05),
@@ -418,6 +418,7 @@ export class Match {
             }
           },
         });
+        if (this.cine && this.cine.caster === e) this.cine.novaFx = novaFx;
         break;
       }
       case 'leap': {
@@ -476,6 +477,7 @@ export class Match {
     if (C.stageOn === on) return;
     C.stageOn = on;
     C.stage.setOn(on);
+    if (C.novaFx) C.novaFx.visible = !on;
     for (const o of C.world) o.visible = !on;
     for (const e of this.ents.values()) if (e !== C.caster && e.alive) e.view.root.visible = !on;
     this.scene.fog.far = on ? 1e5 : 650;
@@ -496,6 +498,7 @@ export class Match {
     while (C.subs < subs.length && t >= subs[C.subs][0]) { const [, text, big] = subs[C.subs]; this.app.hud.cineSub(text, !!big); C.subs++; }
     const onStage = t < 3.6 || (t >= 5.4 && t < 6.6);
     this._cineSetStage(onStage);
+    if (C.novaFx) C.novaFx.visible = !onStage;
     const I = t < 3.6 ? Math.min(1, t / 3.2) : Math.min(1, 0.7 + (t - 5.4) / 1.2);
     C.stage.update(dt, I);
     this.app.hud.cineDark(onStage ? 0 : t < 6.6 ? 0.3 : Math.max(0, 0.45 - (t - 6.6) / 2));
@@ -529,8 +532,9 @@ export class Match {
       L.set(o.x, o.y + 1.5, o.z); fov = 40;
     } else if (t < 5.4) { // the battlefield: behind her, tilting up as the seals stack over the target
       const k = (t - 3.6) / 1.8;
-      P.set(o.x - f.x * 7 + sd.x * 2.5, o.y + 3.5 + k * 2, o.z - f.z * 7 + sd.z * 2.5);
-      L.set(c.x, c.y + 10 + k * 16, c.z); fov = 62;
+      const back = NOVA.radius * 2.6;
+      P.set(c.x - f.x * back + sd.x * 8, c.y + 6 + k * 4, c.z - f.z * back + sd.z * 8);
+      L.set(c.x, c.y + 14 + k * 10, c.z); fov = 62;
     } else if (t < 6.6) { // stage: fast spin, then a whip zoom on the final word
       const k = (t - 5.4) / 1.2;
       const a = face + Math.PI * 0.2 + k * Math.PI * 1.6, r = 4.6 - k * 1.8;

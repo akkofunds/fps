@@ -42,7 +42,7 @@ function stageMaterial() {
         float st = step(0.985, h(g)) * (0.5 + 0.5 * sin(uT * 6.0 + h(g + 3.0) * 40.0)) * smoothstep(0.32, 0.0, length(fract(gc) - 0.5)); // round, small
         col += vec3(1.4, 1.1, 1.8) * st;
         // warm glow rising off the golden circle on the floor
-        col += vec3(1.2, 0.5, 0.1) * smoothstep(0.18, 0.0, uv.y) * (0.3 + uI * 0.6);
+        col += vec3(0.8, 0.32, 0.06) * smoothstep(0.15, 0.0, uv.y) * (0.3 + uI * 0.4);
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -116,10 +116,10 @@ Object.assign(Fx.prototype, {
       update: (dt, I) => {
         t += dt;
         sky.material.uniforms.uT.value = t; sky.material.uniforms.uI.value = I;
-        floor.material.uniforms.uT.value = t; floor.material.uniforms.uI.value = 0.25 + I * 0.5;
+        floor.material.uniforms.uT.value = t; floor.material.uniforms.uI.value = 0.22 + I * 0.3;
         seal.rotation.z += dt * (0.5 + I * 2); seal2.rotation.z -= dt * (0.3 + I);
-        seal.material.opacity = Math.min(1, t * 1.5) * (0.7 + 0.3 * Math.sin(t * 9));
-        seal2.material.opacity = Math.min(1, t * 0.8) * 0.8;
+        seal.material.opacity = Math.min(0.75, t * 1.5) * (0.7 + 0.3 * Math.sin(t * 9));
+        seal2.material.opacity = Math.min(0.55, t * 0.8);
         pm.opacity = Math.min(0.12, I * 0.15) * (0.7 + 0.3 * Math.sin(t * 5));
         for (const p of pillars) p.scale.y = 0.2 + Math.min(1, I * 1.4);
         if (!g.visible) return;
