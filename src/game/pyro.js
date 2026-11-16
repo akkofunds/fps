@@ -3,44 +3,52 @@ import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ } from './projectiles.js';
 
-// PYRO — Flamecaller. Kit definition (shown in the lobby/HUD) + the owner-side ability logic.
+// PYRO — Fire-soldier (Fire Force style kit). Kit definition (lobby/HUD) + owner-side ability logic.
+//   LMB Ember Fists · E Devil's Foot · C Rapid Ignition · V Infernal Step · X Adolla Burst
 export const PYRO = {
   id: 'pyro',
   name: 'PYRO',
-  role: 'FLAMECALLER',
+  role: 'FIRE SOLDIER',
   model: 'models/pyro.glb',
   color: '#ff6a2b',
-  bio: 'A quiet fire-soldier who burns hotter the longer the fight goes. Pyro controls space with walls of flame, punishes clumps with explosive orbs and calls a meteor down from the sky.',
+  bio: 'A third-generation fire soldier who fights with his feet. Pyro rockets in with flaming kicks, buries enemies in stacking burns and ends fights with a beam of pure, concentrated flame.',
   abilities: [
-    { key: 'LMB', id: 'bolt', name: 'Ember Bolt', desc: 'Throw rapid fire punches that launch ember bolts. 18 damage, 27 on headshots.' },
-    { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land.' },
-    { key: 'E', id: 'orb', name: 'Blaze Orb', cd: 7, desc: 'Push out a heavy fireball that arcs and explodes on impact, burning everyone caught in the blast.' },
-    { key: 'C', id: 'wall', name: 'Firewall', cd: 15, desc: 'Slam the ground to raise a 7 m wall of flame where you aim. Blocks sight and burns anyone who crosses it.' },
-    { key: 'V', id: 'leap', name: 'Flame Leap', cd: 10, desc: 'Detonate the ground beneath you to rocket into the air, knocking back and scorching nearby enemies.' },
-    { key: 'X', id: 'meteor', name: 'Meteor', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Call a meteor onto the target area. After a short warning it hits hard and leaves the ground burning.' },
+    { key: 'LMB', id: 'bolt', name: 'Ember Fists', desc: 'Throw rapid fire punches that launch ember bolts. 18 damage, 27 on headshots.' },
+    { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land. Press jump again in the air to double jump.' },
+    { key: 'E', id: 'kick', name: "Devil's Foot", cd: 8, desc: 'Rocket forward with a flaming kick. Hit an enemy to launch them into the air. Leaves a burning trail behind you.' },
+    { key: 'C', id: 'ignite', name: 'Rapid Ignition', cd: 9, desc: 'Fire a fan of 7 fireballs in a wide cone. Every hit stacks burn, and 3 hits on the same enemy within 2 seconds set off an explosion.' },
+    { key: 'V', id: 'step', name: 'Infernal Step', cd: 11, desc: 'Plant both feet and blast a ring of fire around you that knocks enemies back and slows them. You gain a burst of speed afterwards.' },
+    { key: 'X', id: 'adolla', name: 'Adolla Burst', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Gather your flame, then unleash a massive beam of pure fire in a straight line. Pierces every enemy in its path and leaves a long burning scar on the ground.' },
   ],
 };
 
-const COOLDOWN = { bolt: 0.3, orb: 7, wall: 15, leap: 10 };
+export const KICK = { speed: 25, time: 0.34, dmg: 32, radius: 1.35 };
+export const IGNITE = { count: 7, spread: 0.46, window: 2, boomR: 2.8, boomDmg: 30 };
+export const STEP = { radius: 6, maxDmg: 34, minDmg: 18, slow: 0.5, slowT: 2, boost: 2.2 };
+export const ADOLLA = { charge: 0.75, beam: 0.95, range: 48, width: 2.1, dmg: 120, path: 6 };
+
+const COOLDOWN = { bolt: 0.3, kick: 8, ignite: 9, step: 11 };
 // bolt-type fire rates are not shortened below 60% even with admin cooldown tweaks
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
-const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), tmp3 = new THREE.Vector3();
 
 export class PyroKit {
   constructor(match) {
     this.m = match;
     this.def = PYRO;
-    this.cd = { bolt: 0, orb: 0, wall: 0, leap: 0 };
-    this.max = { orb: 7, wall: 15, leap: 10 };
+    this.cd = { bolt: 0, kick: 0, ignite: 0, step: 0 };
+    this.max = { kick: COOLDOWN.kick, ignite: COOLDOWN.ignite, step: COOLDOWN.step };
     this.ult = 0;
     this.side = 1; // alternating punch hand
     this.pending = [];
     this.busy = 0; // can't start another ability
     this.ultReadyAnnounced = false;
+    this.kickT = 0; this.kickHit = null; this.kickDir = new THREE.Vector3();
+    this.stacks = new Map(); // enemy n → { n, t } Rapid Ignition stacks
   }
 
-  reset() { this.cd = { bolt: 0, orb: 0, wall: 0, leap: 0 }; this.pending.length = 0; this.busy = 0; }
-  slots() { return [['orb', 'E'], ['wall', 'C'], ['leap', 'V'], ['meteor', 'X']]; }
+  reset() { this.cd = { bolt: 0, kick: 0, ignite: 0, step: 0 }; this.pending.length = 0; this.busy = 0; this.kickT = 0; this.stacks.clear(); }
+  slots() { return [['kick', 'E'], ['ignite', 'C'], ['step', 'V'], ['adolla', 'X']]; }
   addUlt(v) {
     this.ult = Math.min(ULT_COST, this.ult + v);
     if (this.ult >= ULT_COST && !this.ultReadyAnnounced) { this.ultReadyAnnounced = true; this.m.onUltReady(); }
@@ -57,12 +65,13 @@ export class PyroKit {
       p.t -= dt;
       if (p.t <= 0) { this.pending.splice(i, 1); if (m.local.alive) p.fn(); }
     }
+    if (this.kickT > 0) this._kickTick(dt);
     if (!m.local.alive || !m.controlsActive) return;
     const pr = input.pressed;
-    if (pr.e) this.orb();
-    if (pr.c) this.wall();
-    if (pr.v) this.leap();
-    if (pr.x) this.meteor();
+    if (pr.e) this.kick();
+    if (pr.c) this.ignite();
+    if (pr.v) this.step();
+    if (pr.x) this.adolla();
     if (input.state.fire || pr.fire) this.bolt();
   }
 
@@ -80,7 +89,9 @@ export class PyroKit {
     if (d < 2) out.copy(this.m.cam.fwd); else out.divideScalar(d);
     return out;
   }
+  _flatAim(out) { const y = this.m.cam.yaw; return out.set(Math.sin(y), 0, Math.cos(y)); }
 
+  // ---------------------------------------------------------------- LMB
   bolt() {
     if (!this._ready('bolt')) return;
     const m = this.m;
@@ -90,7 +101,6 @@ export class PyroKit {
     m.playAnim('cast', { anim: side === 'R' ? 'boltR' : 'boltL' });
     this.pending.push({ t: 0.055, fn: () => {
       const o = m.view.palmWorld(side, tmp);
-      // pull the origin toward the chest line so bolts never start inside walls
       const dir = this._aimDir(o, tmp2);
       const v = dir.multiplyScalar(PROJ.bolt.speed);
       m.fx.castBurst(o, dir.clone().normalize(), 0.5);
@@ -100,83 +110,120 @@ export class PyroKit {
     } });
   }
 
-  orb() {
-    if (!this._ready('orb')) return;
+  // ---------------------------------------------------------------- E — Devil's Foot
+  kick() {
+    if (!this._ready('kick')) return;
+    const m = this.m, b = m.body;
+    this.cd.kick = cdOf(COOLDOWN.kick); this.busy = 0.5;
+    const dir = this._flatAim(this.kickDir);
+    // how far the kick can go before a wall stops it (for the trail)
+    const o = b.pos;
+    const hitD = m.world.raycast(o.x, o.y + 0.9, o.z, dir.x, 0, dir.z, KICK.speed * KICK.time, 0.3);
+    const dist = Math.min(KICK.speed * KICK.time, hitD);
+    b.lunge(dir, KICK.speed, KICK.time * (dist / (KICK.speed * KICK.time)) + 0.02);
+    b.vel.y = Math.max(b.vel.y, 2.5); b.grounded = false;
+    this.kickT = KICK.time + 0.04; this.kickHit = null;
+    m.playAnim('kick');
+    m.castAbility({ ab: 'kick', o: [o.x, o.y, o.z], d: [dir.x, dir.z], l: Math.round(dist * 100) / 100 });
+    m.cam.kick += 0.02; m.fx.shake(0.12);
+  }
+
+  _kickTick(dt) {
+    const m = this.m, b = m.body;
+    this.kickT -= dt;
+    if (this.kickHit || !m.local.alive) return;
+    for (const e of m.ents.values()) {
+      if (e === m.local || !e.alive) continue;
+      const dx = e.pos.x - b.pos.x, dz = e.pos.z - b.pos.z;
+      if (dx * dx + dz * dz > KICK.radius * KICK.radius || Math.abs(e.pos.y - b.pos.y) > 1.9) continue;
+      // connect: launch them, bounce off
+      this.kickHit = e;
+      const d = this.kickDir;
+      m.reportHit(e, KICK.dmg, 'kick', { kb: [d.x * 6, 14, d.z * 6], burn: [5, 2.5], at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
+      b.lungeT = 0;
+      b.vel.set(-d.x * 3.5, 6.5, -d.z * 3.5); b.grounded = false;
+      m.castAbility({ ab: 'kickHit', c: [e.pos.x, e.pos.y + 1, e.pos.z], d: [d.x, d.z] });
+      m.fx.shake(0.35); m.cam.kick += 0.04;
+      m.app.hud.hitStop && m.app.hud.hitStop();
+      break;
+    }
+  }
+
+  // ---------------------------------------------------------------- C — Rapid Ignition
+  ignite() {
+    if (!this._ready('ignite')) return;
     const m = this.m;
-    this.cd.orb = cdOf(COOLDOWN.orb); this.busy = 0.3;
-    m.playAnim('cast', { anim: 'orb' });
-    m.sound('orb', m.local.pos, 0.8, 30);
-    this.pending.push({ t: 0.24, fn: () => {
-      const a = m.view.palmWorld('R', tmp), b = m.view.palmWorld('L', new THREE.Vector3());
-      const o = a.add(b).multiplyScalar(0.5);
-      const dir = this._aimDir(o, tmp2);
-      dir.y += 0.06; dir.normalize();
-      const v = dir.multiplyScalar(PROJ.orb.speed);
-      m.fx.castBurst(o, dir.clone().normalize(), 1.2);
-      m.castAbility({ ab: 'orb', o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
-      m.cam.kick += 0.02;
+    this.cd.ignite = cdOf(COOLDOWN.ignite); this.busy = 0.42;
+    m.body.slow = 0.6; this.pending.push({ t: 0.42, fn: () => { m.body.slow = 1; } });
+    const n = IGNITE.count;
+    for (let i = 0; i < n; i++) {
+      this.pending.push({ t: 0.03 + i * 0.045, fn: () => {
+        const side = i % 2 ? 'L' : 'R';
+        if (i % 2 === 0 || i === n - 1) m.playAnim('cast', { anim: side === 'R' ? 'jabR' : 'jabL' });
+        const o = m.view.palmWorld(side, tmp);
+        const dir = this._aimDir(o, tmp2);
+        // fan: spread across the cone around the aim direction (yaw), slight random pitch
+        const a = (i / (n - 1) - 0.5) * 2 * IGNITE.spread;
+        const c = Math.cos(a), s = Math.sin(a);
+        const dx = dir.x * c + dir.z * s, dz = -dir.x * s + dir.z * c;
+        tmp3.set(dx, dir.y + (Math.random() - 0.5) * 0.04, dz).normalize().multiplyScalar(PROJ.ember.speed);
+        m.castAbility({ ab: 'ember', o: [o.x, o.y, o.z], d: [tmp3.x, tmp3.y, tmp3.z] });
+        if (i % 2 === 0) m.sound('ember', o, 0.45, 25);
+        m.cam.kick += 0.005;
+      } });
+    }
+  }
+
+  // called by Projectiles when one of OUR embers hits someone
+  onEmberHit(target, pos) {
+    const m = this.m;
+    const now = m.time;
+    let st = this.stacks.get(target.n);
+    if (!st || now - st.t > IGNITE.window) st = { n: 0, t: now };
+    st.n++; st.t = now;
+    this.stacks.set(target.n, st);
+    m.reportHit(target, PROJ.ember.dmg, 'ember', { burn: [2 + st.n * 1.5, 2.5], at: pos });
+    if (st.n >= 3) {
+      this.stacks.delete(target.n);
+      m.castAbility({ ab: 'igniteBoom', c: [target.pos.x, target.pos.y + 1, target.pos.z] });
+    }
+  }
+
+  // ---------------------------------------------------------------- V — Infernal Step
+  step() {
+    if (!this._ready('step')) return;
+    const m = this.m, b = m.body;
+    this.cd.step = cdOf(COOLDOWN.step); this.busy = 0.5;
+    b.locked = 0.32;
+    m.playAnim('stomp');
+    this.pending.push({ t: 0.2, fn: () => {
+      const p = b.pos;
+      m.castAbility({ ab: 'step', c: [p.x, p.y, p.z] });
+      b.boostT = STEP.boost;
+      m.fx.shake(0.3);
     } });
   }
 
-  wall() {
-    if (!this._ready('wall')) return;
+  // ---------------------------------------------------------------- X — Adolla Burst
+  adolla() {
     const m = this.m;
-    // placement: where the crosshair meets the ground, within 16 m
-    const me = m.local.pos;
-    const aim = m.aimPoint;
-    tmp.set(aim.x - me.x, 0, aim.z - me.z);
-    let d = tmp.length();
-    if (d < 0.01) { tmp.set(Math.sin(m.cam.yaw), 0, Math.cos(m.cam.yaw)); d = 1; }
-    tmp.divideScalar(d);
-    const dist = Math.max(3, Math.min(16, d));
-    const cx = me.x + tmp.x * dist, cz = me.z + tmp.z * dist;
-    const rot = Math.atan2(tmp.x, tmp.z); // wall runs perpendicular to the throw direction
-    this.cd.wall = cdOf(COOLDOWN.wall); this.busy = 0.55;
-    m.body.locked = 0.42;
-    m.playAnim('slam');
-    this.pending.push({ t: 0.28, fn: () => {
-      const cy = m.world.groundAt(cx, cz, me.y + 6);
-      m.castAbility({ ab: 'wall', c: [cx, cy, cz], r: rot });
-      m.fx.shake(0.15);
-    } });
-  }
-
-  leap() {
-    if (!this._ready('leap')) return;
-    const m = this.m;
-    this.cd.leap = cdOf(COOLDOWN.leap); this.busy = 0.25;
-    m.playAnim('leap');
-    this.pending.push({ t: 0.1, fn: () => {
-      const b = m.body;
-      const inp = m.app.input.state;
-      const sy = Math.sin(b.yaw), cy = Math.cos(b.yaw);
-      tmp.set(sy * inp.fwd - cy * inp.side, 0, cy * inp.fwd + sy * inp.side);
-      if (tmp.lengthSq() < 0.01) tmp.set(sy, 0, cy); else tmp.normalize();
-      b.vel.set(tmp.x * 7.5, 12.5, tmp.z * 7.5);
-      b.grounded = false; b.leaping = true; b.airDashed = false;
-      const o = b.pos;
-      m.castAbility({ ab: 'leap', o: [o.x, o.y, o.z] });
-    } });
-  }
-
-  meteor() {
-    const m = this.m;
-    if (this.ult < 100) { m.app.hud.denied('meteor'); return; }
+    if (this.ult < 100) { m.app.hud.denied('adolla'); return; }
     if (this.busy > 0) return;
-    // target: crosshair point on the ground, up to 55 m away
-    const me = m.local.pos;
-    tmp.copy(m.aimPoint);
-    tmp2.set(tmp.x - me.x, 0, tmp.z - me.z);
-    const d = tmp2.length();
-    if (d > 55) { tmp2.multiplyScalar(55 / d); tmp.set(me.x + tmp2.x, 0, me.z + tmp2.z); }
-    const target = new THREE.Vector3(tmp.x, m.world.groundAt(tmp.x, tmp.z, tmp.y + 2), tmp.z);
     this.ult = 0; this.ultReadyAnnounced = false;
-    this.busy = 0.9;
-    m.body.slow = 0.45; setTimeout(() => { m.body.slow = 1; }, 900);
-    m.playAnim('cast', { anim: 'ult' });
-    m.sound('meteorCall', me, 0.9, 60);
-    this.pending.push({ t: 0.5, fn: () => {
-      m.castAbility({ ab: 'meteor', c: [target.x, target.y, target.z] });
-    } });
+    const total = ADOLLA.charge + ADOLLA.beam + 0.35;
+    this.busy = total;
+    m.body.locked = ADOLLA.charge + ADOLLA.beam + 0.1;
+    m.body.vel.x *= 0.2; m.body.vel.z *= 0.2;
+    m.playAnim('adolla');
+    // the beam follows the crosshair, kept fairly flat
+    const o = m.local.pos;
+    const origin = tmp.set(o.x, o.y + 1.25, o.z).addScaledVector(this._flatAim(tmp3), 0.7);
+    const dir = this._aimDir(origin, tmp2);
+    const flat = Math.hypot(dir.x, dir.z) || 1;
+    const pitch = Math.max(-0.3, Math.min(0.3, Math.atan2(dir.y, flat)));
+    dir.set(dir.x / flat * Math.cos(pitch), Math.sin(pitch), dir.z / flat * Math.cos(pitch));
+    // stops at terrain / walls
+    const L = Math.min(ADOLLA.range, m.world.raycast(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, ADOLLA.range, 0.2));
+    m.castAbility({ ab: 'adolla', o: [origin.x, origin.y, origin.z], d: [dir.x, dir.y, dir.z], l: Math.round(L * 100) / 100 });
   }
 }

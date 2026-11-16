@@ -3,7 +3,7 @@ import { BAL } from './balance.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, spark: 30, starfall: 60, sigil: 70, blink: 35, nova: 400 };
+const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 30, starfall: 40, sigil: 80, blink: 45, nova: 500 };
 
 export class Rules {
   constructor(match) {
@@ -90,6 +90,10 @@ export class Rules {
       const cur = this.burns.get(v.n);
       this.burns.set(v.n, { dps, until: this.now + secs, by: from.n, acc: cur ? cur.acc : 0 });
       this.bcast({ t: 'burn', n: v.n, s: secs });
+    }
+    if (v.alive && Array.isArray(msg.slow)) {
+      const k = Math.max(0.3, Math.min(1, Number(msg.slow[0]) || 1)), s = Math.max(0, Math.min(3, Number(msg.slow[1]) || 0));
+      if (s > 0) this.bcast({ t: 'slow', n: v.n, k, s });
     }
     if (v.alive && Array.isArray(msg.kb)) {
       const k = msg.kb.map((x) => Math.max(-16, Math.min(16, Number(x) || 0)));

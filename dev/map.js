@@ -25,3 +25,9 @@ map.update(5, cam, m.root.position, [m.root.position]);
 r.render(map.scene, cam);
 console.log('LOG calls', r.info.render.calls, 'tris', r.info.render.triangles);
 window.done = true;
+if (q.get('top')) {
+  const rows = [];
+  map.scene.traverse((o) => { if (!o.isMesh || !o.visible) return; const g = o.geometry; const t = (g.index ? g.index.count : g.attributes.position.count) / 3; const n = o.isInstancedMesh ? o.count : 1; let p = o; let vis = true; while (p) { if (!p.visible) vis = false; p = p.parent; } if (vis) rows.push([o.name || o.parent?.name || o.type, Math.round(t * n), n]); });
+  const agg = {}; for (const [k, t] of rows) agg[k] = (agg[k] || 0) + t;
+  console.log('LOG TOP ' + JSON.stringify(Object.entries(agg).sort((a, b) => b[1] - a[1]).slice(0, 12)));
+}

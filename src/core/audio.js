@@ -184,6 +184,83 @@ const SFX = {
   wind: [6.0, (oc, o) => { noise(oc, o, { dur: 6.0, type: 'bandpass', f: [300, 600, 250, 500, 300], Q: 0.5, env: [[0.0, 0.5], [1.5, 0.8], [3, 0.5], [4.5, 0.9], [6, 0.5]], seed: 73 }); }, { level: 0.5 }],
 };
 
+// ---------------------------------------------------------------- v2 sound design
+// Layered like real game SFX: a transient click, a pitched sub "thump" for weight, a filtered
+// noise body, and a tail (crackle / reverb). Overrides the thinner first-pass sounds above.
+function thump(oc, o, t0, f0, f1, dur, gain = 1) {
+  tone(oc, o, { t0, dur, f: [f0, f1], env: [[0.003, gain], [dur * 0.35, gain * 0.55], [dur, 0]] });
+  tone(oc, o, { t0, dur: dur * 0.6, f: [f0 * 2, f1 * 1.5], type: 'triangle', env: [[0.003, gain * 0.35], [dur * 0.6, 0]] });
+}
+function click(oc, o, t0, gain = 1, f = 3000) { noise(oc, o, { t0, dur: 0.025, type: 'highpass', f: [f, f], env: [[0.001, gain], [0.025, 0]], seed: 401 + Math.round(f) }); }
+function whoosh(oc, o, t0, dur, f0, f1, gain = 1, seed = 1) { noise(oc, o, { t0, dur, f: [f0, f1, f0 * 0.6], Q: 1.4, env: [[dur * 0.35, gain], [dur, 0]], seed }); }
+function roar(oc, o, t0, dur, gain = 1, seed = 1, f = [180, 1200, 400]) {
+  noise(oc, o, { t0, dur, f, Q: 0.7, env: [[0.02, gain], [dur * 0.5, gain * 0.8], [dur, 0]], seed });
+  noise(oc, o, { t0, dur, type: 'lowpass', f: [300, 150], env: [[0.02, gain * 0.7], [dur, 0]], seed: seed + 1 });
+  crackle(oc, o, t0, dur, 110, 0.55 * gain, seed + 2);
+}
+Object.assign(SFX, {
+  // combat feedback
+  hit: [0.16, (oc, o) => { click(oc, o, 0, 0.8, 4500); tone(oc, o, { dur: 0.09, f: [2400, 2300], type: 'triangle', env: [[0.002, 0.35], [0.09, 0]] }); thump(oc, o, 0, 220, 120, 0.07, 0.5); }, { level: 0.55 }],
+  head: [0.45, (oc, o) => { click(oc, o, 0, 1, 5000); [3200, 4800, 6100].forEach((f, i) => tone(oc, o, { dur: 0.35 - i * 0.08, f: [f, f * 0.995], env: [[0.002, 0.45 - i * 0.1], [0.35 - i * 0.08, 0]] })); thump(oc, o, 0, 300, 150, 0.08, 0.6); }, { reverb: 0.15, tau: 0.25, level: 0.6 }],
+  kill: [1.2, (oc, o) => {
+    thump(oc, o, 0, 120, 40, 0.5, 1);
+    noise(oc, o, { dur: 0.6, f: [2000, 300], Q: 1, env: [[0.005, 0.5], [0.6, 0]], seed: 411 });
+    [784, 1175, 1568].forEach((f, i) => tone(oc, o, { t0: 0.04 + i * 0.03, dur: 0.9, f: [f, f], type: 'triangle', env: [[0.005, 0.32], [0.9, 0]] }));
+  }, { reverb: 0.35, tau: 0.6, drive: 1.3, level: 0.65 }],
+  hurt: [0.35, (oc, o) => { thump(oc, o, 0, 140, 55, 0.25, 1); noise(oc, o, { dur: 0.2, type: 'lowpass', f: [1400, 300], env: [[0.003, 0.7], [0.2, 0]], seed: 413 }); }, { drive: 1.8, level: 0.7 }],
+  // movement
+  jump: [0.35, (oc, o) => { whoosh(oc, o, 0, 0.28, 500, 2200, 0.7, 415); noise(oc, o, { dur: 0.08, type: 'lowpass', f: [400, 200], env: [[0.003, 0.6], [0.08, 0]], seed: 417 }); }, { level: 0.45 }],
+  doubleJump: [0.6, (oc, o) => { whoosh(oc, o, 0, 0.45, 300, 3200, 1, 419); thump(oc, o, 0, 160, 70, 0.2, 0.7); crackle(oc, o, 0, 0.35, 60, 0.3, 421); }, { reverb: 0.2, tau: 0.3, drive: 1.4, level: 0.6 }],
+  dash: [0.6, (oc, o) => { click(oc, o, 0, 0.6, 2500); whoosh(oc, o, 0, 0.42, 400, 4200, 1, 423); thump(oc, o, 0, 110, 60, 0.18, 0.6); crackle(oc, o, 0.02, 0.3, 60, 0.35, 425); }, { reverb: 0.15, tau: 0.25, drive: 1.6, level: 0.7 }],
+  roll: [0.6, (oc, o) => { noise(oc, o, { dur: 0.5, type: 'lowpass', f: [700, 250], env: [[0.01, 0.8], [0.25, 0.5], [0.5, 0]], seed: 427 }); whoosh(oc, o, 0, 0.4, 900, 2600, 0.35, 429); thump(oc, o, 0.02, 90, 50, 0.12, 0.5); }, { level: 0.6 }],
+  land: [0.35, (oc, o) => { thump(oc, o, 0, 120, 45, 0.18, 1); noise(oc, o, { dur: 0.2, f: [2200, 1200], Q: 0.6, env: [[0.004, 0.35], [0.2, 0]], seed: 431 }); }, { level: 0.6 }],
+  step: [0.18, (oc, o) => { noise(oc, o, { dur: 0.14, f: [1800, 3400], Q: 0.5, env: [[0.006, 0.45], [0.14, 0]], seed: 433 }); thump(oc, o, 0, 90, 60, 0.06, 0.45); }, { level: 0.4 }],
+  // Pyro: Fire Force kit
+  bolt: [0.5, (oc, o) => { click(oc, o, 0, 0.5, 2000); thump(oc, o, 0, 180, 70, 0.12, 0.8); roar(oc, o, 0, 0.32, 0.7, 435, [600, 2600, 900]); }, { reverb: 0.15, tau: 0.25, drive: 1.8, level: 0.75 }],
+  kick: [0.9, (oc, o) => { click(oc, o, 0, 0.6, 2200); whoosh(oc, o, 0, 0.5, 300, 3600, 1, 437); roar(oc, o, 0.02, 0.6, 0.9, 439, [200, 1800, 500]); thump(oc, o, 0, 120, 50, 0.25, 0.8); }, { reverb: 0.25, tau: 0.35, drive: 2.2, level: 0.85 }],
+  kickHit: [1.4, (oc, o) => {
+    click(oc, o, 0, 1, 1800); thump(oc, o, 0, 160, 34, 0.55, 1);
+    noise(oc, o, { dur: 0.9, type: 'lowpass', f: [6000, 900, 150], env: [[0.003, 1], [0.12, 0.5], [0.9, 0]], seed: 441 });
+    crackle(oc, o, 0.03, 1.1, 90, 0.5, 443);
+  }, { reverb: 0.35, tau: 0.5, drive: 3, level: 0.95 }],
+  ember: [0.35, (oc, o) => { click(oc, o, 0, 0.4, 3000); roar(oc, o, 0, 0.22, 0.6, 445, [900, 3000, 1200]); thump(oc, o, 0, 220, 110, 0.06, 0.5); }, { drive: 1.6, level: 0.6 }],
+  stomp: [1.8, (oc, o) => {
+    thump(oc, o, 0, 90, 26, 0.8, 1); click(oc, o, 0, 1, 1200);
+    roar(oc, o, 0.02, 1.2, 1, 447, [150, 1400, 300]);
+    noise(oc, o, { dur: 1.4, type: 'lowpass', f: [3000, 500, 100], env: [[0.004, 0.8], [0.3, 0.4], [1.4, 0]], seed: 449 });
+  }, { reverb: 0.45, tau: 0.7, drive: 2.6, level: 1 }],
+  adollaCharge: [1.0, (oc, o) => {
+    for (const [f, d] of [[110, 0], [111, 0], [220, 0.15], [330, 0.35]]) tone(oc, o, { t0: d, dur: 0.95 - d, f: [f, f * 2.6], type: 'sawtooth', env: [[0.1, 0.15], [0.9 - d, 0.3], [0.95 - d, 0]] });
+    noise(oc, o, { dur: 0.95, f: [200, 5000], Q: 2.5, env: [[0.1, 0.3], [0.9, 1], [0.95, 0]], seed: 451 });
+    crackle(oc, o, 0.1, 0.85, 160, 0.6, 453);
+  }, { reverb: 0.4, tau: 0.5, drive: 1.8, level: 0.75 }],
+  adollaBeam: [2.6, (oc, o) => {
+    click(oc, o, 0, 1, 1500); thump(oc, o, 0, 70, 22, 1.4, 1);
+    noise(oc, o, { dur: 1.3, f: [400, 1600, 900], Q: 0.5, env: [[0.01, 1], [1.0, 0.9], [1.3, 0]], seed: 455 });
+    noise(oc, o, { dur: 2.4, type: 'lowpass', f: [5000, 1500, 200], env: [[0.004, 1], [1.1, 0.7], [2.4, 0]], seed: 457 });
+    tone(oc, o, { dur: 1.2, f: [180, 160], type: 'sawtooth', env: [[0.02, 0.25], [1.0, 0.2], [1.2, 0]] });
+    crackle(oc, o, 0, 2.2, 140, 0.7, 459);
+  }, { reverb: 0.55, tau: 0.9, drive: 3.2, level: 1 }],
+  explode: [2.4, (oc, o) => {
+    click(oc, o, 0, 1, 1500); thump(oc, o, 0, 140, 28, 0.7, 1);
+    noise(oc, o, { dur: 1.4, type: 'lowpass', f: [7000, 1400, 180], env: [[0.003, 1], [0.15, 0.55], [1.4, 0]], seed: 461 });
+    crackle(oc, o, 0.05, 1.8, 60, 0.45, 463);
+  }, { reverb: 0.45, tau: 0.7, drive: 2.8, level: 0.95 }],
+  // Meteora
+  spark: [0.5, (oc, o) => {
+    click(oc, o, 0, 0.5, 4000);
+    tone(oc, o, { dur: 0.3, f: [2200, 900], type: 'triangle', env: [[0.003, 0.45], [0.3, 0]] });
+    tone(oc, o, { dur: 0.22, f: [3300, 1500], env: [[0.003, 0.3], [0.22, 0]] });
+    whoosh(oc, o, 0, 0.3, 1500, 5000, 0.5, 465); thump(oc, o, 0, 200, 90, 0.08, 0.5);
+  }, { reverb: 0.3, tau: 0.35, drive: 1.3, level: 0.7 }],
+  starCall: [1.0, (oc, o) => { [660, 990, 1320, 1980].forEach((f, i) => tone(oc, o, { t0: i * 0.06, dur: 0.8, f: [f, f * 1.01], type: 'sine', env: [[0.01, 0.3], [0.8, 0]] })); whoosh(oc, o, 0, 0.9, 400, 6000, 0.5, 467); }, { reverb: 0.6, tau: 0.8, level: 0.6 }],
+  starHit: [1.4, (oc, o) => { click(oc, o, 0, 1, 2500); thump(oc, o, 0, 150, 40, 0.5, 1); noise(oc, o, { dur: 1.0, type: 'lowpass', f: [8000, 1500, 200], env: [[0.003, 0.9], [1.0, 0]], seed: 469 }); [1200, 1800].forEach((f) => tone(oc, o, { dur: 0.6, f: [f, f * 0.98], env: [[0.003, 0.2], [0.6, 0]] })); }, { reverb: 0.4, tau: 0.6, drive: 2.2, level: 0.85 }],
+  vortex: [1.0, (oc, o) => { noise(oc, o, { dur: 0.9, f: [3000, 300], Q: 4, env: [[0.05, 0.6], [0.85, 1], [0.9, 0]], seed: 471 }); tone(oc, o, { dur: 0.9, f: [600, 120], type: 'sawtooth', env: [[0.05, 0.12], [0.9, 0]] }); }, { reverb: 0.4, tau: 0.5, level: 0.6 }],
+  novaWord: [1.4, (oc, o) => { thump(oc, o, 0, 60, 30, 1.3, 1); noise(oc, o, { dur: 1.3, f: [100, 600, 200], Q: 1, env: [[0.01, 0.8], [1.3, 0]], seed: 473 }); [110, 164.8, 220].forEach((f) => tone(oc, o, { dur: 1.3, f: [f, f], type: 'sawtooth', env: [[0.01, 0.2], [1.3, 0]] })); }, { reverb: 0.7, tau: 1.2, drive: 2, level: 0.9 }],
+  circleOn: [1.4, (oc, o) => { thump(oc, o, 0, 80, 40, 0.5, 0.8); [523, 784, 1046, 1568].forEach((f, i) => tone(oc, o, { t0: i * 0.02, dur: 1.3, f: [f, f], type: 'sine', env: [[0.01, 0.3 - i * 0.05], [1.3, 0]] })); noise(oc, o, { dur: 0.6, f: [4000, 800], Q: 2, env: [[0.01, 0.4], [0.6, 0]], seed: 475 }); }, { reverb: 0.8, tau: 1.2, level: 0.75 }],
+  rumble: [4.0, (oc, o) => { noise(oc, o, { dur: 4.0, type: 'lowpass', f: [120, 200, 90, 160], env: [[0.5, 0.8], [3.5, 1], [4.0, 0]], seed: 477 }); tone(oc, o, { dur: 4.0, f: [38, 46], env: [[0.5, 0.5], [3.5, 0.7], [4.0, 0]] }); }, { level: 0.85 }],
+});
+
 async function buildAll() {
   await Promise.all(Object.entries(SFX).map(([name, [len, fn, opt]]) => render(len, fn, opt).then((b) => { buffers[name] = b; })));
   try {

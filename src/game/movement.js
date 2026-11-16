@@ -24,8 +24,13 @@ export class Body {
     this.stepDist = 0;
     this.water = 0;
     this.fallStart = 0;
+    this.doubleJumped = false; // one extra jump in the air
+    this.lungeT = 0; this.lungeDir = new THREE.Vector3(); this.lungeSpeed = 0; // ability lunges (Devil's Foot)
+    this.boostT = 0; // Infernal Step speed boost
+    this.slowT = 0; this.slowK = 1; // slowed by enemy abilities
   }
-  teleport(x, y, z, yaw) { this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = 0; this.grounded = true; this.dashT = this.rollT = 0; this.airDashed = false; this.leaping = false; }
+  teleport(x, y, z, yaw) { this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = 0; this.grounded = true; this.dashT = this.rollT = this.lungeT = this.boostT = this.slowT = 0; this.airDashed = false; this.leaping = false; this.doubleJumped = false; }
+  lunge(dir, speed, time) { this.lungeDir.copy(dir).setY(0).normalize(); this.lungeSpeed = speed; this.lungeT = time; this.dashT = 0; this.rollT = 0; }
 }
 
 const wish = new THREE.Vector3();
@@ -40,6 +45,8 @@ export function stepMovement(b, cmd, dt, world, ev) {
     if (b.dashRecharge >= MOVE.dashRecharge * (BAL.noCooldowns ? 0.02 : BAL.cd)) { b.dashRecharge = 0; b.dashCharges++; }
   }
   b.locked = Math.max(0, b.locked - dt);
+  b.boostT = Math.max(0, b.boostT - dt);
+  b.slowT = Math.max(0, b.slowT - dt);
   // wish direction in world space (forward = (sin yaw, cos yaw); +side = character's right)
   const sy = Math.sin(b.yaw), cy = Math.cos(b.yaw);
   const f = b.locked > 0 ? 0 : cmd.fwd, s = b.locked > 0 ? 0 : cmd.side;
@@ -64,9 +71,14 @@ export function stepMovement(b, cmd, dt, world, ev) {
 
   const water = world.inWater(b.pos.x, b.pos.z);
   b.water = water;
-  const maxSpeed = MOVE.run * BAL.speed * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * b.slow;
+  const maxSpeed = MOVE.run * BAL.speed * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * b.slow * (b.boostT > 0 ? 1.45 : 1) * (b.slowT > 0 ? b.slowK : 1);
 
-  if (b.dashT > 0) {
+  if (b.lungeT > 0) {
+    b.lungeT -= dt;
+    b.vel.x = b.lungeDir.x * b.lungeSpeed; b.vel.z = b.lungeDir.z * b.lungeSpeed;
+    b.vel.y = Math.max(b.vel.y - g * 0.35 * dt, -3);
+    if (b.lungeT <= 0) { b.vel.x *= 0.35; b.vel.z *= 0.35; }
+  } else if (b.dashT > 0) {
     b.dashT -= dt;
     const k = b.dashT > 0 ? 1 : 0;
     b.vel.x = b.dashDir.x * MOVE.dashSpeed * k + b.dashDir.x * MOVE.run * 1.25 * (1 - k);
@@ -97,11 +109,20 @@ export function stepMovement(b, cmd, dt, world, ev) {
       const sp = Math.hypot(b.vel.x, b.vel.z);
       if (sp > maxSpeed * 1.6) { const k = 1 - Math.min(1, 0.6 * dt); b.vel.x *= k; b.vel.z *= k; }
     }
-    // jump
+    // jump (+ one double jump in the air that also re-aims your momentum)
     if (b.jumpBuf > 0 && (b.grounded || b.coyote > 0)) {
       b.vel.y = MOVE.jump * (water > 0.4 ? 0.8 : 1);
       b.grounded = false; b.coyote = 0; b.jumpBuf = 0;
       ev('jump', {});
+    } else if (b.jumpBuf > 0 && !b.grounded && !b.doubleJumped && b.locked <= 0) {
+      b.doubleJumped = true; b.jumpBuf = 0;
+      b.vel.y = MOVE.jump * 0.95;
+      if (wish.lengthSq() > 0.01) {
+        const hs = Math.max(Math.hypot(b.vel.x, b.vel.z), maxSpeed * 0.9);
+        b.vel.x = wish.x * hs; b.vel.z = wish.z * hs;
+      }
+      const lx = wish.x * cy - wish.z * sy, lz = wish.x * sy + wish.z * cy;
+      ev('doubleJump', { dir: wish.lengthSq() > 0.01 ? Math.atan2(lx, lz) : 0 });
     }
     b.vel.y -= g * dt;
   }
@@ -126,7 +147,7 @@ export function stepMovement(b, cmd, dt, world, ev) {
         const lx = b.rollDir.x * cy - b.rollDir.z * sy, lz = b.rollDir.x * sy + b.rollDir.z * cy;
         ev('roll', { dir: Math.atan2(lx, lz) });
       }
-      b.airDashed = false; b.leaping = false;
+      b.airDashed = false; b.leaping = false; b.doubleJumped = false;
     }
     b.pos.y = ground; b.vel.y = Math.max(0, b.vel.y); b.grounded = true;
   } else if (wasGrounded && b.vel.y <= 0 && b.pos.y - ground < 0.42 && b.dashT <= 0) {

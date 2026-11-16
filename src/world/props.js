@@ -308,6 +308,10 @@ export function buildProps(world, quality = 'high', Q = {}) {
   };
   const kinds = { oak: [oakGeometry(11), oakGeometry(23)], pine: [pineGeometry(5), pineGeometry(8)], birch: [birchGeometry(3)] };
   for (const [k, defs] of Object.entries(kinds)) defs.forEach((d) => treeColors(d, k));
+  // the forest on the hills is far away: a coarser canopy (1/4 the triangles) is indistinguishable
+  LEAF_DETAIL = 1;
+  const kindsFar = { oak: [oakGeometry(11), oakGeometry(23)], pine: kinds.pine, birch: kinds.birch };
+  kindsFar.oak.forEach((d) => treeColors(d, 'oak'));
   const placements = [];
   const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 });
   const leafMat = stylize(leafMaterial(), { wrap: 0.55, translucency: 0.25, band: 0.16 });
@@ -347,11 +351,15 @@ export function buildProps(world, quality = 'high', Q = {}) {
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   // arena trees cast shadows; the forest on the surrounding hills doesn't (it's outside the shadow
   // camera anyway, but splitting them keeps the shadow pass from even considering them)
-  for (const [kind, defs] of Object.entries(kinds)) defs.forEach((def, v) => {
+  for (const [kind, defs] of Object.entries(kinds)) defs.forEach((defNear, v) => {
     const all = placements.filter((p) => p.kind === kind && p.v === v);
-    for (const near of [true, false]) {
-      const list = all.filter((p) => (Math.hypot(p.x, p.z) < PLAY_RADIUS + 14) === near);
-      if (!list.length) continue;
+    // near (arena) trees: one batch; far forest: 8 angular sectors so most of it frustum-culls
+    const groups = [all.filter((p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 14)];
+    for (let k = 0; k < 8; k++) groups.push(all.filter((p) => Math.hypot(p.x, p.z) >= PLAY_RADIUS + 14 && Math.floor(((Math.atan2(p.z, p.x) + Math.PI) / (Math.PI * 2)) * 8) % 8 === k));
+    groups.forEach((list, gi) => {
+      const near = gi === 0;
+      const def = near ? defNear : kindsFar[kind][v];
+      if (!list.length) return;
       const tm = new THREE.InstancedMesh(def.trunk, trunkMat, list.length);
       const lm = new THREE.InstancedMesh(def.leaves, leafMat, list.length);
       list.forEach((p, i) => {
@@ -360,7 +368,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
         tm.setMatrixAt(i, m4); lm.setMatrixAt(i, m4);
       });
       for (const m of [tm, lm]) { m.castShadow = near; m.receiveShadow = near; m.computeBoundingSphere(); root.add(m); }
-    }
+    });
   });
 
   // ---------------- rocks

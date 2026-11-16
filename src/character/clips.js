@@ -419,3 +419,76 @@ export const RESPAWN = compileClip([
   } },
   { t: 1.05, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: GUARD },
 ]);
+
+// ================================================================== Pyro: Fire Force kit
+// E — Devil's Foot: a flying front kick, right leg spearing forward, flames streaming off the foot
+const KICK_AIR = {
+  hips: [-26, 0, 0], spine: [-4, 0, 0], chest: [6, 0, 0], neck: [10, 0, 0], head: [16, 0, 0],
+  upperLegR: [-100, 0, 4], lowerLegR: [6, 0, 0], footR: [-28, 0, 0],
+  upperLegL: [-58, 0, 6], lowerLegL: [118, 0, 0], footL: [30, 0, 0],
+  upperArmL: [-36, 0, 48], foreArmL: [-64, 0, 0], upperArmR: [24, 0, 34], foreArmR: [-40, 0, 0],
+};
+export const KICK_CLIP = compileClip([
+  { t: 0, hip: [0, -0.06, 0], b: { hips: [10, 0, 0], spine: [12, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [50, 0, 0], upperLegR: [-20, 0, 4], lowerLegR: [46, 0, 0], upperArmL: [-30, 0, 30], upperArmR: [-20, 0, 30], foreArmL: [-60, 0, 0], foreArmR: [-60, 0, 0] } },
+  { t: 0.08, ease: 'out', hip: [0, 0.12, 0.05], b: KICK_AIR },
+  { t: 0.3, ease: 'linear', hip: [0, 0.1, 0.05], b: { ...KICK_AIR, hips: [-24, 0, 0], upperLegR: [-96, 0, 4] } },
+  { t: 0.42, ease: 'smooth', hip: [0, -0.1, 0], b: { hips: [8, 0, 0], spine: [8, 0, 0], upperLegL: [-36, 0, 6], lowerLegL: [60, 0, 0], footL: [-10, 0, 0], upperLegR: [-30, 0, 6], lowerLegR: [56, 0, 0], footR: [-10, 0, 0], upperArmL: [-20, 0, 34], foreArmL: [-50, 0, 0], upperArmR: [-14, 0, 30], foreArmR: [-60, 0, 0] } },
+  { t: 0.56, ease: 'smooth', hip: [0, -0.03, 0], b: { spine: [3, 0, 0], upperArmL: [-8, 0, 12], foreArmL: [-40, 0, 0], upperArmR: [-14, 0, 16], foreArmR: [-70, 0, 0] } },
+]);
+
+// V — Infernal Step: knee up, both arms raised… then STOMP into a wide crouch, palms driving down
+const STOMP_LOW = {
+  hips: [12, 0, 0], spine: [20, 0, 0], chest: [8, 0, 0], neck: [-14, 0, 0], head: [-16, 0, 0],
+  upperArmL: [-26, 0, 64], foreArmL: [-24, 0, 0], handL: [-40, 0, 0], upperArmR: [-26, 0, 64], foreArmR: [-24, 0, 0], handR: [-40, 0, 0],
+};
+const STOMP_WIDE = { L: [0.24, 0, 0.1, 0], R: [-0.24, 0, -0.08, 0] };
+export const STOMP_CLIP = compileClip([
+  { t: 0, hip: [0, -0.03, 0], ik: STAND, b: { spine: [2, 0, 0] } },
+  { t: 0.13, ease: 'out', hip: [0, 0.02, 0], ik: { L: [0.13, 0, 0.04, 0], R: [-0.13, 0.42, 0.12, -10] }, b: {
+    spine: [-8, 0, 0], chest: [-6, 0, 0], head: [-6, 0, 0],
+    upperArmL: [-150, 0, 34], foreArmL: [-30, 0, 0], upperArmR: [-150, 0, 34], foreArmR: [-30, 0, 0],
+  } },
+  { t: 0.21, ease: 'in', hip: [0, -0.3, 0.02], ik: STOMP_WIDE, b: STOMP_LOW },
+  { t: 0.42, ease: 'linear', hip: [0, -0.28, 0.02], ik: STOMP_WIDE, b: { ...STOMP_LOW, spine: [18, 0, 0] } },
+  { t: 0.68, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: { spine: [3, 0, 0], upperArmL: [-8, 0, 12], foreArmL: [-40, 0, 0], upperArmR: [-14, 0, 16], foreArmR: [-70, 0, 0] } },
+]);
+
+// X — Adolla Burst: sink into a wide stance gathering flame at the hip, then thrust both palms
+const ADOLLA_CHARGE = {
+  hips: [4, -18, 0], spine: [6, -16, 0], chest: [4, -14, 0], neck: [0, 22, 0], head: [-4, 24, 0],
+  upperArmR: [10, 0, 22], foreArmR: [-108, 0, 0], handR: [20, 0, 0],
+  upperArmL: [-34, 0, -40], foreArmL: [-100, 0, 0], handL: [20, 0, 0],
+};
+const ADOLLA_FIRE = {
+  hips: [8, 6, 0], spine: [12, 4, 0], chest: [6, 2, 0], neck: [-12, 0, 0], head: [-12, -4, 0],
+  upperArmR: [-86, 0, -10], foreArmR: [-4, 0, 0], handR: [-50, 0, 0],
+  upperArmL: [-86, 0, -10], foreArmL: [-4, 0, 0], handL: [-50, 0, 0],
+};
+const BRACE = { L: [0.22, 0, 0.26, -4], R: [-0.22, 0, -0.24, 18] };
+export const ADOLLA_CLIP = compileClip([
+  { t: 0, hip: [0, -0.03, 0], ik: STAND, b: { spine: [2, 0, 0] } },
+  { t: 0.3, ease: 'out', hip: [0, -0.18, -0.02], ik: BRACE, b: ADOLLA_CHARGE },
+  { t: 0.72, ease: 'linear', hip: [0, -0.2, -0.03], ik: BRACE, b: { ...ADOLLA_CHARGE, spine: [8, -18, 0] } },
+  { t: 0.8, ease: 'out', hip: [0, -0.22, 0.05], ik: BRACE, b: ADOLLA_FIRE },
+  { t: 1.2, ease: 'linear', hip: [0, -0.24, 0.02], ik: BRACE, b: { ...ADOLLA_FIRE, spine: [10, 4, 0] } },
+  { t: 1.65, ease: 'linear', hip: [0, -0.22, 0.03], ik: BRACE, b: { ...ADOLLA_FIRE, spine: [11, 3, 0] } },
+  { t: 2.0, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: { spine: [3, 0, 0], upperArmL: [-8, 0, 12], foreArmL: [-40, 0, 0], upperArmR: [-14, 0, 16], foreArmR: [-70, 0, 0] } },
+]);
+
+// C — Rapid Ignition: short snapping jabs (much quicker than the Ember Fists punches)
+function jabKeys(side) {
+  const out = { spine: [3, 6, 0], chest: [2, 12, 0], neck: [0, -10, 0], head: [0, -12, 0], upperArmR: [-84, 0, -6], foreArmR: [-4, 0, 0], handR: [-30, 0, 0], upperArmL: [12, 0, 16], foreArmL: [-108, 0, 0] };
+  const keys = [{ t: 0, b: GUARD }, { t: 0.04, ease: 'out', b: out }, { t: 0.09, ease: 'linear', b: out }, { t: 0.22, ease: 'smooth', b: GUARD }];
+  return compileClip(side === 'R' ? keys : keys.map((k) => ({ ...k, b: mirror(k.b) })));
+}
+export const JAB_R = jabKeys('R');
+export const JAB_L = jabKeys('L');
+
+// double jump: a tucked front flip with the arms swept up
+export const DOUBLE_JUMP = compileClip([
+  { t: 0, hip: [0, 0.02, 0], b: { hips: [-6, 0, 0], upperLegL: [-40, 0, 6], lowerLegL: [60, 0, 0], upperLegR: [-10, 0, 6], lowerLegR: [40, 0, 0], upperArmL: [-150, 0, 30], upperArmR: [-150, 0, 30], foreArmL: [-20, 0, 0], foreArmR: [-20, 0, 0] } },
+  tuckKey(0.12, 120, 0.1, 0, 'out'),
+  tuckKey(0.26, 250, 0.08, 0, 'linear'),
+  { t: 0.42, ease: 'out', hip: [0, 0.02, 0], b: { hips: [362, 0, 0], spine: [6, 0, 0], upperLegL: [-50, 0, 8], lowerLegL: [70, 0, 0], footL: [20, 0, 0], upperLegR: [-20, 0, 8], lowerLegR: [50, 0, 0], footR: [24, 0, 0], upperArmL: [-30, 0, 50], foreArmL: [-30, 0, 0], upperArmR: [-26, 0, 54], foreArmR: [-30, 0, 0] } },
+  { t: 0.55, hip: [0, 0.02, 0], b: { hips: [360, 0, 0], spine: [2, 0, 0], upperLegL: [-34, 0, 8], lowerLegL: [44, 0, 0], upperLegR: [-12, 0, 8], lowerLegR: [30, 0, 0], upperArmL: [-14, 0, 52], foreArmL: [-28, 0, 0], upperArmR: [-8, 0, 56], foreArmR: [-30, 0, 0] } },
+]);

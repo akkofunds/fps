@@ -4,6 +4,8 @@ import { Audio } from '../core/audio.js';
 import { addRecent } from '../core/storage.js';
 import { groundH } from '../world/terrain.js';
 import { Fx } from '../fx/arcane.js';
+import '../fx/inferno.js';
+import { KICK, STEP, ADOLLA, IGNITE } from './pyro.js';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
 import { Body, stepMovement } from './movement.js';
 import { ShoulderCamera } from './camera.js';
@@ -87,7 +89,7 @@ export class Match {
     const Q = this.map.Q;
     this.fx = new Fx(this.scene, this.world, Q.lights, Q.particles);
     // without bloom, additive HDR fire saturates to white; tone it down
-    if (!app.composer) this.fx.fire.mat.uniforms.uGain.value = 0.55;
+    if (!app.composer || app.noPost) this.fx.fire.mat.uniforms.uGain.value = 0.55;
     this.proj = new Projectiles(this);
     const templates = {};
     for (const p of this.players) { const md = mageOf(p.mage); if (!templates[md.id]) templates[md.id] = await loadMageModel(md.model); }
@@ -161,12 +163,13 @@ export class Match {
     const msg = { t: 'hit', v: target.n, dmg, ab, head: extra.head ? 1 : 0 };
     if (extra.burn) msg.burn = extra.burn;
     if (extra.kb) msg.kb = extra.kb;
+    if (extra.slow) msg.slow = extra.slow;
     this.sendToHost(msg);
     // instant feedback (host confirms HP)
     this.app.hud.hitMarker(extra.head, dmg);
     this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
     Audio.play(extra.head ? 'head' : 'hit', 0.6);
-    if (ab !== 'nova' && ab !== 'meteor') this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
+    if (ab !== 'nova' && ab !== 'meteor' && ab !== 'adolla' && ab !== 'adollaPath') this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
   }
 
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
@@ -185,6 +188,7 @@ export class Match {
       const dmg = Math.round(maxD + (minD - maxD) * k);
       const extra = { at: new THREE.Vector3(e.pos.x, e.pos.y + 1.4, e.pos.z) };
       if (opts.burn) extra.burn = opts.burn;
+      if (opts.slow) extra.slow = opts.slow;
       if (opts.kb) {
         const hx = e.pos.x - c.x, hz = e.pos.z - c.z, hl = Math.hypot(hx, hz) || 1;
         const s = opts.kb * (1 - k * 0.5);
@@ -204,6 +208,67 @@ export class Match {
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
       case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
+      // ---- Pyro: Fire Force kit
+      case 'kick': {
+        const o = new THREE.Vector3().fromArray(d.o);
+        const dx = d.d[0], dz = d.d[1], L = Math.min(KICK.speed * KICK.time, Number(d.l) || 0);
+        const a = new THREE.Vector3(o.x, o.y, o.z), b = new THREE.Vector3(o.x + dx * L, 0, o.z + dz * L);
+        b.y = this.world.groundAt(b.x, b.z, o.y + 3);
+        e.kickT = KICK.time + 0.05;
+        this.fx.fireTrail(a, b, 3.5, KICK.time, 0.55);
+        this.areas.push({ kind: 'trail', a, b, w: 1.0, t: 0, life: 3.5, tick: 0.3, owner: e.n, local, dmg: 6, ab: 'trail', burn: [3, 1.5] });
+        this.sound('kick', o, 1, 35);
+        break;
+      }
+      case 'kickHit': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.kickImpact(c, d.d[0], d.d[1]);
+        this.sound('kickHit', c, 1, 40);
+        break;
+      }
+      case 'ember': this.proj.spawn(e.n, 'ember', d.o, d.d, local); if (!local && Math.random() < 0.5) this.sound('ember', tmpV.fromArray(d.o), 0.4, 25); break;
+      case 'igniteBoom': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.igniteBoom(c, IGNITE.boomR);
+        this.sound('explode', c, 0.8, 35);
+        if (local) this.areaDamage(c, IGNITE.boomR, IGNITE.boomDmg, 18, 'igniteBoom', { kb: 5, up: 5 });
+        break;
+      }
+      case 'step': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.infernalStep(c, STEP.radius);
+        e.boostT = STEP.boost;
+        this.sound('stomp', c, 1, 45);
+        if (local) this.areaDamage(c, STEP.radius, STEP.maxDmg, STEP.minDmg, 'step', { kb: 13, up: 6, slow: [STEP.slow, STEP.slowT], burn: [3, 2] });
+        break;
+      }
+      case 'adolla': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3().fromArray(d.d).normalize();
+        const L = Math.min(ADOLLA.range, Number(d.l) || ADOLLA.range);
+        this.sound('adollaCharge', o, 1.1, 80);
+        this.fx.adolla(o, dir, L, {
+          charge: ADOLLA.charge, beam: ADOLLA.beam,
+          onFire: () => {
+            this.sound('adollaBeam', o, 1.4, 160);
+            // burning scar on the ground under the beam
+            const a = new THREE.Vector3(o.x, 0, o.z), b = new THREE.Vector3(o.x + dir.x * L, 0, o.z + dir.z * L);
+            a.y = this.world.groundAt(a.x, a.z, o.y + 2); b.y = this.world.groundAt(b.x, b.z, o.y + dir.y * L + 4);
+            this.fx.fireTrail(a, b, ADOLLA.path, 0.12, 1.1);
+            this.areas.push({ kind: 'trail', a, b, w: 1.6, t: 0, life: ADOLLA.path, tick: 0.2, owner: e.n, local, dmg: 8, ab: 'adollaPath', burn: [5, 2] });
+            if (local) {
+              // pierces: everyone along the beam, once
+              const end = tmpV2.copy(o).addScaledVector(dir, L);
+              for (const t of this.ents.values()) {
+                if (t === this.local || !t.alive) continue;
+                if (distToSeg3(t.pos, o, end) < ADOLLA.width) this.reportHit(t, ADOLLA.dmg, 'adolla', { kb: [dir.x * 11, 5, dir.z * 11], burn: [7, 3], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.3, t.pos.z) });
+              }
+              // recoil
+              this.body.vel.x -= dir.x * 3; this.body.vel.z -= dir.z * 3;
+            }
+          },
+        });
+        break;
+      }
       case 'starfall': {
         const c = new THREE.Vector3().fromArray(d.c);
         this.sound('meteorFall', c, 0.5, 40);
@@ -334,6 +399,21 @@ export class Match {
           }
         }
         if (ar.t >= ar.life) { Audio.stopLoop('wall' + ar.id); this.areas.splice(i, 1); }
+      } else if (ar.kind === 'trail') {
+        // burning ground along a segment (Devil's Foot trail, Adolla scar)
+        if (ar.local) {
+          ar.tick -= dt;
+          if (ar.tick <= 0) {
+            ar.tick = 0.5;
+            for (const e of this.ents.values()) {
+              if (e === this.local || !e.alive) continue;
+              const gy = ar.a.y + (ar.b.y - ar.a.y) * 0.5;
+              if (distToSegXZ(e.pos, ar.a, ar.b) < ar.w && e.pos.y < Math.max(ar.a.y, ar.b.y) + 2.2 && e.pos.y > Math.min(ar.a.y, ar.b.y) - 1.5) this.reportHit(e, ar.dmg, ar.ab, { burn: ar.burn, at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
+              void gy;
+            }
+          }
+        }
+        if (ar.t >= ar.life) this.areas.splice(i, 1);
       } else if (ar.kind === 'field') {
         ar.tick -= dt;
         if (ar.local && ar.tick <= 0) {
@@ -426,7 +506,11 @@ export class Match {
       case 'ev': {
         const e = this.ents.get(msg.n);
         if (!e || e === this.local) return;
-        if (msg.k === 'anim') e.view.anim.play(msg.a, msg.d || {});
+        if (msg.k === 'anim') {
+          e.view.anim.play(msg.a, msg.d || {});
+          if (msg.a === 'dash') { e.dashFx = 0.24; this.fx.dashBurst(e.pos, tmpV.set(e.vel.x, 0, e.vel.z).normalize(), e.mage); this.sound('dash', e.pos, 0.7, 25); }
+          if (msg.a === 'doubleJump') { this.fx.doubleJumpFx(e.pos, e.mage); this.sound('doubleJump', e.pos, 0.6, 25); }
+        }
         else if (msg.k === 'ab') this.spawnAbility(e, msg, false);
         break;
       }
@@ -456,6 +540,13 @@ export class Match {
         break;
       }
       case 'burn': { const e = this.ents.get(msg.n); if (e) e.burnT = msg.s; break; }
+      case 'slow': {
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        e.slowT = msg.s;
+        if (e === this.local) { this.body.slowT = msg.s; this.body.slowK = msg.k; hud.status && hud.status('SLOWED', msg.s); }
+        break;
+      }
       case 'kill': {
         const v = this.ents.get(msg.v), k = this.ents.get(msg.k);
         if (v) {
@@ -592,7 +683,10 @@ export class Match {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
         if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
         else if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
-        if (this.body.dashT > 0 && e === this.local) this.fx.dashTrail(e.pos);
+        if (e.dashFx > 0) { e.dashFx -= dt; this.fx.dashStreak(e.pos, e.vel, e.mage); }
+        if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
+        if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
+        if (e.slowT > 0) { e.slowT -= dt; this.fx.slowFx(e.pos); }
       }
     }
     // local view fades when the camera is jammed against it
@@ -630,8 +724,9 @@ export class Match {
     const me = this.local, b = this.body;
     switch (k) {
       case 'jump': this.view.anim.play('jumpStart'); this.sound('jump', b.pos, 0.5, 20); break;
+      case 'doubleJump': this.playAnim('doubleJump', d); this.sound('doubleJump', b.pos, 0.7, 25); this.fx.doubleJumpFx(b.pos, this.local.mage); break;
       case 'land': this.view.anim.play('land', d); if (d.vy < -6) this.sound('land', b.pos, Math.min(1, -d.vy / 14), 20); break;
-      case 'dash': this.playAnim('dash', d); this.sound('dash', b.pos, 0.8, 25); this.fx.dashTrail(b.pos); break;
+      case 'dash': this.playAnim('dash', d); this.sound('dash', b.pos, 0.8, 25); me.dashFx = 0.24; this.fx.dashBurst(b.pos, b.dashDir, me.mage); this.cam.dashKick = 1; break;
       case 'roll': this.playAnim('roll', d); this.sound('roll', b.pos, 0.8, 20); break;
       case 'step': this.sound(d.water > 0.1 ? 'splash' : 'step', b.pos, d.water > 0.1 ? 0.4 : 0.25, 15); break;
       default: break;
@@ -698,6 +793,12 @@ export class Match {
   }
 }
 
+function distToSeg3(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const py = p.y + 0.9;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (py - a.y) * dy + (p.z - a.z) * dz) / (dx * dx + dy * dy + dz * dz || 1)));
+  return Math.hypot(p.x - (a.x + dx * t), py - (a.y + dy * t), p.z - (a.z + dz * t));
+}
 function distToSegXZ(p, a, b) {
   const dx = b.x - a.x, dz = b.z - a.z;
   const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz)));

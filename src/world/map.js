@@ -13,10 +13,10 @@ import { STYLE } from './stylize.js';
 // no shadows/post, short grass draw distance, coarse terrain, fewer lights/particles/outlines.
 // Every preset also gets dynamic resolution (see main.js) to hold 60 FPS.
 export const QUALITY = {
-  low: { grass: 9000, blades: 3, grassDist: 28, pushers: 2, flowers: 500, bushes: 30, scenery: 70, leafDetail: 1, terrainStep: 2, shadow: 1024, shadows: false, bloom: false, msaa: 0, lights: 1, particles: 2500, outlines: false, dpr: 1, minScale: 0.6 },
-  medium: { grass: 30000, blades: 3, grassDist: 40, pushers: 4, flowers: 1600, bushes: 100, scenery: 170, leafDetail: 1, terrainStep: 1, shadow: 1024, shadows: true, bloom: true, msaa: 0, lights: 2, particles: 5000, outlines: true, dpr: 1.25, minScale: 0.6 },
-  high: { grass: 60000, blades: 4, grassDist: 55, pushers: 8, flowers: 3000, bushes: 200, scenery: 300, leafDetail: 2, terrainStep: 1, shadow: 2048, shadows: true, bloom: true, msaa: 4, lights: 3, particles: 8000, outlines: true, dpr: 1.5, minScale: 0.55 },
-  ultra: { grass: 100000, blades: 4, grassDist: 75, pushers: 8, flowers: 4500, bushes: 300, scenery: 420, leafDetail: 2, terrainStep: 1, shadow: 4096, shadows: true, bloom: true, msaa: 4, ao: true, lights: 4, particles: 9000, outlines: true, dpr: 2, minScale: 0.5 },
+  low: { grass: 7000, blades: 3, grassDist: 24, pushers: 2, flowers: 400, bushes: 24, scenery: 60, leafDetail: 1, terrainStep: 2, shadow: 1024, shadows: false, bloom: false, msaa: 0, lights: 1, particles: 2000, outlines: false, dpr: 1, minScale: 0.55 },
+  medium: { grass: 20000, blades: 3, grassDist: 34, pushers: 4, flowers: 1100, bushes: 70, scenery: 130, leafDetail: 1, terrainStep: 1, shadow: 1024, shadows: true, bloom: true, msaa: 0, lights: 2, particles: 4000, outlines: true, dpr: 1, minScale: 0.6 },
+  high: { grass: 38000, blades: 4, grassDist: 46, pushers: 6, flowers: 2000, bushes: 150, scenery: 230, leafDetail: 2, terrainStep: 1, shadow: 2048, shadows: true, bloom: true, msaa: 2, lights: 3, particles: 6000, outlines: true, dpr: 1.25, minScale: 0.55 },
+  ultra: { grass: 70000, blades: 4, grassDist: 64, pushers: 8, flowers: 3500, bushes: 260, scenery: 360, leafDetail: 2, terrainStep: 1, shadow: 4096, shadows: true, bloom: true, msaa: 4, ao: true, lights: 4, particles: 8000, outlines: true, dpr: 1.5, minScale: 0.5 },
 };
 
 export class GameMap {
@@ -57,6 +57,7 @@ export class GameMap {
     this.bushes = buildBushes(Q.bushes, this.props.userData.anchors, avoid); s.add(this.bushes);
     // undergrowth chunks culled by distance every frame
     this.lod = [...this.grass.children.map((m) => [m, Q.grassDist]), ...this.flowers.children.map((m) => [m, Q.grassDist * 0.9]), ...this.bushes.children.map((m) => [m, Q.grassDist * 2.2])];
+    this.lodScale = 1; // lowered by the runtime auto-tuner
     this.altar = this.props.userData.altar;
     this.spawns = this._spawns();
     this.time = 0;
@@ -134,7 +135,7 @@ export class GameMap {
     if (this._lodTick === 0) for (const [m, dist] of this.lod) {
       const bs = m.boundingSphere;
       if (!bs) continue;
-      const dx = bs.center.x - cp.x, dz = bs.center.z - cp.z, r = dist + bs.radius;
+      const dx = bs.center.x - cp.x, dz = bs.center.z - cp.z, r = dist * this.lodScale + bs.radius;
       m.visible = dx * dx + dz * dz < r * r;
     }
     if (pushers) {
