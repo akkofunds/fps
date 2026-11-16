@@ -89,6 +89,12 @@ export class LobbyScene {
       // drift back toward the hero angle
       this.yaw += (this.baseYaw + 0.35 + Math.sin(this.t * 0.25) * 0.08 - this.yaw) * (1 - Math.exp(-0.8 * dt)) * (Math.abs(this.yawVel) < 0.2 ? 1 : 0);
     }
+    // the lobby shows players only: the character is hidden (the meadow stays as the backdrop)
+    if (this.inst.root.visible) this.inst.root.visible = false;
+    this.fx.update(dt, this.camera, this.h);
+    this.map.update(dt, this.camera, this.P, [this.P]);
+    return;
+    // eslint-disable-next-line no-unreachable
     const a = this.inst.anim;
     a.update(dt, { pos: this.inst.root.position, yaw: this.yaw, pitch: 0.05, vel: new THREE.Vector3(), grounded: true });
     this.inst.root.rotation.y = this.yaw;

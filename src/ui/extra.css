@@ -168,6 +168,7 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 @keyframes heroIn { from { opacity: 0; transform: translateX(-46%); letter-spacing: 0.2em; } }
 
 /* party banners: sleeker glass with element-tinted top glow */
+.card.me .frame { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 .card .frame { background: linear-gradient(to bottom, rgba(18,26,38,0.55), rgba(10,15,24,0.78)); border: 1px solid rgba(255,255,255,0.09); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); }
 .card:not(.me):hover .frame { border-color: rgba(255,255,255,0.22); }
 .card .plus { transition: transform .2s, color .2s; }
@@ -199,3 +200,16 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 .mage-tile.sel { box-shadow: 0 0 0 1px var(--hero) inset, 0 0 22px -6px var(--hero); }
 .mage-tile.locked { opacity: 0.55; filter: grayscale(0.6); }
 .mage-tile.locked .soon { background: #6b2a3a; color: #ffd6dc; }
+
+/* ---------------- lobby: name cards only (no characters) */
+.card.name-card .frame { background: linear-gradient(to bottom, rgba(18,26,38,0.62), rgba(10,15,24,0.85)) !important; border: 1px solid rgba(255,255,255,0.1); }
+.card.name-card.me .frame { border-color: rgba(120,220,255,0.55); box-shadow: 0 0 36px -8px rgba(120,220,255,0.5), inset 0 0 24px -12px rgba(120,220,255,0.6); }
+.card.name-card .emblem { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); width: 92px; height: 92px; display: grid; place-items: center;
+  font-family: var(--font-d); font-weight: 700; font-size: 48px; color: #fff; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.18), rgba(255,255,255,0.02) 60%), linear-gradient(135deg, #2b4d6e, #1a2433);
+  border: 2px solid rgba(255,255,255,0.18); box-shadow: 0 8px 26px -10px #000; }
+.card.name-card.me .emblem { width: 112px; height: 112px; font-size: 58px; border-color: rgba(140,225,255,0.7);
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.25), rgba(255,255,255,0.02) 60%), linear-gradient(135deg, #3a7ea8, #9a3a2a); box-shadow: 0 0 30px -6px rgba(120,220,255,0.7); }
+.card.name-card .pname { max-width: calc(100% - 20px); margin: 6px auto 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.card.name-card .ptag { margin-top: 4px; font-size: 11px; letter-spacing: 0.18em; color: var(--muted); }
+.card.name-card .meta { padding-bottom: 30%; }

@@ -184,29 +184,22 @@ export class Lobby {
     this._startLabel();
   }
 
+  // party card: no characters in the lobby, just the player — a big initial emblem + the name
+  // (long names are cut with an ellipsis)
   _card(m, isMe) {
     const pm = this.pm;
-    const c = el('div', 'card' + (isMe ? ' me' : ''));
+    const c = el('div', 'card name-card' + (isMe ? ' me' : ''));
     c.appendChild(el('div', 'frame'));
-    const md = mageOf(isMe ? this.mage : m.mage);
-    if (!isMe) {
-      const art = el('div', 'art' + (md.id === 'meteora' ? ' crimson' : ''));
-      art.appendChild(el('div', 'art-name', md.name));
-      art.insertAdjacentHTML('beforeend', md.id === 'meteora' ? ICONS.nova : ICONS.flame);
-      c.appendChild(art);
-    }
     if (pm.party.leader === m.id && pm.inParty) c.appendChild(el('div', 'leader', '★'));
+    const emb = el('div', 'emblem', (m.name || '?').trim().charAt(0).toUpperCase());
+    c.appendChild(emb);
     const meta = el('div', 'meta');
-    meta.appendChild(el('div', 'ready', 'READY'));
-    meta.appendChild(el('div', 'pname', m.name));
-    meta.appendChild(el('div', 'ptitle', md.role));
+    meta.appendChild(el('div', 'ready', isMe ? 'YOU' : 'READY'));
+    const nm = el('div', 'pname', m.name); nm.title = `${m.name}#${m.tag || ''}`;
+    meta.appendChild(nm);
+    meta.appendChild(el('div', 'ptag', m.tag ? `#${m.tag}` : ''));
     c.appendChild(meta);
     const rank = el('div', 'rank'); rank.innerHTML = ICONS.rank; c.appendChild(rank);
-    if (isMe) {
-      // the showcase character is fixed (no dragging): a hero pedestal + glow instead
-      c.appendChild(el('div', 'pedestal'));
-      c.style.setProperty('--accent', md.color);
-    }
     return c;
   }
 
@@ -283,6 +276,7 @@ export class Lobby {
 
   // big agent-select style name watermark behind the lobby character
   _heroName() {
+    return; // lobby shows players only (no character showcase)
     let h = document.getElementById('heroName');
     if (!h) { h = el('div', 'hero-name'); h.id = 'heroName'; const tab = $('tabPlay'); tab.insertBefore(h, tab.firstChild); }
     const md = mageOf(this.mage);
