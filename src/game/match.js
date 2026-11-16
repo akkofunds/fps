@@ -532,8 +532,8 @@ export class Match {
       L.set(o.x, o.y + 1.5, o.z); fov = 40;
     } else if (t < 5.4) { // the battlefield: behind her, tilting up as the seals stack over the target
       const k = (t - 3.6) / 1.8;
-      const back = NOVA.radius * 2.6;
-      P.set(c.x - f.x * back + sd.x * 8, c.y + 6 + k * 4, c.z - f.z * back + sd.z * 8);
+      const back = NOVA.radius * 1.9;
+      P.set(c.x - f.x * back + sd.x * 8, c.y + 4 + k * 4, c.z - f.z * back + sd.z * 8);
       L.set(c.x, c.y + 14 + k * 10, c.z); fov = 62;
     } else if (t < 6.6) { // stage: fast spin, then a whip zoom on the final word
       const k = (t - 5.4) / 1.2;

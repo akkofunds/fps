@@ -110,7 +110,7 @@ function groundCircle(tex, radius, x, z, color, world) {
 // ---------------------------------------------------------------- fireball shader (nova)
 function fireballMaterial() {
   return new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    transparent: true, depthWrite: false, blending: THREE.NormalBlending, fog: false,
     uniforms: { uT: { value: 0 }, uHeat: { value: 1 } },
     vertexShader: /* glsl */`
       uniform float uT; varying vec3 vN; varying vec3 vW; varying float vNz;
@@ -136,8 +136,13 @@ function fireballMaterial() {
         float k = clamp(core * uHeat + vNz * 0.3, 0.0, 1.0);
         vec3 col = mix(cool, mid, smoothstep(0.1, 0.55, k));
         col = mix(col, hot, smoothstep(0.55, 1.0, k));
-        float a = (0.3 + core * 0.5) * clamp(uHeat * 1.2, 0.0, 1.0);
-        gl_FragColor = vec4(col * a, a);
+        // a solid ball of fire (not a glow bubble): turbulent dark-red edges, orange-gold core,
+        // cooling into black-brown smoke as the heat drops
+        float smoke = smoothstep(0.75, 0.15, uHeat) * (0.6 + 0.4 * (1.0 - vNz));
+        col = mix(col, vec3(0.12, 0.08, 0.07), smoke);
+        col *= 0.75 + 0.5 * vNz;
+        float a = clamp(0.55 + core * 0.4, 0.0, 0.95) * clamp(uHeat * 2.0 + 0.15, 0.0, 1.0);
+        gl_FragColor = vec4(col, a);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
       }`,
