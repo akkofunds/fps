@@ -299,15 +299,17 @@ const NOVA_UP2 = { ...NOVA_UP, spine: [-12, 0, 0], head: [-26, 0, 0], upperArmR:
 const WIDE = { L: [0.2, 0, 0.12, 0], R: [-0.2, 0, -0.1, 0] };
 export const M_NOVA = compileClip([
   { t: 0, hip: [0, -0.03, 0], ik: STAND, b: SGUARD },
-  { t: 0.35, ease: 'out', hip: [0, -0.08, -0.02], ik: WIDE, b: NOVA_UP },
-  { t: 2.1, ease: 'linear', hip: [0, -0.1, -0.03], ik: WIDE, b: NOVA_UP2 },
+  { t: 0.5, ease: 'out', hip: [0, -0.08, -0.02], ik: WIDE, b: NOVA_UP },
+  { t: 2.0, ease: 'smooth', hip: [0, -0.1, -0.03], ik: WIDE, b: { ...NOVA_UP2, spine: [-14, 6, 0], head: [-28, 4, 0] } },
+  { t: 3.8, ease: 'smooth', hip: [0, -0.09, -0.03], ik: WIDE, b: { ...NOVA_UP, spine: [-12, -6, 0], head: [-24, -4, 0] } },
+  { t: 5.7, ease: 'smooth', hip: [0, -0.12, -0.04], ik: WIDE, b: { ...NOVA_UP2, spine: [-18, 0, 0], chest: [-12, 0, 0], head: [-32, 0, 0] } },
   // …then hurls it forward at the target
-  { t: 2.3, ease: 'in', hip: [0, -0.16, 0.05], ik: { L: [0.2, 0, 0.26, -6], R: [-0.2, 0, -0.18, 16] }, b: {
+  { t: 6.3, ease: 'in', hip: [0, -0.16, 0.05], ik: { L: [0.2, 0, 0.26, -6], R: [-0.2, 0, -0.18, 16] }, b: {
     hips: [10, 0, 0], spine: [16, 0, 0], chest: [10, 0, 0], neck: [-12, 0, 0], head: [-14, 0, 0],
     upperArmR: [-88, 0, -12], foreArmR: [-4, 0, 0], propR: [180, 0, 0],
     upperArmL: [-84, 0, -18], foreArmL: [-10, 0, 0],
   } },
-  { t: 2.6, ease: 'linear', hip: [0, -0.16, 0.05], ik: { L: [0.2, 0, 0.26, -6], R: [-0.2, 0, -0.18, 16] }, b: {
+  { t: 6.7, ease: 'linear', hip: [0, -0.16, 0.05], ik: { L: [0.2, 0, 0.26, -6], R: [-0.2, 0, -0.18, 16] }, b: {
     hips: [9, 0, 0], spine: [15, 0, 0], chest: [10, 0, 0], neck: [-12, 0, 0], head: [-14, 0, 0],
     upperArmR: [-86, 0, -12], foreArmR: [-6, 0, 0], propR: [180, 0, 0],
     upperArmL: [-80, 0, -18], foreArmL: [-12, 0, 0],

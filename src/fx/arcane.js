@@ -243,18 +243,19 @@ Object.assign(Fx.prototype, {
 
   // X — Crimson Nova. onImpact fires when the fireball lands; onFlash(intensity) for the screen flash
   nova(target, caster, opts) {
-    const { radius, channel, onImpact, onFlash } = opts;
+    const { radius, channel, onImpact, onFlash, onLayer } = opts;
+    const stagger = opts.stagger || [0.12, 0.44, 0.76, 1.08, 1.4];
     const scene = this.scene;
     const layers = [];
-    const sizes = [radius * 0.95, radius * 0.78, radius * 0.62, radius * 0.48, radius * 0.36];
-    const heights = [9, 17, 25, 33, 41];
-    sizes.forEach((s, i) => {
-      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(1.9, 0.42 - i * 0.03, 0.06));
-      m.position.set(target.x, target.y + heights[i], target.z);
+    const n = stagger.length;
+    for (let i = 0; i < n; i++) {
+      const s = radius * (0.98 - (i / (n - 1)) * 0.66);
+      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(2.6, 0.5 - i * 0.04, 0.08));
+      m.position.set(target.x, target.y + 8 + i * (40 / (n - 1)), target.z);
       m.scale.setScalar(0.001);
       scene.add(m);
-      layers.push({ m, at: 0.12 + i * 0.32, dir: i % 2 ? -1 : 1 });
-    });
+      layers.push({ m, at: stagger[i], dir: i % 2 ? -1 : 1, i, fired: false });
+    }
     // ground warning (huge, so everyone knows to run)
     const warn = groundCircle(circleTexture(5, 1024), radius, target.x, target.z, new THREE.Color(1.8, 0.16, 0.06), this.world);
     warn.material.opacity = 0;
@@ -280,6 +281,13 @@ Object.assign(Fx.prototype, {
       const ch = Math.min(1, t / channel);
       // ---- channel: circles stack up and spin
       for (const L of layers) {
+        if (!L.fired && t >= L.at) {
+          L.fired = true;
+          if (onLayer) onLayer(L.i);
+          // each seal slams into place with a ring of sparks
+          for (let q = 0; q < 50; q++) { const a = R() * 6.283, rr = L.m.geometry.parameters.width * 0.5; this.fire.emit(L.m.position.x + Math.cos(a) * rr, L.m.position.y, L.m.position.z + Math.sin(a) * rr, Math.cos(a) * 3, (R() - 0.5) * 2, Math.sin(a) * 3, 0.6 + R() * 0.5, 0.9, 0.1, R() < 0.4 ? GOLD : CRIM, DARKR, 1, 0); }
+          this.light(L.m.position, 40, 60, 0.5, 0xff3020);
+        }
         const k = THREE.MathUtils.clamp((t - L.at) / 0.35, 0, 1);
         const e = 1 - (1 - k) ** 3;
         const s = boomed ? 1 + (t - channel) * 0.6 : e * (1 + 0.04 * Math.sin(t * 9));
@@ -358,6 +366,99 @@ Object.assign(Fx.prototype, {
           for (let i = 0; i < 4; i++) this.smoke.emit(target.x + (R() - 0.5) * 3, target.y + bt * 4, target.z + (R() - 0.5) * 3, 0, 6 + R() * 3, 0, 2.2, 2.5, 5, [0.3, 0.22, 0.2, 0.5], [0.45, 0.4, 0.38, 0], 0.5, 0.5);
         }
         if (t >= cleanupAt) { cleanup(); return false; }
+      }
+      return true;
+    } });
+  },
+
+  // E — Starfall barrage: telegraphs on every point, then stars streak down one after another
+  starfallBarrage(pts, opts) {
+    const { first, gap, radius, onImpact } = opts;
+    const tex = circleTexture(7, 512);
+    const items = pts.map((p, i) => {
+      const tele = groundCircle(tex, radius, p.x, p.z, new THREE.Color(1.8, 0.3, 0.12), this.world);
+      tele.material.opacity = 0;
+      this.scene.add(tele);
+      const star = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 1.8, 1.0), fog: false }));
+      star.visible = false;
+      this.scene.add(star);
+      const a = R() * 6.283;
+      return { p, tele, star, at: first + i * gap, from: new THREE.Vector3(p.x + Math.cos(a) * 10, p.y + 34, p.z + Math.sin(a) * 10), done: false };
+    });
+    const fall = 0.42;
+    let t = 0;
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      let alive = false;
+      for (const it of items) {
+        if (it.done) continue;
+        alive = true;
+        it.tele.rotation.y += dt * 2;
+        it.tele.material.opacity = Math.min(1, t / 0.25) * (0.55 + 0.45 * Math.sin(t * 22));
+        const u = (t - (it.at - fall)) / fall;
+        if (u > 0) {
+          it.star.visible = true;
+          it.star.position.lerpVectors(it.from, it.p, Math.min(1, u * u));
+          const sp = it.star.position;
+          for (let i = 0; i < 7; i++) this.fire.emit(sp.x + (R() - 0.5) * 0.35, sp.y + (R() - 0.5) * 0.35, sp.z + (R() - 0.5) * 0.35, (R() - 0.5), 2 + R() * 2, (R() - 0.5), 0.35 + R() * 0.25, 0.75, 0.12, R() < 0.35 ? GOLD : CRIM, DARKR, 1, 0);
+          this.fire.emit(sp.x, sp.y, sp.z, 0, 0, 0, 0.05, 1.4, 1, [4, 2.2, 1.2, 1], CRIM, 0, 0);
+        }
+        if (t >= it.at) {
+          it.done = true;
+          for (const o of [it.tele, it.star]) { this.scene.remove(o); o.geometry.dispose(); o.material.dispose(); }
+          this.explosion(it.p, radius, 0.85);
+          this.sparkBurst(new THREE.Vector3(it.p.x, it.p.y + 0.4, it.p.z), radius);
+          this.ring(it.p, radius * 1.3, 0.35, new THREE.Color(3, 0.5, 0.4));
+          if (onImpact) onImpact(it.p, items.indexOf(it));
+        }
+      }
+      return alive;
+    } });
+  },
+
+  // C — sigil triggered: the rune flares and drags everything into its center before blowing
+  sigilVortex(p, radius, dur) {
+    let t = 0;
+    const m = groundCircle(circleTexture(11, 512), radius * 1.6, p.x, p.z, new THREE.Color(3, 0.4, 0.2), this.world);
+    this.scene.add(m);
+    this.light(new THREE.Vector3(p.x, p.y + 1, p.z), 20, radius * 4, dur, 0xff3040);
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      const k = t / dur;
+      m.rotation.y -= dt * (4 + k * 14);
+      m.scale.setScalar(1 - k * 0.5);
+      m.material.opacity = 0.6 + 0.4 * Math.sin(t * 40);
+      for (let i = 0; i < 14; i++) {
+        const a = R() * 6.283, rr = radius * (1.4 + R() * 0.8);
+        const x = p.x + Math.cos(a) * rr, z = p.z + Math.sin(a) * rr;
+        // swirl inward
+        const tx = -Math.cos(a) * rr * 3.2 - Math.sin(a) * rr * 2.2, tz = -Math.sin(a) * rr * 3.2 + Math.cos(a) * rr * 2.2;
+        this.fire.emit(x, p.y + 0.2 + R() * 1.4, z, tx, 0.5, tz, 0.3, 0.32, 0.06, R() < 0.3 ? GOLD : CRIM, DARKR, 0, 0);
+      }
+      if (t >= dur) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); return false; }
+      return true;
+    } });
+  },
+
+  // V — the afterimage left behind: a burning crimson silhouette that flickers, then detonates
+  blinkEcho(p, delay, onBoom) {
+    let t = 0;
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      const k = t / delay;
+      for (let i = 0; i < 10 + k * 14; i++) {
+        // rough body volume: legs, torso, head
+        const h = R() * 1.75, w = h > 1.45 ? 0.13 : h > 0.85 ? 0.24 : 0.17;
+        const a = R() * 6.283;
+        this.fire.emit(p.x + Math.cos(a) * w, p.y + h, p.z + Math.sin(a) * w, 0, 0.25 + R() * 0.3, 0, 0.18 + R() * 0.12, 0.22 + k * 0.1, 0.05, R() < 0.3 + k * 0.4 ? GOLD : CRIM, DARKR, 1, 0.3);
+      }
+      if (R() < 0.3) this.light(new THREE.Vector3(p.x, p.y + 1, p.z), 6 + k * 10, 6, 0.1, 0xff3040);
+      if (t >= delay) {
+        const c = new THREE.Vector3(p.x, p.y + 0.8, p.z);
+        this.explosion(c, 3.2, 1.1);
+        this.sparkBurst(c, 3.2);
+        if (onBoom) onBoom(c);
+        return false;
       }
       return true;
     } });

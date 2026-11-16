@@ -11,7 +11,7 @@ import { Body, stepMovement } from './movement.js';
 import { ShoulderCamera } from './camera.js';
 import { Projectiles, hitCharacter } from './projectiles.js';
 import { mageOf } from './mages.js';
-import { NOVA } from './meteora.js';
+import { NOVA, STARFALL } from './meteora.js';
 import { BAL, applyBalance } from './balance.js';
 import { Rules } from './rules.js';
 
@@ -271,11 +271,29 @@ export class Match {
       }
       case 'starfall': {
         const c = new THREE.Vector3().fromArray(d.c);
-        this.sound('meteorFall', c, 0.5, 40);
-        this.fx.starfall(c, 3.8, 0.75, () => {
-          this.sound('explode', c, 0.9, 40);
-          if (local) this.areaDamage(c, 3.8, 55, 20, 'starfall', { kb: 6 });
-        });
+        const raw = Array.isArray(d.p) ? d.p.slice(0, STARFALL.count * 3) : [c.x, c.y, c.z];
+        const pts = [];
+        for (let i = 0; i + 2 < raw.length; i += 3) pts.push(new THREE.Vector3(+raw[i], +raw[i + 1], +raw[i + 2]));
+        this.sound('starCall', c, 0.9, 60);
+        this.fx.starfallBarrage(pts, { first: STARFALL.first, gap: STARFALL.gap, radius: STARFALL.radius, onImpact: (p) => {
+          this.sound('starHit', p, 0.8, 45);
+          if (local) this.areaDamage(p, STARFALL.radius, STARFALL.dmg, STARFALL.minDmg, 'starfall', { kb: 4, up: 4 });
+        } });
+        break;
+      }
+      case 'sigilPull': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.sigilVortex(c, 1.9, 0.4);
+        this.sound('vortex', c, 0.9, 35);
+        if (local) {
+          for (const t of this.ents.values()) {
+            if (t === this.local || !t.alive) continue;
+            const dx = c.x - t.pos.x, dz = c.z - t.pos.z, dl = Math.hypot(dx, dz);
+            if (dl > 5.5 || Math.abs(t.pos.y - c.y) > 2.5) continue;
+            const k = Math.min(12, dl * 3.4) / (dl || 1);
+            this.reportHit(t, 5, 'sigil', { kb: [dx * k, 3, dz * k], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.2, t.pos.z) });
+          }
+        }
         break;
       }
       case 'sigil': {
@@ -304,23 +322,26 @@ export class Match {
       case 'blink': {
         const a = new THREE.Vector3().fromArray(d.o), b = new THREE.Vector3().fromArray(d.t);
         this.fx.blinkFx(a, b);
-        this.fx.sparkBurst(new THREE.Vector3(a.x, a.y + 0.6, a.z), 3);
+        this.fx.ring(b, 2.4, 0.3, new THREE.Color(3, 0.6, 0.4));
         this.sound('blink', b, 0.8, 30);
-        if (local) this.areaDamage(new THREE.Vector3(a.x, a.y + 0.6, a.z), 3, 30, 15, 'blink', {});
+        this.fx.blinkEcho(a, 0.65, (c) => {
+          this.sound('explode', c, 0.8, 35);
+          if (local) this.areaDamage(c, 3.2, 42, 18, 'blink', { kb: 6, up: 5 });
+        });
         if (!local) e.snaps.length = 0;
         break;
       }
       case 'nova': {
         const c = new THREE.Vector3().fromArray(d.c), o = new THREE.Vector3().fromArray(d.o);
-        this.sound('novaChant', o, 1.2, 120);
-        this.app.hud.novaWarning(c, NOVA.radius, e === this.local);
+        this._startCine(e, c, o);
         this.fx.nova(c, o, {
           radius: NOVA.radius, channel: NOVA.channel,
+          stagger: [1.2, 1.72, 2.24, 2.76, 3.28, 3.8, 4.32],
+          onLayer: (i) => Audio.play('circleOn', 0.45 + i * 0.06, 0, 0.9 + i * 0.05),
           onFlash: () => {
-            // everyone who can see it gets blinded for a moment
-            const dist = this.camera.position.distanceTo(c);
-            this.app.hud.flash(Math.max(0, Math.min(1, 1.3 - dist / 140)));
-            this.sound('novaBoom', c, 1.5, 300);
+            this.app.hud.flash(1);
+            Audio.play('novaBoom', 1.3);
+            setTimeout(() => Audio.play('rumble', 0.9), 400);
           },
           onImpact: () => {
             if (local) this.areaDamage(c, NOVA.radius, NOVA.maxDmg, NOVA.minDmg, 'nova', { kb: 16, up: 12, noCover: true, burn: [8, 3] });
@@ -358,6 +379,70 @@ export class Match {
       }
       default: break;
     }
+  }
+
+  // ---------------------------------------------------------------- Crimson Nova cutscene
+  // Universal: every client plays the same shots, all controls are locked until it ends.
+  _startCine(caster, c, o) {
+    if (this.cine) return; // a second nova during one keeps its own effect, not a second camera
+    const f = new THREE.Vector3(c.x - o.x, 0, c.z - o.z);
+    if (f.lengthSq() < 0.01) f.set(Math.sin(caster.yaw), 0, Math.cos(caster.yaw));
+    f.normalize();
+    this.cine = { t: 0, dur: NOVA.cine, caster, c, o: o.clone(), f, side: new THREE.Vector3(-f.z, 0, f.x), subs: 0, orbit: Math.atan2(o.z - c.z, o.x - c.x) };
+    this.app.hud.cineStart();
+    Audio.play('rumble', 0.6);
+    Audio.play('novaChant', 0.9);
+    setTimeout(() => { if (this.cine) Audio.play('novaChant', 1, 0, 1.25); }, 2600);
+    setTimeout(() => { if (this.cine) Audio.play('rumble', 0.9); }, 3200);
+    setTimeout(() => { if (this.cine) Audio.play('novaWord', 1); }, 5300);
+  }
+
+  _cineUpdate(dt) {
+    const C = this.cine;
+    C.t += dt;
+    const subs = [
+      [0.25, 'Crimson stars that sleep beneath the world…'],
+      [1.95, 'Seven seals of ruin, open at my word.'],
+      [3.5, 'Let the sky remember fire… and the earth remember fear.'],
+      [5.25, 'EXPLOSION!', true],
+      [6.5, ''],
+    ];
+    while (C.subs < subs.length && C.t >= subs[C.subs][0]) { const [, text, big] = subs[C.subs]; this.app.hud.cineSub(text, !!big); C.subs++; }
+    this.app.hud.cineDark(Math.min(1, C.t / 3.5) * (C.t < 6.4 ? 1 : Math.max(0, 1 - (C.t - 6.4) / 1.5)));
+    if (C.t >= C.dur) { this.cine = null; this.app.hud.cineEnd(); this.cam.pivotY = null; }
+  }
+
+  _cineCamera() {
+    const C = this.cine, t = C.t, o = C.caster.pos, c = C.c, f = C.f, sd = C.side, cam = this.camera;
+    const P = tmpV, L = tmpV2;
+    let fov = 50;
+    if (t < 1.6) { // close-up: her face and staff as the chant begins
+      const d = 2.3 - t * 0.2;
+      P.set(o.x + f.x * d + sd.x * 1.3, o.y + 0.95, o.z + f.z * d + sd.z * 1.3);
+      L.set(o.x, o.y + 1.45, o.z); fov = 40;
+    } else if (t < 3.2) { // over the shoulder, tilting up to the seals forming over the target
+      const k = (t - 1.6) / 1.6;
+      P.set(o.x - f.x * 3.2 + sd.x * 1.4, o.y + 1.6, o.z - f.z * 3.2 + sd.z * 1.4);
+      L.set(c.x, c.y + 3 + k * 12, c.z); fov = 60;
+    } else if (t < 5.0) { // slow orbit around the target: the full tower of circles
+      const a = C.orbit + (t - 3.2) * 0.32, r = NOVA.radius * 2.1;
+      P.set(c.x + Math.cos(a) * r, c.y + 36 + (t - 3.2) * 4, c.z + Math.sin(a) * r);
+      L.set(c.x, c.y + 16, c.z); fov = 64;
+    } else if (t < 6.4) { // side profile: the final word
+      const k = (t - 5.0) / 1.4;
+      P.set(o.x + sd.x * (3.4 - k * 0.8) + f.x * 0.9, o.y + 1.2, o.z + sd.z * (3.4 - k * 0.8) + f.z * 0.9);
+      L.set(o.x + f.x * 0.6, o.y + 1.35, o.z + f.z * 0.6); fov = 45;
+    } else { // the catastrophe, from far away
+      const k = t - 6.4;
+      P.set(c.x - f.x * NOVA.radius * 3.0 + sd.x * NOVA.radius * 1.1, c.y + 16 + k * 2.5, c.z - f.z * NOVA.radius * 3.0 + sd.z * NOVA.radius * 1.1);
+      L.set(c.x, c.y + 10 + k * 4, c.z); fov = 66;
+      const sh = this.fx.shakeAmt * 0.6;
+      P.x += Math.sin(t * 47) * sh; P.y += Math.sin(t * 59 + 1) * sh;
+    }
+    P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 50) + 0.6);
+    cam.position.copy(P); cam.lookAt(L);
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    return L;
   }
 
   _wall(e, d, local) {
@@ -451,7 +536,8 @@ export class Match {
         if (e === this.local || !e.alive) continue;
         if (Math.hypot(e.pos.x - h.pos.x, e.pos.z - h.pos.z) < 2.0 && Math.abs(e.pos.y - h.pos.y) < 2) {
           h.fired = true;
-          this.castAbility({ ab: 'sigilBoom', id: h.id, c: [h.pos.x, h.pos.y, h.pos.z] });
+          this.castAbility({ ab: 'sigilPull', id: h.id, c: [h.pos.x, h.pos.y, h.pos.z] });
+          this.kit.pending.push({ t: 0.42, fn: () => this.castAbility({ ab: 'sigilBoom', id: h.id, c: [h.pos.x, h.pos.y, h.pos.z] }) });
           break;
         }
       }
@@ -623,8 +709,9 @@ export class Match {
     const st = input.poll();
     const [dx, dy] = input.consumeLook();
     const me = this.local;
-    if (!app.paused && !app.chat.isOpen) this.cam.look(dx, dy, app.settings.sens, app.settings.invertY);
-    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup';
+    if (!app.paused && !app.chat.isOpen && !this.cine) this.cam.look(dx, dy, app.settings.sens, app.settings.invertY);
+    if (this.cine) this._cineUpdate(dt);
+    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup' && !this.cine;
 
     // ---- local player
     if (me.alive) {
@@ -690,7 +777,7 @@ export class Match {
       }
     }
     // local view fades when the camera is jammed against it
-    this.view.root.visible = me.alive || (me.hideAt && this.time < me.hideAt) ? !this.cam.tooClose : this.view.root.visible;
+    this.view.root.visible = me.alive || (me.hideAt && this.time < me.hideAt) ? (this.cine ? true : !this.cam.tooClose) : this.view.root.visible;
 
     this.proj.update(dt);
     this._updateAreas(dt);
@@ -701,8 +788,9 @@ export class Match {
     Audio.loop('brazier', 'fireLoop', 0.35 / (1 + (dA / 10) ** 2));
 
     // ---- camera + aim
-    const focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);
-    this.cam.update(dt, focus, st.aim && me.alive, this.fx.shakeAmt);
+    let focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);
+    if (this.cine) focus = this._cineCamera();
+    else this.cam.update(dt, focus, st.aim && me.alive, this.fx.shakeAmt);
     this._computeAim();
     this.fx.update(dt, this.camera, app.height);
     this.map.update(dt, this.camera, focus, pushers);
@@ -778,6 +866,7 @@ export class Match {
   sendChat(text) { this.sendToHost({ t: 'chat', msg: text }); }
 
   dispose() {
+    if (this.cine) { this.cine = null; this.app.hud.cineEnd(); }
     for (const off of this._offs || []) off();
     for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);
     Audio.stopLoop('brazier');

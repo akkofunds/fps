@@ -262,6 +262,30 @@ export class Hud {
     else if (me && Math.hypot(me.pos.x - c.x, me.pos.z - c.z) < radius + 8) this.banner('CRIMSON NOVA INCOMING', 'GET OUT OF THE CIRCLE!', 2.2, 'kill');
   }
 
+  // ---------------------------------------------------------------- cutscene (Crimson Nova)
+  cineStart() {
+    if (!this.cineEl) {
+      const c = document.createElement('div'); c.id = 'cine';
+      c.innerHTML = '<div class="cine-dark"></div><div class="cine-bar top"></div><div class="cine-bar bot"></div><div class="cine-sub"></div><div class="cine-tag">CRIMSON NOVA</div>';
+      document.body.appendChild(c);
+      this.cineEl = c;
+    }
+    this.cineEl.className = 'on';
+    this.cineEl.querySelector('.cine-sub').textContent = '';
+    document.body.classList.add('cine-on');
+  }
+  cineSub(text, big) {
+    if (!this.cineEl) return;
+    const el = this.cineEl.querySelector('.cine-sub');
+    el.classList.remove('show', 'big');
+    void el.offsetWidth;
+    el.textContent = text;
+    if (text) el.classList.add('show');
+    if (big) el.classList.add('big');
+  }
+  cineDark(k) { if (this.cineEl) this.cineEl.querySelector('.cine-dark').style.opacity = String(k * 0.55); }
+  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); }
+
   // full-screen white flash (nova); 0..1
   flash(k) {
     const f = $('flash');
