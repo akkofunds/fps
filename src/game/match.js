@@ -123,6 +123,41 @@ export class Match {
     this._placeCamera();
   }
 
+  // ---------------------------------------------------------------- dash afterimages
+  // Glowing copies of the character frozen in its current pose, left behind along the dash.
+  _ghost(e) {
+    this.ghosts = this.ghosts || [];
+    let g = this.ghosts.find((x) => x.t <= 0 && x.mage === e.mage);
+    if (!g) {
+      if (this.ghosts.length >= 10) return;
+      const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
+      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
+      inst.setLod(true);
+      this.scene.add(inst.root);
+      g = { inst, mat, t: 0, mage: e.mage };
+      this.ghosts.push(g);
+    }
+    const src = e.view, dst = g.inst;
+    for (let i = 0; i < src.rig.bones.length; i++) {
+      const a = src.rig.bones[i], b = dst.rig.bones[i];
+      if (a && b) { b.quaternion.copy(a.quaternion); b.position.copy(a.position); }
+    }
+    dst.root.position.copy(src.root.position); dst.root.rotation.copy(src.root.rotation);
+    dst.root.visible = true;
+    g.t = 0.32; g.mat.opacity = 0.55;
+  }
+
+  _updateGhosts(dt) {
+    if (!this.ghosts) return;
+    for (const g of this.ghosts) {
+      if (g.t <= 0) continue;
+      g.t -= dt;
+      g.mat.opacity = Math.max(0, g.t / 0.32) * 0.55;
+      if (g.t <= 0) g.inst.root.visible = false;
+    }
+  }
+
   _makeEnt(p) {
     if (this.byId.has(p.id)) return this.byId.get(p.id);
     const Q = this.map.Q;
@@ -800,7 +835,11 @@ export class Match {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
         if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
         else if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
-        if (e.dashFx > 0) { e.dashFx -= dt; this.fx.dashStreak(e.pos, e.vel, e.mage); }
+        if (e.dashFx > 0) {
+          e.dashFx -= dt; this.fx.dashStreak(e.pos, e.vel, e.mage);
+          e.ghostT = (e.ghostT || 0) - dt;
+          if (e.ghostT <= 0) { e.ghostT = 0.045; this._ghost(e); }
+        }
         if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
         if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
         if (e.slowT > 0) { e.slowT -= dt; this.fx.slowFx(e.pos); }
@@ -810,6 +849,7 @@ export class Match {
     this.view.root.visible = me.alive || (me.hideAt && this.time < me.hideAt) ? (this.cine ? true : !this.cam.tooClose) : this.view.root.visible;
 
     this.proj.update(dt);
+    this._updateGhosts(dt);
     this._updateAreas(dt);
     this._checkSigils();
     // altar brazier
@@ -909,6 +949,7 @@ export class Match {
       this.scene.remove(e.view.root);
       for (const mesh of e.view.meshes) mesh.material.dispose();
     }
+    for (const g of this.ghosts || []) { this.scene.remove(g.inst.root); g.mat.dispose(); }
   }
 }
 

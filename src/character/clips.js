@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { compileClip } from './pose.js';
 
 // Keyframed full-body and upper-body clips (degrees / meters, canonical frames — see pose.js).
@@ -9,14 +10,14 @@ const STAND = { L: [0.13, 0, 0.06, 0], R: [-0.13, 0, -0.06, 0] };
 // ------------------------------------------------------------------ full body
 export const DASH = compileClip([
   { t: 0, hip: [0, -0.04, 0], b: { spine: [4, 0, 0] } },
-  { t: 0.06, ease: 'out', hip: [0, -0.12, -0.04], b: {
-    hips: [24, 0, 0], spine: [10, 0, 0], chest: [6, 0, 0], neck: [-14, 0, 0], head: [-18, 0, 0],
+  { t: 0.05, ease: 'out', hip: [0, -0.16, -0.04], b: {
+    hips: [34, 8, 0], spine: [14, -6, 0], chest: [8, -6, 0], neck: [-18, 0, 0], head: [-24, 4, 0],
     upperLegL: [-58, 0, 6], lowerLegL: [72, 0, 0], footL: [18, 0, 0],
     upperLegR: [22, 0, 6], lowerLegR: [64, 0, 0], footR: [42, 0, 0],
-    upperArmL: [58, 0, 24], foreArmL: [-22, 0, 0], upperArmR: [64, 0, 22], foreArmR: [-18, 0, 0],
+    upperArmL: [72, 0, 30], foreArmL: [-14, 0, 0], upperArmR: [78, 0, 28], foreArmR: [-12, 0, 0], handL: [30, 0, 0], handR: [30, 0, 0],
   } },
-  { t: 0.24, ease: 'linear', hip: [0, -0.1, -0.04], b: {
-    hips: [20, 0, 0], spine: [9, 0, 0], chest: [5, 0, 0], neck: [-12, 0, 0], head: [-16, 0, 0],
+  { t: 0.24, ease: 'linear', hip: [0, -0.14, -0.04], b: {
+    hips: [30, 6, 0], spine: [12, -5, 0], chest: [7, -5, 0], neck: [-16, 0, 0], head: [-22, 3, 0],
     upperLegL: [-52, 0, 6], lowerLegL: [80, 0, 0], footL: [20, 0, 0],
     upperLegR: [16, 0, 6], lowerLegR: [72, 0, 0], footR: [40, 0, 0],
     upperArmL: [52, 0, 26], foreArmL: [-26, 0, 0], upperArmR: [58, 0, 24], foreArmR: [-22, 0, 0],
@@ -50,15 +51,35 @@ const TUCK = (rx, y, z = 0) => ({
 });
 function tuckKey(t, rx, y, z, ease) { const b = TUCK(rx, y, z); const hip = b._hip; delete b._hip; return { t, hip, b, ease }; }
 
-// forward roll on landing: dive with the arms reaching, tuck tight, the hips ride HIGH while
-// upside down (so the head never sinks into the ground), then come up already leaning into a run
+// Landing roll: a curved combat roll over the RIGHT shoulder. The body rolls about a tilted axis
+// (diagonally across the back from the right shoulder to the left hip), the hips swing out to the
+// right on an arc, and he comes up kneeling on the right knee before driving back into a run.
+const SHOULDER_AXIS = new THREE.Vector3(1, 0, 0.5).normalize();
+const _q = new THREE.Quaternion(), _e = new THREE.Euler();
+function shoulderHips(deg, extra = [0, 0, 0]) {
+  _q.setFromAxisAngle(SHOULDER_AXIS, (deg * Math.PI) / 180);
+  _e.setFromQuaternion(_q, 'XYZ');
+  return [(_e.x * 180) / Math.PI + extra[0], (_e.y * 180) / Math.PI + extra[1], (_e.z * 180) / Math.PI + extra[2]];
+}
+const SR_TUCK = {
+  spine: [30, -8, 6], chest: [22, -6, 4], upperChest: [10, 0, 0], neck: [24, 18, 14], head: [20, 16, 10],
+  upperLegL: [-118, 0, 10], lowerLegL: [138, 0, 0], footL: [30, 0, 0],
+  upperLegR: [-104, 0, 14], lowerLegR: [126, 0, 0], footR: [26, 0, 0],
+  upperArmR: [-70, 0, -24], foreArmR: [-50, 0, 0], upperArmL: [-46, 0, 8], foreArmL: [-110, 0, 0],
+};
+const srKey = (t, deg, hip, ease) => ({ t, ease, hip, b: { ...SR_TUCK, hips: shoulderHips(deg) } });
+const KNEEL_R = { L: [0.15, 0, 0.3, 0], R: [-0.16, 0.03, -0.3, 58] };
 export const ROLL = compileClip([
-  { t: 0, hip: [0, -0.2, 0.06], b: { hips: [22, 0, 0], spine: [22, 0, 0], chest: [8, 0, 0], neck: [-10, 0, 0], head: [-14, 0, 0], upperLegL: [-62, 0, 6], lowerLegL: [92, 0, 0], footL: [-20, 0, 0], upperLegR: [-24, 0, 6], lowerLegR: [70, 0, 0], footR: [-30, 0, 0], upperArmL: [-78, 0, 8], foreArmL: [-24, 0, 0], upperArmR: [-74, 0, 8], foreArmR: [-26, 0, 0] } },
-  tuckKey(0.07, 95, -0.32, 0.1, 'in'),
-  tuckKey(0.16, 200, -0.27, 0.05, 'linear'),
-  tuckKey(0.26, 300, -0.34, -0.02, 'linear'),
-  { t: 0.34, ease: 'out', hip: [0, -0.2, 0.02], b: { hips: [372, 0, 0], spine: [18, 0, 0], chest: [8, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0], upperLegL: [-70, 0, 8], lowerLegL: [100, 0, 0], footL: [-20, 0, 0], upperLegR: [-22, 0, 8], lowerLegR: [90, 0, 0], footR: [-50, 0, 0], upperArmL: [-30, 0, 34], foreArmL: [-50, 0, 0], upperArmR: [-20, 0, 36], foreArmR: [-56, 0, 0] } },
-  { t: 0.44, ease: 'smooth', hip: [0, -0.06, 0], b: { hips: [368, 0, 0], spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [44, 0, 0], footL: [-10, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [36, 0, 0], footR: [-16, 0, 0], upperArmL: [6, 0, 14], foreArmL: [-50, 0, 0], upperArmR: [-10, 0, 16], foreArmR: [-60, 0, 0] } },
+  // dip the right shoulder in, right arm reaching across, head tucked to the left
+  { t: 0, hip: [0, -0.2, 0.06], b: { hips: [20, -10, -8], spine: [22, -10, -10], chest: [8, -6, -4], neck: [10, 16, 12], head: [6, 14, 10], upperLegL: [-60, 0, 6], lowerLegL: [90, 0, 0], footL: [-16, 0, 0], upperLegR: [-30, 0, 6], lowerLegR: [72, 0, 0], footR: [-28, 0, 0], upperArmR: [-74, 0, -28], foreArmR: [-30, 0, 0], upperArmL: [-40, 0, 20], foreArmL: [-70, 0, 0] } },
+  srKey(0.08, 85, [-0.08, -0.34, 0.1], 'in'),
+  srKey(0.17, 185, [-0.16, -0.3, 0.05], 'linear'),
+  srKey(0.27, 285, [-0.1, -0.34, -0.01], 'linear'),
+  // up onto the right knee, left foot planted, arms out for balance
+  { t: 0.36, ease: 'out', hip: [-0.02, -0.4, 0.02], ik: KNEEL_R, b: { hips: shoulderHips(360, [12, 0, 0]), spine: [16, 4, 0], chest: [6, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0], upperArmR: [-20, 0, 44], foreArmR: [-40, 0, 0], upperArmL: [-46, 0, 22], foreArmL: [-60, 0, 0] } },
+  { t: 0.42, ease: 'linear', hip: [-0.01, -0.38, 0.02], ik: KNEEL_R, b: { hips: shoulderHips(360, [10, 0, 0]), spine: [14, 4, 0], neck: [-8, 0, 0], head: [-10, 0, 0], upperArmR: [-16, 0, 40], foreArmR: [-40, 0, 0], upperArmL: [-40, 0, 20], foreArmL: [-60, 0, 0] } },
+  // drive back up into the run
+  { t: 0.54, ease: 'smooth', hip: [0, -0.06, 0], b: { hips: shoulderHips(360, [8, 0, 0]), spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [44, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [36, 0, 0], upperArmL: [6, 0, 14], foreArmL: [-50, 0, 0], upperArmR: [-10, 0, 16], foreArmR: [-60, 0, 0] } },
 ]);
 
 export const ROLL_BACK = compileClip([
