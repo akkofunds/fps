@@ -8,7 +8,7 @@ import { BAL } from '../game/balance.js';
 // damage numbers, hit markers, damage direction, death/scoreboard/end screens.
 // DOM writes only happen when a displayed value changes.
 
-const proj = new THREE.Vector3();
+const proj = new THREE.Vector3(), cv = new THREE.Vector3();
 const fmtTime = (s) => { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
 export class Hud {
@@ -182,6 +182,27 @@ export class Hud {
         }
       }
       if (t._vis !== vis) { t._vis = vis; t.style.display = vis ? '' : 'none'; }
+      // off-screen enemy indicator: a red arrow on the screen edge pointing at them (+ distance)
+      let off = false;
+      if (e.alive && e.view.root.visible && m.local.alive) {
+        cv.set(e.pos.x, e.pos.y + 1.2, e.pos.z);
+        const d = cv.distanceTo(cam.position);
+        cv.applyMatrix4(cam.matrixWorldInverse); // camera space: x right, y up, -z forward
+        const inFront = cv.z < 0;
+        let sx = 0, sy = 0;
+        if (inFront) { proj.set(e.pos.x, e.pos.y + 1.2, e.pos.z).project(cam); sx = proj.x; sy = proj.y; }
+        off = d < 90 && (!inFront || Math.abs(sx) > 0.96 || Math.abs(sy) > 0.94);
+        if (off) {
+          if (!t._arrow) { t._arrow = el('div', 'enemy-arrow'); t._arrow.innerHTML = '<i></i><span></span>'; $('tags').appendChild(t._arrow); t._ad = t._arrow.querySelector('span'); }
+          const a = Math.atan2(cv.x, cv.y * (inFront ? 1 : -1) + (inFront ? 0 : 0.0001));
+          const x = W / 2 + Math.sin(a) * W * 0.44, y = H / 2 - Math.cos(a) * H * (Math.cos(a) < 0 ? 0.3 : 0.4); // stays above the ability bar
+          t._arrow.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) translate(-50%, -50%)`;
+          t._arrow.firstChild.style.transform = `rotate(${a.toFixed(3)}rad)`;
+          const dm = Math.round(d);
+          if (t._dm !== dm) { t._dm = dm; t._ad.textContent = `${dm}m`; }
+        }
+      }
+      if (t._arrow && t._off !== off) { t._off = off; t._arrow.style.display = off ? 'block' : 'none'; }
     }
   }
 

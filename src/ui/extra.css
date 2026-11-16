@@ -124,3 +124,10 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 @media (max-width: 700px) { #queueBar i { display: none; } }
 /* tablets: bigger ability buttons */
 @media (min-width: 900px) and (pointer: coarse) { .tbtns { transform: scale(1.28); transform-origin: 100% 100%; } }
+
+/* ---------------- enemy highlight: off-screen arrows + red name tags */
+.enemy-arrow { position: absolute; left: 0; top: 0; pointer-events: none; display: none; width: 34px; height: 34px; }
+.enemy-arrow i { position: absolute; inset: 0; background: #ff3346; clip-path: polygon(50% 0, 100% 70%, 50% 52%, 0 70%); filter: drop-shadow(0 0 6px rgba(255, 40, 60, 0.9)); }
+.enemy-arrow span { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); font: 700 11px/1 'Rajdhani', sans-serif; color: #ffd0d4; text-shadow: 0 1px 2px #000; white-space: nowrap; }
+.ntag b { color: #ff7a85; }
+.ntag.dummy b { color: #e8d8b8; }

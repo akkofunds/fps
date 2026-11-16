@@ -115,6 +115,25 @@ export class MageInstance {
     if (on === this.lod) return;
     this.lod = on;
     this.meshes.forEach((m, i) => { const b = this.baseGeo[i]; m.geometry = on ? (LOD.get(b) || b) : b; });
+    if (this.xray) for (const x of this.xray) x.geometry = x.userData.src.geometry;
+  }
+
+  // Enemy highlight (Valorant-style): red ink outline + a red silhouette that shows only where the
+  // body is hidden behind something (walls, trees, grass), so you never have to hunt for players.
+  setEnemy(on) {
+    this.enemy = on;
+    for (const m of this.meshes) if (m.userData.outline) { m.material = m.material.clone(); m.material.color.set(on ? 0xff2a36 : 0x0a0505); m.visible = true; }
+    if (!on || this.xray) return;
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.16, 0.2), transparent: true, opacity: 0.5, depthWrite: false, depthFunc: THREE.GreaterDepth, fog: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    this.xray = [];
+    for (const m of this.meshes) {
+      if (m.userData.outline || !m.isSkinnedMesh) continue;
+      const x = new THREE.SkinnedMesh(m.geometry, mat);
+      x.bind(m.skeleton, m.bindMatrix);
+      x.frustumCulled = false; x.renderOrder = 30; x.userData.src = m;
+      m.add(x);
+      this.xray.push(x);
+    }
   }
 
   // own (non-shared) materials so per-player flashes don't leak

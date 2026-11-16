@@ -137,6 +137,7 @@ export class Match {
       const f = e.view.rig.bones[side === 'L' ? 16 : 20].getWorldPosition(tmpV2);
       if (f.distanceToSquared(this.camera.position) < 900 && this.world.inWater(f.x, f.z) <= 0) this.fx.dust(f, Math.min(1, speed / 6));
     };
+    if (!e.isLocal) e.view.setEnemy(true); // everyone else is an enemy in FFA
     this.ents.set(e.n, e); this.byId.set(e.id, e);
     return e;
   }

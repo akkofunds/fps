@@ -75,7 +75,8 @@ export class AdminPanel {
       if (step === 1) { this.renderGate(2); return; }
       try { sessionStorage.setItem(SESSION_KEY, '1'); } catch { /* ignore */ }
       syncAdminPerks();
-      toast('Admin unlocked for this tab.');
+      if (this.app.lobby) this.app.lobby.refreshAccess();
+      toast('Admin unlocked for this tab. Meteora is now available.');
       this.renderPanel();
     });
     box.appendChild(form);
@@ -181,7 +182,7 @@ export class AdminPanel {
     tool('START PRACTICE', () => { this.close(); app.session.startPractice(); });
     tool('CLEAR MATCH HISTORY', () => { localStorage.removeItem('magebreak.history'); app.lobby.renderCareer(); toast('History cleared.'); });
     tool('CLEAR RECENT PLAYERS', () => { localStorage.removeItem('magebreak.recent'); app.lobby.renderSocial(); toast('Recent players cleared.'); });
-    tool('LOCK ADMIN', () => { try { sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } syncAdminPerks(); this.close(); toast('Admin locked.'); });
+    tool('LOCK ADMIN', () => { try { sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } syncAdminPerks(); if (app.lobby) app.lobby.refreshAccess(); this.close(); toast('Admin locked.'); });
     s5.appendChild(trow);
 
     r.appendChild(p);
