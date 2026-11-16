@@ -6,6 +6,8 @@ import { groundH } from '../world/terrain.js';
 import { Fx } from '../fx/arcane.js';
 import '../fx/inferno.js';
 import '../fx/novaStage.js';
+import '../fx/frost.js';
+import { FREEZE, BLITZ, ZERO } from './shoto.js';
 import { KICK, STEP, ADOLLA, IGNITE } from './pyro.js';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
 import { Body, stepMovement } from './movement.js';
@@ -287,6 +289,85 @@ export class Match {
         this.sound('kickHit', c, 1, 40);
         break;
       }
+      // ---- Shoto: frost & flame
+      case 'shard': this.proj.spawn(e.n, 'shard', d.o, d.d, local); if (!local) this.sound('iceShot', tmpV.fromArray(d.o), 0.45, 30); break;
+      case 'freeze': {
+        const o = new THREE.Vector3().fromArray(d.o), c = new THREE.Vector3().fromArray(d.c);
+        this.fx.iceSurge(o, c, FREEZE.radius, FREEZE.root);
+        this.sound('freeze', c, 1, 45);
+        if (local) {
+          for (const t of this.ents.values()) {
+            if (t === this.local || !t.alive) continue;
+            if (Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < FREEZE.radius + 0.4 && Math.abs(t.pos.y - c.y) < 2.5) {
+              this.kit.frozen && this.kit.frozen.set(t.n, this.time);
+              this.reportHit(t, FREEZE.dmg, 'freeze', { slow: [0.02, FREEZE.root], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.2, t.pos.z) });
+            }
+          }
+        }
+        break;
+      }
+      case 'heatwave': {
+        const o = new THREE.Vector3().fromArray(d.o), ux = d.d[0], uz = d.d[1];
+        this.fx.heatWave(o, ux, uz, FREEZE.waveLen, FREEZE.waveHalf);
+        this.sound('stomp', o, 0.9, 45);
+        if (local) {
+          for (const t of this.ents.values()) {
+            if (t === this.local || !t.alive) continue;
+            const dx = t.pos.x - o.x, dz = t.pos.z - o.z, dl = Math.hypot(dx, dz);
+            if (dl > FREEZE.waveLen + 0.5 || dl < 0.01 || Math.abs(t.pos.y - o.y) > 3) continue;
+            if ((dx * ux + dz * uz) / dl < Math.cos(FREEZE.waveHalf + 0.15)) continue;
+            const ft = this.kit.frozen ? this.kit.frozen.get(t.n) : undefined;
+            const shattered = ft !== undefined && this.time - ft < FREEZE.root + 0.6;
+            const at = new THREE.Vector3(t.pos.x, t.pos.y + 1.2, t.pos.z);
+            if (shattered) { this.kit.frozen.delete(t.n); this.castAbility({ ab: 'shatter', c: [at.x, at.y, at.z] }); }
+            this.reportHit(t, FREEZE.waveDmg + (shattered ? FREEZE.shatter : 0), 'heatwave', { burn: [5, 2.5], at, kb: shattered ? [dx / dl * 11, 7, dz / dl * 11] : [dx / dl * 4, 2, dz / dl * 4] });
+          }
+        }
+        break;
+      }
+      case 'shatter': { const c = new THREE.Vector3().fromArray(d.c); this.fx.shatter(c); this.sound('iceShatter', c, 1, 40); break; }
+      case 'lanceCharge': { this.fx.lanceCharge(new THREE.Vector3().fromArray(d.o)); this.sound('adollaCharge', tmpV.fromArray(d.o), 0.6, 40, 1.8); break; }
+      case 'lance': {
+        const o = new THREE.Vector3().fromArray(d.o), t = new THREE.Vector3().fromArray(d.t);
+        this.fx.lanceBeam(o, t);
+        this.sound('lance', o, 1, 80);
+        break;
+      }
+      case 'blitz': {
+        const o = new THREE.Vector3().fromArray(d.o), L = Math.min(BLITZ.speed * BLITZ.time, Number(d.l) || 0);
+        const b = new THREE.Vector3(o.x + d.d[0] * L, 0, o.z + d.d[1] * L); b.y = this.world.groundAt(b.x, b.z, o.y + 3);
+        this.fx.frostPath(o, b, 2.5);
+        e.blitzT = BLITZ.time + 0.05;
+        this.sound('blitz', o, 1, 40);
+        break;
+      }
+      case 'uppercut': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        e.blitzT = 0;
+        this.fx.uppercutBurst(c);
+        this.sound('kickHit', c, 1, 40);
+        if (local) this.areaDamage(c, 2.4, BLITZ.dmg, 28, 'uppercut', { kb: 3, up: 15, burn: [4, 2], slow: [0.6, 1.5] });
+        break;
+      }
+      case 'zero': {
+        const o = new THREE.Vector3().fromArray(d.o);
+        this.sound('freeze', o, 1.2, 120);
+        setTimeout(() => this.sound('adollaCharge', o, 1.2, 140), 700);
+        this.fx.zeroBurn(o, ZERO.radius, ZERO.freezeAt, ZERO.boomAt,
+          () => {
+            this.sound('iceShatter', o, 1, 120);
+            if (local) for (const t of this.ents.values()) {
+              if (t === this.local || !t.alive) continue;
+              if (Math.hypot(t.pos.x - o.x, t.pos.z - o.z) < ZERO.radius && Math.abs(t.pos.y - o.y) < 8) this.reportHit(t, ZERO.freezeDmg, 'zero', { slow: [0.02, ZERO.root], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.2, t.pos.z) });
+            }
+          },
+          () => {
+            this.app.hud.flash(0.8);
+            Audio.play('novaBoom', 1.1);
+            if (local) this.areaDamage(new THREE.Vector3(o.x, o.y + 1, o.z), ZERO.radius, ZERO.dmg, ZERO.minDmg, 'zeroBoom', { kb: 12, up: 10, noCover: true, burn: [6, 3] });
+          });
+        break;
+      }
       case 'blast': this.proj.spawn(e.n, 'blast', d.o, d.d, local); if (!local) this.sound('ember', tmpV.fromArray(d.o), 0.7, 30); break;
       case 'ember': this.proj.spawn(e.n, 'ember', d.o, d.d, local); if (!local && Math.random() < 0.5) this.sound('ember', tmpV.fromArray(d.o), 0.4, 25); break;
       case 'igniteBoom': {
@@ -341,6 +422,18 @@ export class Match {
           this.sound('starHit', p, 0.8, 45);
           if (local) this.areaDamage(p, STARFALL.radius, STARFALL.dmg, STARFALL.minDmg, 'starfall', { kb: 4, up: 4 });
         } });
+        break;
+      }
+      case 'rayCharge': {
+        const RAYC = 1.3;
+        this.fx.rayCharge(() => e.view.staffTip(new THREE.Vector3()), () => new THREE.Vector3(Math.sin(e.yaw), 0, Math.cos(e.yaw)), RAYC);
+        this.sound('novaChant', e.pos, 0.6, 50, 1.6);
+        break;
+      }
+      case 'ray': {
+        const o = new THREE.Vector3().fromArray(d.o), t = new THREE.Vector3().fromArray(d.t);
+        this.fx.rayBeam(o, t);
+        this.sound('adollaBeam', o, 1.1, 90, 1.25);
         break;
       }
       case 'sigilPull': {
@@ -662,7 +755,7 @@ export class Match {
 
   // positional sound relative to the camera
   listener() { return { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z, yaw: this.cam.yaw }; }
-  sound(name, pos, gain = 1, falloff = 30) { Audio.at(name, pos, this.listener(), gain, falloff); }
+  sound(name, pos, gain = 1, falloff = 30, rate = 1) { Audio.at(name, pos, this.listener(), gain, falloff, rate); }
 
   // ---------------------------------------------------------------- host side
   hostHandle(e, msg) {
@@ -746,6 +839,7 @@ export class Match {
         const e = this.ents.get(msg.n);
         if (!e) return;
         e.slowT = msg.s;
+        if (msg.k < 0.2) { e.iceT = msg.s; this.fx.iceBlock(e.pos.clone(), msg.s); this.sound('freeze', e.pos, 0.6, 25); }
         if (e === this.local) { this.body.slowT = msg.s; this.body.slowK = msg.k; hud.status && hud.status('SLOWED', msg.s); }
         break;
       }
@@ -896,9 +990,11 @@ export class Match {
           e.ghostT = (e.ghostT || 0) - dt;
           if (e.ghostT <= 0) { e.ghostT = 0.045; this._ghost(e); }
         }
+        if (e.blitzT > 0) { e.blitzT -= dt; this.fx.blitzJets(e.pos, e.vel); }
         if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
         if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
-        if (e.slowT > 0) { e.slowT -= dt; this.fx.slowFx(e.pos); }
+        if (e.slowT > 0) { e.slowT -= dt; if (!(e.iceT > 0)) this.fx.slowFx(e.pos); }
+        if (e.iceT > 0) e.iceT -= dt;
       }
     }
     // local view fades when the camera is jammed against it

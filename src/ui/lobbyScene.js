@@ -54,7 +54,9 @@ export class LobbyScene {
     this.fx.fire.points.visible = on; this.fx.smoke.points.visible = on;
   }
 
-  bindDrag(elm) {
+  // the lobby character is a fixed showcase now (no drag-to-rotate)
+  bindDrag() {}
+  _unusedDrag(elm) {
     elm.addEventListener('pointerdown', (e) => { this.drag = e.clientX; elm.setPointerCapture(e.pointerId); });
     elm.addEventListener('pointermove', (e) => { if (this.drag === null) return; const dx = e.clientX - this.drag; this.drag = e.clientX; this.yaw += dx * 0.012; this.yawVel = dx * 0.6; });
     const up = () => { this.drag = null; };
@@ -87,13 +89,21 @@ export class LobbyScene {
       // drift back toward the hero angle
       this.yaw += (this.baseYaw + 0.35 + Math.sin(this.t * 0.25) * 0.08 - this.yaw) * (1 - Math.exp(-0.8 * dt)) * (Math.abs(this.yawVel) < 0.2 ? 1 : 0);
     }
+    // the lobby shows players only: the character is hidden (the meadow stays as the backdrop)
+    if (this.inst.root.visible) this.inst.root.visible = false;
+    this.fx.update(dt, this.camera, this.h);
+    this.map.update(dt, this.camera, this.P, [this.P]);
+    return;
+    // eslint-disable-next-line no-unreachable
     const a = this.inst.anim;
     a.update(dt, { pos: this.inst.root.position, yaw: this.yaw, pitch: 0.05, vel: new THREE.Vector3(), grounded: true });
     this.inst.root.rotation.y = this.yaw;
     if (this.mageId === 'meteora') { if (Math.random() < 0.6) this.fx.staffGlow(this.inst.staffTip(new THREE.Vector3())); }
     else {
-      this.fx.palmFlame(this.inst.palmWorld('R', new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0)), 1.3);
-      if (Math.random() < 0.06) this.fx.light(this.inst.palmWorld('R', new THREE.Vector3()), 3, 3, 0.4);
+      // Shoto: fire flickers in the left hand, frost mist curls off the right
+      this.fx.palmFlame(this.inst.palmWorld('L', new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0)), 1.2);
+      if (Math.random() < 0.5) { const p = this.inst.palmWorld('R', new THREE.Vector3()); this.fx.fire.emit(p.x + (Math.random() - 0.5) * 0.1, p.y, p.z + (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.3, -0.2 + Math.random() * 0.4, (Math.random() - 0.5) * 0.3, 0.7, 0.12, 0.03, [1.2, 2.0, 2.8, 0.9], [0.5, 0.7, 0.9, 0], 1, -0.5); }
+      if (Math.random() < 0.06) this.fx.light(this.inst.palmWorld('L', new THREE.Vector3()), 3, 3, 0.4);
     }
     this.fx.update(dt, this.camera, this.h);
     this.map.update(dt, this.camera, this.P, [this.P]);

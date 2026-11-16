@@ -16,3 +16,9 @@ intellectual property and the model's license is unknown, so don't use it commer
 
 ## Everything else
 The terrain, vegetation, ruins, sky, water, VFX, animations and all audio are generated procedurally in code.
+
+## Shoto model
+`public/models/shoto.glb` is auto-rigged by `tools/characters/rig_shoto.py` from a user-supplied model
+(`tools/characters/src/shoto_original.glb`) that appears to be a fan-made model of an existing anime
+character. As with Meteora: fine for a private/hobby build, but replace it with an original or properly
+licensed model before any public or commercial release.

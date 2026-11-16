@@ -1,0 +1,17 @@
+<!doctype html><html><body style="margin:0;background:#8899aa"><script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+const q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+r.outputColorSpace = THREE.SRGBColorSpace;
+const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0x666666, 2.5)); const d = new THREE.DirectionalLight(0xffffff, 1.5); d.position.set(2, 4, 5); sc.add(d);
+new GLTFLoader().load(q.get('u'), (g) => {
+  const o = g.scene;
+  const sideQ = q.get('side'); o.traverse((m) => { if (!m.isMesh) return; if (q.get('hide') && m.name.includes(q.get('hide'))) m.visible = false; if (sideQ) m.material.side = { front: THREE.FrontSide, back: THREE.BackSide, double: THREE.DoubleSide }[sideQ]; }); const box = new THREE.Box3().setFromObject(o); const s = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+  const views = (q.get('views') || '0,90').split(',').map(Number); const vw = innerWidth / views.length;
+  sc.add(o); r.setScissorTest(true);
+  views.forEach((v, i) => { const cam = new THREE.PerspectiveCamera(30, vw / innerHeight, 0.01, 1000); const a = v * Math.PI / 180, D = s.y * 2.2; cam.position.set(c.x + Math.sin(a) * D, c.y, c.z + Math.cos(a) * D); cam.lookAt(c); r.setViewport(i * vw, 0, vw, innerHeight); r.setScissor(i * vw, 0, vw, innerHeight); r.render(sc, cam); });
+  console.log('LOG size', s.toArray().map((x) => x.toFixed(2)).join(','));
+  window.done = true;
+});
+</script></body></html>

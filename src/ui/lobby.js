@@ -16,7 +16,7 @@ const MODE_DESC = {
   practice: 'Practice: a solo range on Sunvale with training dummies. Learn Pyro\'s combos — dash-cancel your casts, roll out of air dashes, and land the Meteor.',
 };
 const MAGES = [
-  { id: 'pyro', name: 'PYRO', icon: ICONS.flame, open: true },
+  { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },
   { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true, admin: true }, // admin-only
   { id: 'tide', name: 'TIDE', icon: ICONS.water },
   { id: 'terra', name: 'TERRA', icon: ICONS.earth },
@@ -180,33 +180,26 @@ export class Lobby {
       }
     });
     $('partyCount').textContent = `${members.length}/${MODES.ffa.size}`;
+    this._heroName();
     this._startLabel();
   }
 
+  // party card: no characters in the lobby, just the player — a big initial emblem + the name
+  // (long names are cut with an ellipsis)
   _card(m, isMe) {
     const pm = this.pm;
-    const c = el('div', 'card' + (isMe ? ' me' : ''));
+    const c = el('div', 'card name-card' + (isMe ? ' me' : ''));
     c.appendChild(el('div', 'frame'));
-    const md = mageOf(isMe ? this.mage : m.mage);
-    if (!isMe) {
-      const art = el('div', 'art' + (md.id === 'meteora' ? ' crimson' : ''));
-      art.appendChild(el('div', 'art-name', md.name));
-      art.insertAdjacentHTML('beforeend', md.id === 'meteora' ? ICONS.nova : ICONS.flame);
-      c.appendChild(art);
-    }
     if (pm.party.leader === m.id && pm.inParty) c.appendChild(el('div', 'leader', '★'));
+    const emb = el('div', 'emblem', (m.name || '?').trim().charAt(0).toUpperCase());
+    c.appendChild(emb);
     const meta = el('div', 'meta');
-    meta.appendChild(el('div', 'ready', 'READY'));
-    meta.appendChild(el('div', 'pname', m.name));
-    meta.appendChild(el('div', 'ptitle', md.role));
+    meta.appendChild(el('div', 'ready', isMe ? 'YOU' : 'READY'));
+    const nm = el('div', 'pname', m.name); nm.title = `${m.name}#${m.tag || ''}`;
+    meta.appendChild(nm);
+    meta.appendChild(el('div', 'ptag', m.tag ? `#${m.tag}` : ''));
     c.appendChild(meta);
     const rank = el('div', 'rank'); rank.innerHTML = ICONS.rank; c.appendChild(rank);
-    if (isMe) {
-      c.appendChild(el('div', 'chev l')); c.appendChild(el('div', 'chev r'));
-      c.title = 'Drag to turn your mage';
-      c.style.cursor = 'grab';
-      this.app.lobbyScene.bindDrag(c);
-    }
     return c;
   }
 
@@ -279,6 +272,17 @@ export class Lobby {
     this.app.lobbyScene.setMage(id);
     Audio.play('found', 0.4);
     this.renderMages(); this.renderParty();
+  }
+
+  // big agent-select style name watermark behind the lobby character
+  _heroName() {
+    return; // lobby shows players only (no character showcase)
+    let h = document.getElementById('heroName');
+    if (!h) { h = el('div', 'hero-name'); h.id = 'heroName'; const tab = $('tabPlay'); tab.insertBefore(h, tab.firstChild); }
+    const md = mageOf(this.mage);
+    h.textContent = md.name;
+    h.style.setProperty('--accent', md.color);
+    document.body.style.setProperty('--hero', md.color);
   }
 
   renderMages() {

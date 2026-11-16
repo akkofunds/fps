@@ -59,7 +59,8 @@ function prepareMaterials(root) {
       const map = m.map;
       if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 16; map.generateMipmaps = true; map.minFilter = THREE.LinearMipmapLinearFilter; }
       o.material = new THREE.MeshLambertMaterial({
-        map, emissiveMap: map, emissive: new THREE.Color(0.62, 0.6, 0.6), side: THREE.DoubleSide,
+        // keep each model's own sidedness (Shoto ships a built-in inner ink shell that must stay culled)
+        map, emissiveMap: map, emissive: new THREE.Color(0.62, 0.6, 0.6), side: m.side,
       });
       o.material.name = m.name;
       rimLight(o.material);

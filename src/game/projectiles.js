@@ -33,6 +33,7 @@ export const PROJ = {
   orb: { speed: 33, grav: 7, radius: 0.38, life: 3, dmg: 20, head: 1 },
   spark: { speed: 46, grav: 0, radius: 0.08, life: 1.6, dmg: 20, head: 1.5 },
   ember: { speed: 50, grav: 2, radius: 0.1, life: 0.62, dmg: 9, head: 1 },
+  shard: { speed: 62, grav: 0, radius: 0.07, life: 1.2, dmg: 16, head: 1.5 },
   blast: { speed: 46, grav: 0, radius: 0.14, life: 1.2, dmg: 26, head: 1.3 },
 };
 
@@ -92,11 +93,12 @@ export class Projectiles {
       }
       p.pos.copy(end);
       if (p.age > p.def.life) {
-        if (p.kind === 'orb' || p.kind === 'spark' || p.kind === 'blast') this._impact(p, p.pos, null, false); else if (p.kind === 'ember') m.fx.emberHit(p.pos); else m.fx.hitSpark(p.pos);
+        if (p.kind === 'orb' || p.kind === 'spark' || p.kind === 'blast') this._impact(p, p.pos, null, false); else if (p.kind === 'ember') m.fx.emberHit(p.pos); else if (p.kind === 'shard') m.fx.iceHit(p.pos); else m.fx.hitSpark(p.pos);
         this.list.splice(i, 1); continue;
       }
       // trail
       if (p.kind === 'bolt') m.fx.boltTrail(p.pos, p.vel);
+      else if (p.kind === 'shard') m.fx.iceTrail(p.pos, p.vel);
       else if (p.kind === 'blast') m.fx.boltTrail(p.pos, p.vel, 2);
       else if (p.kind === 'spark') m.fx.sparkTrail(p.pos, p.vel);
       else if (p.kind === 'ember') m.fx.emberTrail(p.pos, p.vel);
@@ -110,6 +112,10 @@ export class Projectiles {
       m.fx.hitSpark(pos);
       m.sound('boltHit', pos, 0.7, 22);
       if (p.local && target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'bolt', { head, at: pos });
+    } else if (p.kind === 'shard') {
+      m.fx.iceHit(pos);
+      m.sound('iceHit', pos, 0.6, 22);
+      if (p.local && target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'shard', { head, at: pos, slow: [0.75, 0.8] });
     } else if (p.kind === 'blast') {
       m.fx.igniteBoom(pos, 2.4);
       m.sound('explode', pos, 0.7, 35);

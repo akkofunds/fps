@@ -1,7 +1,7 @@
 import { BAL, ADMIN } from './balance.js';
 import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
-import { PROJ } from './projectiles.js';
+import { PROJ, hitCharacter } from './projectiles.js';
 
 // METEORA — Crimson Archmage. A staff caster who lives for one thing: the biggest explosion
 // anyone has ever seen. Her ultimate wipes out everything in a huge radius, but the long, loud
@@ -17,7 +17,7 @@ export const METEORA = {
     { key: 'LMB', id: 'spark', name: 'Crimson Spark', desc: 'Your staff fires a bolt of crimson flame. Aim it: 20 damage on a direct hit, 30 on headshots.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land.' },
     { key: 'E', id: 'starfall', name: 'Starfall', cd: 8, desc: 'Raise your staff and call down a barrage of 5 burning stars that rain across the target area one after another.' },
-    { key: 'C', id: 'sigil', name: 'Blast Sigil', cd: 11, desc: 'Brand an explosive rune on the ground where you aim. When an enemy steps on it, it drags everyone nearby into its center, then detonates. Up to 2 at a time.' },
+    { key: 'C', id: 'ray', name: 'Scarlet Ray', cd: 10, desc: 'Plant your feet and channel: magic circles spin up in front of your staff, then a devastating beam fires to your crosshair, piercing every enemy along its path (85 damage).' },
     { key: 'V', id: 'blink', name: 'Blink', cd: 9, desc: 'Teleport up to 10 m in the direction you are moving. You leave a crimson afterimage behind that explodes a moment later.' },
     { key: 'X', id: 'nova', name: 'Crimson Nova', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Time stops for everyone. A full cutscene plays as you chant and seven magic circles stack up over the target, then a catastrophic explosion obliterates EVERYTHING within 24 m. Afterwards you collapse, exhausted.' },
   ],
@@ -25,8 +25,9 @@ export const METEORA = {
 
 // the cutscene timeline (seconds after the cast): circles stack, final word, impact, wide shot
 export const NOVA = { radius: 24, channel: 7.2, cine: 10.6, maxDmg: 500, minDmg: 220, range: 85, exhausted: 3.3 };
+export const RAY = { channel: 1.3, range: 90, width: 1.3, dmg: 85 };
 export const STARFALL = { count: 5, spread: 4.2, radius: 2.5, dmg: 26, minDmg: 10, first: 0.55, gap: 0.16 };
-const COOLDOWN = { spark: 0.45, starfall: 8, sigil: 11, blink: 9 };
+const COOLDOWN = { spark: 0.45, starfall: 8, sigil: 11, ray: 10, blink: 9 };
 // bolt-type fire rates are not shortened below 60% even with admin cooldown tweaks
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
@@ -35,8 +36,8 @@ export class MeteoraKit {
   constructor(match) {
     this.m = match;
     this.def = METEORA;
-    this.cd = { spark: 0, starfall: 0, sigil: 0, blink: 0 };
-    this.max = { starfall: 8, sigil: 11, blink: 9 };
+    this.cd = { spark: 0, starfall: 0, ray: 0, blink: 0 };
+    this.max = { starfall: 8, ray: 10, blink: 9 };
     this.ult = 0;
     this.pending = [];
     this.busy = 0;
@@ -49,7 +50,7 @@ export class MeteoraKit {
     this.ult = Math.min(ULT_COST, this.ult + v);
     if (this.ult >= ULT_COST && !this.ultReadyAnnounced) { this.ultReadyAnnounced = true; this.m.onUltReady(); }
   }
-  slots() { return [['starfall', 'E'], ['sigil', 'C'], ['blink', 'V'], ['nova', 'X']]; }
+  slots() { return [['starfall', 'E'], ['ray', 'C'], ['blink', 'V'], ['nova', 'X']]; }
 
   update(dt, input) {
     const m = this.m;
@@ -69,7 +70,7 @@ export class MeteoraKit {
     for (const k in buf) buf[k] = pr[k] ? 0.4 : Math.max(0, buf[k] - dt);
     const go = (k, fn) => { if (buf[k] > 0 && this.busy <= 0) { buf[k] = 0; fn(); } };
     go('e', () => this.starfall());
-    go('c', () => this.sigil());
+    go('c', () => this.ray());
     go('v', () => this.blink());
     go('x', () => this.nova());
     if (input.state.fire || pr.fire) this.spark();
@@ -132,6 +133,31 @@ export class MeteoraKit {
     m.body.locked = 0.4;
     m.playAnim('plant');
     this.pending.push({ t: 0.32, fn: () => m.castAbility({ ab: 'sigil', c: [target.x, target.y, target.z], id: Math.floor(Math.random() * 1e9) }) });
+  }
+
+  // C — Scarlet Ray: a channelled spell, then a piercing beam to the crosshair
+  ray() {
+    if (!this._ready('ray')) return;
+    const m = this.m;
+    this.cd.ray = cdOf(COOLDOWN.ray); this.busy = RAY.channel + 0.5;
+    m.body.locked = RAY.channel + 0.35; m.body.vel.x *= 0.2; m.body.vel.z *= 0.2;
+    m.playAnim('ray');
+    m.castAbility({ ab: 'rayCharge' });
+    this.pending.push({ t: RAY.channel, fn: () => {
+      const cam = m.camera.position, f = m.cam.fwd;
+      const wd = m.world.raycast(cam.x, cam.y, cam.z, f.x, f.y, f.z, RAY.range, 0);
+      const end = tmp2.copy(cam).addScaledVector(f, Math.min(RAY.range, wd));
+      const o = m.view.staffTip(tmp);
+      m.castAbility({ ab: 'ray', o: [o.x, o.y, o.z], t: [end.x, end.y, end.z] });
+      // pierces: everyone along the beam from the staff to the end point
+      const hitEnd = end.clone(), start = o.clone();
+      for (const e of m.ents.values()) {
+        if (e === m.local || !e.alive) continue;
+        const h = hitCharacter(e, start, hitEnd, RAY.width * 0.5);
+        if (h) m.reportHit(e, RAY.dmg, 'ray', { head: h.head, burn: [6, 2.5], kb: [f.x * 7, 3, f.z * 7], at: new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z) });
+      }
+      m.cam.kick += 0.06; m.fx.shake(0.45);
+    } });
   }
 
   blink() {

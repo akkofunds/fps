@@ -258,6 +258,21 @@ Object.assign(SFX, {
   vortex: [1.0, (oc, o) => { noise(oc, o, { dur: 0.9, f: [3000, 300], Q: 4, env: [[0.05, 0.6], [0.85, 1], [0.9, 0]], seed: 471 }); tone(oc, o, { dur: 0.9, f: [600, 120], type: 'sawtooth', env: [[0.05, 0.12], [0.9, 0]] }); }, { reverb: 0.4, tau: 0.5, level: 0.6 }],
   novaWord: [1.4, (oc, o) => { thump(oc, o, 0, 60, 30, 1.3, 1); noise(oc, o, { dur: 1.3, f: [100, 600, 200], Q: 1, env: [[0.01, 0.8], [1.3, 0]], seed: 473 }); [110, 164.8, 220].forEach((f) => tone(oc, o, { dur: 1.3, f: [f, f], type: 'sawtooth', env: [[0.01, 0.2], [1.3, 0]] })); }, { reverb: 0.7, tau: 1.2, drive: 2, level: 0.9 }],
   circleOn: [1.4, (oc, o) => { thump(oc, o, 0, 80, 40, 0.5, 0.8); [523, 784, 1046, 1568].forEach((f, i) => tone(oc, o, { t0: i * 0.02, dur: 1.3, f: [f, f], type: 'sine', env: [[0.01, 0.3 - i * 0.05], [1.3, 0]] })); noise(oc, o, { dur: 0.6, f: [4000, 800], Q: 2, env: [[0.01, 0.4], [0.6, 0]], seed: 475 }); }, { reverb: 0.8, tau: 1.2, level: 0.75 }],
+  // Shoto: ice
+  iceShot: [0.4, (oc, o) => { click(oc, o, 0, 0.6, 5000); tone(oc, o, { dur: 0.25, f: [3200, 1800], type: 'triangle', env: [[0.003, 0.35], [0.25, 0]] }); whoosh(oc, o, 0, 0.25, 2500, 7000, 0.5, 501); }, { reverb: 0.2, tau: 0.3, level: 0.6 }],
+  iceHit: [0.5, (oc, o) => { click(oc, o, 0, 1, 6000); [2400, 3700, 5200].forEach((f, i) => tone(oc, o, { t0: i * 0.01, dur: 0.3, f: [f, f * 0.97], env: [[0.002, 0.3], [0.3, 0]] })); noise(oc, o, { dur: 0.3, type: 'highpass', f: [4000, 6000], env: [[0.002, 0.6], [0.3, 0]], seed: 503 }); }, { reverb: 0.25, tau: 0.3, level: 0.6 }],
+  freeze: [1.2, (oc, o) => {
+    noise(oc, o, { dur: 1.0, type: 'highpass', f: [7000, 2500], env: [[0.01, 0.8], [0.3, 0.5], [1.0, 0]], seed: 505 });
+    for (let i = 0; i < 9; i++) { const f = 1800 + i * 430; click(oc, o, i * 0.035, 0.5, 4000 + i * 300); tone(oc, o, { t0: i * 0.035, dur: 0.25, f: [f, f * 0.96], env: [[0.002, 0.18], [0.25, 0]] }); }
+    thump(oc, o, 0, 90, 50, 0.3, 0.6);
+  }, { reverb: 0.4, tau: 0.6, level: 0.7 }],
+  iceShatter: [1.2, (oc, o) => {
+    click(oc, o, 0, 1, 3000); thump(oc, o, 0, 130, 40, 0.4, 1);
+    noise(oc, o, { dur: 0.9, type: 'highpass', f: [3000, 8000, 3000], env: [[0.003, 1], [0.9, 0]], seed: 507 });
+    for (let i = 0; i < 14; i++) tone(oc, o, { t0: Math.random() * 0.4, dur: 0.2, f: [2000 + Math.random() * 4000, 1500], env: [[0.002, 0.15], [0.2, 0]] });
+  }, { reverb: 0.45, tau: 0.6, drive: 1.5, level: 0.85 }],
+  lance: [1.0, (oc, o) => { click(oc, o, 0, 1, 2000); tone(oc, o, { dur: 0.6, f: [2400, 300], type: 'sawtooth', env: [[0.003, 0.35], [0.6, 0]] }); noise(oc, o, { dur: 0.7, f: [6000, 900], Q: 1.5, env: [[0.003, 1], [0.7, 0]], seed: 509 }); thump(oc, o, 0, 140, 40, 0.3, 0.8); crackle(oc, o, 0.05, 0.6, 120, 0.4, 511); }, { reverb: 0.4, tau: 0.6, drive: 2.2, level: 0.9 }],
+  blitz: [0.9, (oc, o) => { whoosh(oc, o, 0, 0.8, 600, 5000, 1, 513); noise(oc, o, { dur: 0.7, type: 'highpass', f: [5000, 3000], env: [[0.02, 0.4], [0.7, 0]], seed: 515 }); roar(oc, o, 0, 0.7, 0.6, 517, [300, 1800, 600]); }, { reverb: 0.2, tau: 0.3, drive: 1.6, level: 0.75 }],
   rumble: [4.0, (oc, o) => { noise(oc, o, { dur: 4.0, type: 'lowpass', f: [120, 200, 90, 160], env: [[0.5, 0.8], [3.5, 1], [4.0, 0]], seed: 477 }); tone(oc, o, { dur: 4.0, f: [38, 46], env: [[0.5, 0.5], [3.5, 0.7], [4.0, 0]] }); }, { level: 0.85 }],
 });
 

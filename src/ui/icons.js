@@ -29,3 +29,11 @@ ICONS.ignite = '<svg viewBox="0 0 24 24"><circle cx="18.5" cy="5.5" r="2.6"/><ci
 ICONS.step = '<svg viewBox="0 0 24 24"><path d="M9.5 3.5h5l.8 8.5h-6.6z"/><path d="M8.2 13h7.6l1.2 3H7z"/><path d="M2 19.5c3-2.4 6.4-3.4 10-3.4s7 1 10 3.4l-.9 1.3c-2.8-2.1-5.8-3-9.1-3s-6.3.9-9.1 3z"/><path d="M4.5 22c2.2-1.4 4.8-2.1 7.5-2.1s5.3.7 7.5 2.1"/></svg>';
 ICONS.adolla = '<svg viewBox="0 0 24 24"><path d="M2 9.5h3.2c2.6 0 4.4-1.5 6.5-1.5H23v8H11.7c-2.1 0-3.9-1.5-6.5-1.5H2z"/><path d="M12 10h11v4H12z" fill="#fff6d0"/><path d="M5 4l1.5 3M9 2.5l.7 3.5M5 20l1.5-3M9 21.5l.7-3.5" stroke="currentColor" stroke-width="1.5"/></svg>';
 Object.assign(ABILITY_ICON, { blast: ICONS.bolt, kick: ICONS.kick, ignite: ICONS.ignite, step: ICONS.step, adolla: ICONS.adolla, ember: ICONS.ignite, igniteBoom: ICONS.ignite, trail: ICONS.burn, adollaPath: ICONS.burn });
+// Shoto (frost & flame)
+ICONS.freeze = '<svg viewBox="0 0 24 24"><path d="M11 2h2v4l2.5-1.5 1 1.7L13 8.4V10h1.6l2.2-3.5 1.7 1L17 10h4v2h-4l1.5 2.5-1.7 1-2.2-3.5H13v1.6l3.5 2.2-1 1.7L13 16v4h-2v-4l-2.5 1.5-1-1.7L11 13.6V12H9.4l-2.2 3.5-1.7-1L7 12H3v-2h4L5.5 7.5l1.7-1L9.4 10H11V8.4L7.5 6.2l1-1.7L11 6z"/></svg>';
+ICONS.lance = '<svg viewBox="0 0 24 24"><path d="M2 13.2l13-1.4v.4L2 13.6zM15 10l7 2-7 2c.6-1.3.6-2.7 0-4z"/><path d="M3 11h9v2H3z" opacity=".55"/><circle cx="4" cy="12" r="2.2"/></svg>';
+ICONS.blitz = '<svg viewBox="0 0 24 24"><path d="M13 3l6 6-4 1 3 4-3 1 2 6-9-8 4-1-3-4 4-1z"/><path d="M2 20h8v1.6H2zM1 16.5h6v1.4H1z"/></svg>';
+ICONS.zero = '<svg viewBox="0 0 24 24"><path d="M12 2l2 6 6-2-4 5 5 3-6 1 1 6-4-4-4 4 1-6-6-1 5-3-4-5 6 2z"/><circle cx="12" cy="12" r="2.6" fill="#ff8a3a"/></svg>';
+Object.assign(ABILITY_ICON, { freeze: ICONS.freeze, heatwave: ICONS.freeze, shatter: ICONS.freeze, lance: ICONS.lance, blitz: ICONS.blitz, uppercut: ICONS.blitz, zero: ICONS.zero, zeroBoom: ICONS.zero, shard: ICONS.freeze });
+ICONS.ray = '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="5" cy="12" r="1.4"/><path d="M8.6 10.8L23 11.4v1.2L8.6 13.2z"/><path d="M8 9.2l6 1.6-6 .4zM8 14.8l6-1.6-6-.4z" opacity=".6"/></svg>';
+Object.assign(ABILITY_ICON, { ray: ICONS.ray });

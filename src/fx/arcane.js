@@ -259,9 +259,13 @@ Object.assign(Fx.prototype, {
       const s = radius * (0.98 - (i / (n - 1)) * 0.66);
       const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(1.7, 0.32 - i * 0.025, 0.05));
       m.position.set(target.x, target.y + 8 + i * (40 / (n - 1)), target.z);
-      m.scale.setScalar(0.001);
+      m.scale.setScalar(1);
+      m.material.opacity = 0;
       scene.add(m);
-      layers.push({ m, at: stagger[i], dir: i % 2 ? -1 : 1, i, fired: false });
+      // soft glow twin (slightly larger, dimmer) so the lines read crisp and luminous
+      const g2 = circleMesh(m.material.map, s * 1.035, new THREE.Color(1.2, 0.12, 0.04));
+      g2.position.copy(m.position); g2.material.opacity = 0; scene.add(g2);
+      layers.push({ m, g: g2, at: stagger[i], dir: i % 2 ? -1 : 1, i, fired: false });
     }
     // ground warning (huge, so everyone knows to run)
     const warn = groundCircle(circleTexture(5, 1024), radius, target.x, target.z, new THREE.Color(1.8, 0.16, 0.06), this.world);
@@ -285,7 +289,7 @@ Object.assign(Fx.prototype, {
     const glow = this.light(new THREE.Vector3(target.x, target.y + 6, target.z), 0, radius * 3, channel + 2.5, 0xff5020);
     let t = 0, boomed = false, ball = null, ballMat = null, cleanupAt = 0;
     const cleanup = () => {
-      for (const L of layers) { scene.remove(L.m); L.m.geometry.dispose(); L.m.material.dispose(); }
+      for (const L of layers) { scene.remove(L.m); scene.remove(L.g); L.m.geometry.dispose(); L.m.material.dispose(); L.g.geometry.dispose(); L.g.material.dispose(); }
       for (const o of [warn, own, column]) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); }
       scene.remove(beamGlow); glowMat.dispose();
       if (ball) { scene.remove(ball); ball.geometry.dispose(); ballMat.dispose(); }
@@ -303,12 +307,15 @@ Object.assign(Fx.prototype, {
           for (let q = 0; q < 50; q++) { const a = R() * 6.283, rr = L.m.geometry.parameters.width * 0.5; this.fire.emit(L.m.position.x + Math.cos(a) * rr, L.m.position.y, L.m.position.z + Math.sin(a) * rr, Math.cos(a) * 3, (R() - 0.5) * 2, Math.sin(a) * 3, 0.6 + R() * 0.5, 0.9, 0.1, R() < 0.4 ? GOLD : CRIM, DARKR, 1, 0); }
           this.light(L.m.position, 40, 60, 0.5, 0xff3020);
         }
-        const k = THREE.MathUtils.clamp((t - L.at) / 0.35, 0, 1);
-        const e = 1 - (1 - k) ** 3;
-        const s = boomed ? 1 + (t - channel) * 0.6 : e * (1 + 0.04 * Math.sin(t * 9));
-        L.m.scale.setScalar(Math.max(0.001, s));
-        L.m.rotation.z += dt * L.dir * (0.6 + ch * 2.5);
-        L.m.material.opacity = boomed ? Math.max(0, 1 - (t - channel) / 0.9) : e * (0.75 + 0.25 * Math.sin(t * 13 + L.at * 10));
+        // static seals: they ignite in place (bright flash settling to a steady glow), turn slowly
+        // and evenly, never scale or pulse; at the impact they burn out where they are
+        const k = THREE.MathUtils.clamp((t - L.at) / 0.22, 0, 1);
+        const flash = t >= L.at ? Math.max(0, 1 - (t - L.at) / 0.3) : 0;
+        const out = boomed ? Math.max(0, 1 - Math.max(0, t - channel - 0.12) / 0.55) : 1;
+        L.m.rotation.z += dt * L.dir * 0.22;
+        L.g.rotation.z = L.m.rotation.z;
+        L.m.material.opacity = k * out * (0.9 + flash * 0.6);
+        L.g.material.opacity = k * out * (0.35 + flash * 0.8);
       }
       warn.material.opacity = boomed ? Math.max(0, 1 - (t - channel) / 0.5) : ch * (0.55 + 0.45 * Math.sin(t * (6 + ch * 18)));
       warn.rotation.y -= dt * 0.4;
@@ -479,6 +486,67 @@ Object.assign(Fx.prototype, {
       if (t >= dur) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); return false; }
       return true;
     } });
+  },
+
+  // C — Scarlet Ray: three magic circles spin up in front of the staff while she channels
+  rayCharge(getTip, getDir, dur) {
+    const circles = [0, 1, 2].map((i) => {
+      const m = circleMesh(circleTexture(41 + i * 5, 512), 0.9 + i * 0.55, new THREE.Color(3.2, 0.6 - i * 0.08, 0.3));
+      m.rotation.set(0, 0, 0); m.material.opacity = 0; this.scene.add(m);
+      return m;
+    });
+    let t = 0;
+    const tip = new THREE.Vector3(), dir = new THREE.Vector3(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      getTip(tip); dir.copy(getDir());
+      const k = Math.min(1, t / dur);
+      q.setFromUnitVectors(Z, dir);
+      circles.forEach((m, i) => {
+        m.position.copy(tip).addScaledVector(dir, 0.45 + i * 0.6);
+        m.quaternion.copy(q); m.rotateZ(t * (i % 2 ? -3 : 4) * (1 + k * 2));
+        const s = Math.min(1, Math.max(0, (t - i * 0.18) / 0.3)) * (1 + 0.05 * Math.sin(t * 20));
+        m.scale.setScalar(Math.max(0.001, s * (0.6 + 0.6 * k)));
+        m.material.opacity = Math.min(1, s) * (0.7 + 0.3 * Math.sin(t * 15 + i));
+      });
+      for (let i = 0; i < 4 + k * 10; i++) {
+        const a = R() * 6.283, rr = 1.2 + R() * 1.4;
+        const p = new THREE.Vector3(Math.cos(a) * rr, Math.sin(a) * rr, 0).applyQuaternion(q).add(tip).addScaledVector(dir, 0.6);
+        const v = tip.clone().addScaledVector(dir, 0.6).sub(p).multiplyScalar(3.5);
+        this.fire.emit(p.x, p.y, p.z, v.x, v.y, v.z, 0.28, 0.16 + k * 0.1, 0.04, R() < 0.4 ? GOLD : CRIM, DARKR, 0, 0);
+      }
+      this.fire.emit(tip.x, tip.y, tip.z, 0, 0, 0, 0.06, 0.5 + k * 1.2, 0.4, [3.6, 1.6, 1.2, 1], CRIM, 0, 0);
+      if (t >= dur) { for (const m of circles) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); } return false; }
+      return true;
+    } });
+  },
+  rayBeam(o, t) {
+    const dir = new THREE.Vector3().subVectors(t, o), L = dir.length(); dir.normalize();
+    const geo = new THREE.CylinderGeometry(1, 1, 1, 18, 1, true); geo.translate(0, 0.5, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const mk = (col, op) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide })); m.position.copy(o); m.quaternion.copy(q); m.frustumCulled = false; this.scene.add(m); return m; };
+    const core = mk(new THREE.Color(3.6, 2.4, 2.0), 1), mid = mk(new THREE.Color(3.0, 0.5, 0.35), 0.8), outer = mk(new THREE.Color(1.6, 0.15, 0.1), 0.35);
+    this.explosion(t, 3.2, 1.4); this.sparkBurst(t, 3.2);
+    this.ring(o, 2.2, 0.3, new THREE.Color(3, 0.6, 0.4));
+    this.light(o, 40, 12, 0.4, 0xff4050); this.light(t, 60, 14, 0.5, 0xff6040);
+    let tt = 0;
+    const life = 0.6;
+    this.effects.push({ update: (dt) => {
+      tt += dt;
+      const k = Math.max(0, 1 - tt / life), grow = Math.min(1, tt / 0.06), pulse = 1 + Math.sin(tt * 60) * 0.08;
+      core.scale.set(0.16 * k * pulse + 0.01, L * grow, 0.16 * k * pulse + 0.01);
+      mid.scale.set(0.42 * k * pulse + 0.01, L * grow, 0.42 * k * pulse + 0.01);
+      outer.scale.set(0.9 * k + 0.01, L * grow, 0.9 * k + 0.01);
+      core.material.opacity = k; mid.material.opacity = 0.8 * k; outer.material.opacity = 0.35 * k;
+      for (let i = 0; i < 18 * k; i++) {
+        const u = R() * L * grow;
+        const p = o.clone().addScaledVector(dir, u);
+        this.fire.emit(p.x + (R() - 0.5) * 0.5, p.y + (R() - 0.5) * 0.5, p.z + (R() - 0.5) * 0.5, dir.x * 12 + (R() - 0.5) * 2, dir.y * 12 + (R() - 0.5) * 2 + 0.5, dir.z * 12 + (R() - 0.5) * 2, 0.25, 0.5, 0.1, R() < 0.35 ? GOLD : CRIM, DARKR, 2, 0);
+      }
+      if (tt > life) { for (const m of [core, mid, outer]) { this.scene.remove(m); m.material.dispose(); } geo.dispose(); return false; }
+      return true;
+    } });
+    this.shake(0.35);
   },
 
   // V — the afterimage left behind: a burning crimson silhouette that flickers, then detonates
