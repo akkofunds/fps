@@ -315,7 +315,7 @@ def main():
         return out
 
     # torso: elliptical squeeze around the spine line
-    cx, cz, rx, rz, kt = 0.6, -2.0, 9.0, 7.0, 0.42
+    cx, cz, rx, rz, kt = 0.6, -2.0, 8.2, 6.4, 0.26
     dx, dz = Pc[:, 0] - cx, Pc[:, 2] - cz
     rn = np.sqrt((dx / rx) ** 2 + (dz / rz) ** 2)
     rn2 = np.where(rn > 1, 1 + (rn - 1) * kt, rn)
@@ -328,11 +328,11 @@ def main():
         names = [f'upperArm_{side}', f'foreArm_{side}', f'hand_{side}']
         w = sum(Wc_[:, IDX[n]] for n in names)
         if w.max() > 0:
-            target += squeeze_chain(Pc, names, 3.4, 0.4) * w[:, None]; wsum += w
+            target += squeeze_chain(Pc, names, 3.1, 0.3) * w[:, None]; wsum += w
         names = [f'upperLeg_{side}', f'lowerLeg_{side}', f'foot_{side}']
         w = sum(Wc_[:, IDX[n]] for n in names)
         if w.max() > 0:
-            target += squeeze_chain(Pc, names, 4.3, 0.44) * w[:, None]; wsum += w
+            target += squeeze_chain(Pc, names, 3.7, 0.26) * w[:, None]; wsum += w
     target += Pc * np.maximum(0, 1 - wsum)[:, None]
     delta[cloth] = target - Pc
 

@@ -87,7 +87,7 @@ export function stepMovement(b, cmd, dt, world, ev) {
   } else if (b.rollT > 0) {
     b.rollT -= dt;
     const k = Math.max(0, b.rollT / MOVE.rollTime);
-    const sp = MOVE.rollSpeed * (0.45 + 0.55 * k);
+    const sp = MOVE.rollSpeed * (0.72 + 0.28 * k); // keeps your momentum: you come up running
     b.vel.x = b.rollDir.x * sp; b.vel.z = b.rollDir.z * sp;
     b.vel.y -= g * dt;
   } else {

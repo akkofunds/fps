@@ -50,23 +50,24 @@ const TUCK = (rx, y, z = 0) => ({
 });
 function tuckKey(t, rx, y, z, ease) { const b = TUCK(rx, y, z); const hip = b._hip; delete b._hip; return { t, hip, b, ease }; }
 
-// forward roll on landing: the hips orbit a full turn while the body is balled up
+// forward roll on landing: dive with the arms reaching, tuck tight, the hips ride HIGH while
+// upside down (so the head never sinks into the ground), then come up already leaning into a run
 export const ROLL = compileClip([
-  { t: 0, hip: [0, -0.16, 0], b: { hips: [14, 0, 0], spine: [16, 0, 0], upperLegL: [-50, 0, 6], lowerLegL: [80, 0, 0], footL: [-24, 0, 0], upperLegR: [-30, 0, 6], lowerLegR: [70, 0, 0], footR: [-30, 0, 0], upperArmL: [-40, 0, 14], upperArmR: [-40, 0, 14], foreArmL: [-40, 0, 0], foreArmR: [-40, 0, 0] } },
-  tuckKey(0.1, 80, -0.42, 0.08, 'in'),
-  tuckKey(0.24, 185, -0.4, 0.04, 'linear'),
-  tuckKey(0.38, 290, -0.42, -0.02, 'linear'),
-  { t: 0.5, ease: 'out', hip: [0, -0.2, 0], b: { hips: [372, 0, 0], spine: [18, 0, 0], chest: [8, 0, 0], neck: [-6, 0, 0], head: [-8, 0, 0], upperLegL: [-74, 0, 8], lowerLegL: [104, 0, 0], footL: [-26, 0, 0], upperLegR: [-26, 0, 8], lowerLegR: [96, 0, 0], footR: [-58, 0, 0], upperArmL: [-20, 0, 30], foreArmL: [-40, 0, 0], upperArmR: [-10, 0, 34], foreArmR: [-50, 0, 0] } },
-  { t: 0.62, hip: [0, -0.06, 0], b: { hips: [364, 0, 0], spine: [6, 0, 0], upperLegL: [-22, 0, 4], lowerLegL: [34, 0, 0], footL: [-10, 0, 0], upperLegR: [-8, 0, 4], lowerLegR: [30, 0, 0], footR: [-18, 0, 0], upperArmL: [0, 0, 16], foreArmL: [-34, 0, 0], upperArmR: [0, 0, 18], foreArmR: [-44, 0, 0] } },
+  { t: 0, hip: [0, -0.2, 0.06], b: { hips: [22, 0, 0], spine: [22, 0, 0], chest: [8, 0, 0], neck: [-10, 0, 0], head: [-14, 0, 0], upperLegL: [-62, 0, 6], lowerLegL: [92, 0, 0], footL: [-20, 0, 0], upperLegR: [-24, 0, 6], lowerLegR: [70, 0, 0], footR: [-30, 0, 0], upperArmL: [-78, 0, 8], foreArmL: [-24, 0, 0], upperArmR: [-74, 0, 8], foreArmR: [-26, 0, 0] } },
+  tuckKey(0.07, 95, -0.32, 0.1, 'in'),
+  tuckKey(0.16, 200, -0.27, 0.05, 'linear'),
+  tuckKey(0.26, 300, -0.34, -0.02, 'linear'),
+  { t: 0.34, ease: 'out', hip: [0, -0.2, 0.02], b: { hips: [372, 0, 0], spine: [18, 0, 0], chest: [8, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0], upperLegL: [-70, 0, 8], lowerLegL: [100, 0, 0], footL: [-20, 0, 0], upperLegR: [-22, 0, 8], lowerLegR: [90, 0, 0], footR: [-50, 0, 0], upperArmL: [-30, 0, 34], foreArmL: [-50, 0, 0], upperArmR: [-20, 0, 36], foreArmR: [-56, 0, 0] } },
+  { t: 0.44, ease: 'smooth', hip: [0, -0.06, 0], b: { hips: [368, 0, 0], spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [44, 0, 0], footL: [-10, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [36, 0, 0], footR: [-16, 0, 0], upperArmL: [6, 0, 14], foreArmL: [-50, 0, 0], upperArmR: [-10, 0, 16], foreArmR: [-60, 0, 0] } },
 ]);
 
 export const ROLL_BACK = compileClip([
-  { t: 0, hip: [0, -0.14, 0], b: { hips: [-6, 0, 0], upperLegL: [-40, 0, 6], lowerLegL: [70, 0, 0], upperLegR: [-30, 0, 6], lowerLegR: [60, 0, 0] } },
-  tuckKey(0.12, -70, -0.44, -0.08, 'in'),
-  tuckKey(0.26, -180, -0.4, -0.04, 'linear'),
-  tuckKey(0.4, -290, -0.42, 0.02, 'linear'),
-  { t: 0.52, ease: 'out', hip: [0, -0.2, 0], b: { hips: [-360, 0, 0], spine: [16, 0, 0], upperLegL: [-70, 0, 8], lowerLegL: [100, 0, 0], footL: [-28, 0, 0], upperLegR: [-30, 0, 8], lowerLegR: [96, 0, 0], footR: [-50, 0, 0], upperArmL: [-20, 0, 30], foreArmL: [-40, 0, 0], upperArmR: [-10, 0, 34], foreArmR: [-50, 0, 0] } },
-  { t: 0.64, hip: [0, -0.06, 0], b: { hips: [-360, 0, 0], spine: [6, 0, 0], upperLegL: [-20, 0, 4], lowerLegL: [32, 0, 0], upperLegR: [-8, 0, 4], lowerLegR: [30, 0, 0], foreArmL: [-34, 0, 0], foreArmR: [-44, 0, 0] } },
+  { t: 0, hip: [0, -0.16, -0.02], b: { hips: [-8, 0, 0], spine: [12, 0, 0], upperLegL: [-44, 0, 6], lowerLegL: [76, 0, 0], upperLegR: [-30, 0, 6], lowerLegR: [64, 0, 0], upperArmL: [-40, 0, 20], upperArmR: [-40, 0, 20], foreArmL: [-60, 0, 0], foreArmR: [-60, 0, 0] } },
+  tuckKey(0.09, -80, -0.38, -0.08, 'in'),
+  tuckKey(0.19, -185, -0.22, -0.04, 'linear'),
+  tuckKey(0.3, -290, -0.36, 0.02, 'linear'),
+  { t: 0.4, ease: 'out', hip: [0, -0.2, 0], b: { hips: [-360, 0, 0], spine: [16, 0, 0], upperLegL: [-70, 0, 8], lowerLegL: [100, 0, 0], footL: [-28, 0, 0], upperLegR: [-30, 0, 8], lowerLegR: [96, 0, 0], footR: [-50, 0, 0], upperArmL: [-20, 0, 30], foreArmL: [-40, 0, 0], upperArmR: [-10, 0, 34], foreArmR: [-50, 0, 0] } },
+  { t: 0.5, hip: [0, -0.06, 0], b: { hips: [-360, 0, 0], spine: [6, 0, 0], upperLegL: [-20, 0, 4], lowerLegL: [32, 0, 0], upperLegR: [-8, 0, 4], lowerLegR: [30, 0, 0], foreArmL: [-34, 0, 0], foreArmR: [-44, 0, 0] } },
 ]);
 
 // C — Firewall: wind up and slam the right palm into the ground

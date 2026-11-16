@@ -367,7 +367,8 @@ export class Animator {
     for (const side of ['L', 'R']) {
       const sg = side === 'L' ? 1 : -1;
       const sw = (Ls > 1e-3 ? feet[side].along / (Ls * 0.5) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
-      const idleX = side === 'R' ? -14 : -8, idleZ = side === 'R' ? 16 : 11, idleE = side === 'R' ? -72 : -36;
+      // relaxed ready stance: arms close to the body, casting hand slightly raised
+      const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
       const ax = lerp(idleX, 8 + sw, wRun);
       const az = lerp(idleZ, 10 + 4 * wFast, wRun);
       const ex = lerp(idleE, -(48 + 42 * wFast) - Math.max(0, -sw) * 0.5, wRun);
