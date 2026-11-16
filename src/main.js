@@ -72,7 +72,8 @@ class App {
     if (!QUALITY[this.settings.quality]) this.settings.quality = detectQuality();
     const Q = QUALITY[this.settings.quality];
     // low (Chromebooks): no MSAA on the default framebuffer — it's a big fill-rate cost on iGPUs
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: this.settings.quality !== 'low', powerPreference: 'high-performance', stencil: false });
+    // always anti-aliased: jagged edges read as "pixelated"; MSAA is nearly free on mobile GPUs
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance', stencil: false });
     this.dynScale = 1; this._perf = { t: 0, n: 0, good: 0, cool: 0 };
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -113,7 +114,9 @@ class App {
     this.map = new GameMap(this.settings.quality);
     this._setupComposer();
     // re-apply what the auto-tuner learned last time on this device
-    for (let i = 0; i < (this.settings.autoTier || 0); i++) this._degrade(true);
+    // plus the player's chosen optimization level (trims effects, never resolution)
+    const tiers = (this.settings.autoTier || 0) + ({ off: 0, balanced: 2, max: 5 }[this.settings.perfMode] || 0);
+    for (let i = 0; i < tiers; i++) this._degrade(true);
     if (IGPU.test(this.gpu) && !/Mac/.test(navigator.platform) && !isIPad()) setTimeout(() => toast('Your browser is using integrated graphics. For much smoother play, set your browser to use your graphics card (Windows: Settings → Display → Graphics → your browser → High performance).', 9000), 4000);
     this.progress(0.55, 'Summoning Pyro…');
     try { await Promise.all(MAGE_LIST.map((m) => loadMageModel(m.model))); } catch (e) { console.error(e); toast('Failed to load a character model.'); }
@@ -241,11 +244,14 @@ class App {
     const dpr = window.devicePixelRatio || 1;
     const Q = QUALITY[this.settings.quality] || QUALITY.medium;
     const scale = Number(this.settings.renderScale) || 0;
+    // never render below one pixel per screen point: that is what looks pixelated
+    const floor = Math.min(dpr, 1);
     // base: native resolution up to the preset's cap (manual "Render resolution" overrides it)
     let base = scale > 0 ? scale * dpr : Math.min(dpr, Q.dpr);
     if (this.settings.quality === 'ultra' && !scale) base = Math.max(base, 2);
-    // dynamic resolution: drops when the GPU can't hold 60 FPS, climbs back when it can
-    return Math.max(0.5, Math.min(3, base * this.dynScale));
+    base = Math.max(floor, base);
+    // dynamic resolution only trims the EXTRA sharpness above that floor (Retina/4K/supersampling)
+    return Math.min(3, Math.max(floor, base * this.dynScale));
   }
 
   // Dynamic resolution scaling. Measures real frame rate over ~0.7 s windows; below 55 FPS the
@@ -260,13 +266,17 @@ class App {
     const Q = QUALITY[this.settings.quality] || QUALITY.medium;
     p.cool = Math.max(0, p.cool - 1);
     let next = this.dynScale;
-    if (fps < 55 && this.dynScale > Q.minScale) { next = Math.max(Q.minScale, this.dynScale * (fps < 40 ? 0.8 : 0.9)); p.good = 0; p.cool = 6; }
+    // lowest scale that still keeps >= 1 pixel per screen point
+    const dpr = window.devicePixelRatio || 1, scale = Number(this.settings.renderScale) || 0;
+    const base = Math.max(Math.min(dpr, 1), scale > 0 ? scale * dpr : Math.min(dpr, Q.dpr));
+    const minScale = Math.min(1, Math.min(dpr, 1) / base);
+    if (fps < 55 && this.dynScale > minScale + 0.005) { next = Math.max(minScale, this.dynScale * (fps < 40 ? 0.8 : 0.9)); p.good = 0; p.cool = 6; }
     else if (fps >= 59) { p.good++; if (p.good >= 4 && p.cool === 0 && this.dynScale < 1) { next = Math.min(1, this.dynScale * 1.06); p.good = 0; } }
     else p.good = 0;
     if (Math.abs(next - this.dynScale) > 0.005) { this.dynScale = next; this.resize(); }
     // still slow at the resolution floor → the auto-tuner switches off the next most expensive
     // feature (remembered for next time on this device)
-    if (fps < 50 && this.dynScale <= Q.minScale + 0.01 && !document.hidden) {
+    if (fps < 50 && this.dynScale <= minScale + 0.01 && !document.hidden) {
       p.slow = (p.slow || 0) + 1;
       if (p.slow >= 3 && this.settings.autoTune !== false) {
         p.slow = 0;
@@ -286,11 +296,6 @@ class App {
     const steps = [
       () => { if (this.map.lodScale <= 0.75) return false; this.map.lodScale = 0.72; return true; },
       () => { if (!this.gtao || !this.gtao.enabled) return false; this.gtao.enabled = false; return true; },
-      () => {
-        if (!this.composer || !this.composer.renderTarget1.samples) return false;
-        for (const t of [this.composer.renderTarget1, this.composer.renderTarget2]) { t.samples = 0; t.dispose(); }
-        return true;
-      },
       () => { if (this.map.lodScale <= 0.55) return false; this.map.lodScale = 0.52; return true; },
       () => {
         if (!this.renderer.shadowMap.enabled) return false;

@@ -91,8 +91,10 @@ export class Lobby {
     $('sShoulder').onchange = () => { s.shoulder = Number($('sShoulder').value); app.saveSettings(); app.applySettings(); };
     $('sInvert').checked = !!s.invertY;
     $('sInvert').onchange = () => { s.invertY = $('sInvert').checked; app.saveSettings(); };
+    $('sPerf').value = s.perfMode || 'off';
+    $('sPerf').onchange = () => { s.perfMode = $('sPerf').value; app.saveSettings(); toast('Reloading to apply optimization…'); setTimeout(() => location.reload(), 700); };
     $('sDyn').checked = s.dynamicRes !== false;
-    $('sDyn').onchange = () => { s.dynamicRes = $('sDyn').checked; if (!s.dynamicRes) app.dynScale = 1; app.saveSettings(); app.resize(); };
+    $('sDyn').onchange = () => { s.dynamicRes = $('sDyn').checked; s.autoTune = s.dynamicRes; if (!s.dynamicRes) app.dynScale = 1; app.saveSettings(); app.resize(); };
     $('btnSettingsClose').onclick = () => { show('settings', false); };
   }
 
