@@ -3,22 +3,19 @@ import { DEFAULT_BALANCE, loadBalance, saveBalance, ADMIN } from '../game/balanc
 import { MAGE_LIST } from '../game/mages.js';
 import { Audio } from '../core/audio.js';
 
-// Admin panel, built into the normal game client and opened at /admin (or #admin).
-//
-// Access check: an admin code (compared in base64) and then a security question.
-// NOTE: this runs entirely in the browser — anyone can read the bundled JavaScript, and base64
-// is an encoding, not encryption. It keeps casual visitors out; it is not real security. Nothing
-// here can touch other people's games except Custom/Practice lobbies that YOU host.
-const CODE_B64 = 'QWtrbzQ3ODQ2OTA5';
-const ANSWER_B64 = 'a2l3aQ==';
-const SESSION_KEY = 'magebreak.admin';
+import { isAdmin, myToken, maskToken, adminSession, saveSession, api, setLocalGrant } from '../core/adminAccess.js';
 
-const b64 = (s) => { try { return btoa(unescape(encodeURIComponent(s))); } catch { return ''; } };
+// Admin panel, built into the normal game client and opened at /admin (or #admin), or from the
+// ADMIN badge in the lobby once you are an admin.
+//
+// Sign-in: password, then the security question — both checked by the server (/api/admin), so
+// neither is in the game's JavaScript. The signed-in session is remembered on this device. Then
+// (optional) paste a player's token from their Settings to make them an admin everywhere.
+export { isAdmin };
 
 export function isAdminRoute() {
   return /\/admin\/?$/.test(location.pathname) || location.hash === '#admin' || new URLSearchParams(location.search).has('admin');
 }
-export function isAdmin() { try { return sessionStorage.getItem(SESSION_KEY) === '1'; } catch { return false; } }
 // admin perk: ultimate always ready (on by default once unlocked; toggle in the panel)
 export function syncAdminPerks() {
   let pref = '1';
@@ -37,52 +34,131 @@ export class AdminPanel {
 
   open() {
     show(this.root, true);
-    if (isAdmin()) this.renderPanel(); else this.renderGate(1);
+    if (adminSession()) this.renderPanel(); else this.renderGate(1);
   }
   close() { show(this.root, false); }
 
-  // ---------------------------------------------------------------- two-step gate
+  _granted() {
+    syncAdminPerks();
+    if (this.app.lobby) this.app.lobby.refreshAccess();
+    if (this.app.lobby) { if (isAdmin()) this.app.lobby.showAdminBadge(() => this.open()); else this.app.lobby.hideAdminBadge(); }
+  }
+
+  // ---------------------------------------------------------------- sign-in (password → dog's name → optional token)
   renderGate(step) {
     const r = this.root;
     r.innerHTML = '';
     const box = el('div', 'admin-gate');
     box.appendChild(el('div', 'ag-title', 'ADMIN ACCESS'));
-    box.appendChild(el('div', 'ag-step', step === 1 ? 'STEP 1 OF 2 · ADMIN CODE' : 'STEP 2 OF 2 · SECURITY QUESTION'));
-    box.appendChild(el('label', 'ag-q', step === 1 ? 'Enter the admin code' : "What is your dog's name?"));
+    const steps = ['STEP 1 OF 3 · PASSWORD', "STEP 2 OF 3 · SECURITY QUESTION", 'STEP 3 OF 3 · GRANT ADMIN'];
+    box.appendChild(el('div', 'ag-step', steps[step - 1]));
+    box.appendChild(el('label', 'ag-q', step === 1 ? 'Enter the admin password' : step === 2 ? "What is your dog's name?" : 'Paste the token of the account to make admin'));
+    if (step === 3) box.appendChild(el('p', 'muted ag-note', 'Every player has a private token in Settings → Account. Paste yours (or a friend\'s) to give that account admin in the normal game — no /admin needed. You can do this later from the panel.'));
     const form = el('form');
     const inp = el('input');
     inp.type = step === 1 ? 'password' : 'text';
     inp.autocomplete = 'off'; inp.spellcheck = false;
+    if (step === 3) inp.placeholder = 'magebreak-…';
     form.appendChild(inp);
-    const go = el('button', 'btn-wide primary', step === 1 ? 'CONTINUE' : 'UNLOCK'); go.type = 'submit';
+    let nameInp = null;
+    if (step === 3) {
+      nameInp = el('input'); nameInp.placeholder = 'Name (optional, e.g. Akko)'; nameInp.maxLength = 24; nameInp.autocomplete = 'off';
+      form.appendChild(nameInp);
+      const mine = el('button', 'btn-wide', "USE THIS DEVICE'S TOKEN"); mine.type = 'button';
+      mine.onclick = () => { inp.value = myToken(); if (!nameInp.value) nameInp.value = (this.app.pm && this.app.pm.identity && this.app.pm.identity.name) || ''; };
+      form.appendChild(mine);
+    }
+    const go = el('button', 'btn-wide primary', step === 1 ? 'CONTINUE' : step === 2 ? 'SIGN IN' : 'GRANT ADMIN'); go.type = 'submit';
     form.appendChild(go);
-    const back = el('button', 'btn-wide', 'BACK TO GAME'); back.type = 'button';
-    back.onclick = () => { this.close(); history.replaceState(null, '', location.pathname.replace(/admin\/?$/, '') || '/'); };
+    const back = el('button', 'btn-wide', step === 3 ? 'SKIP FOR NOW' : 'BACK TO GAME'); back.type = 'button';
+    back.onclick = () => {
+      if (step === 3) { this.renderPanel(); return; }
+      this.close(); history.replaceState(null, '', location.pathname.replace(/admin\/?$/, '') || '/');
+    };
     form.appendChild(back);
     const err = el('div', 'ag-err', '');
-    form.addEventListener('submit', (e) => {
+    const fail = (msg) => { err.textContent = msg; go.disabled = false; inp.focus(); };
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const v = inp.value.trim();
-      const ok = step === 1 ? b64(v) === CODE_B64 : b64(v.toLowerCase()) === ANSWER_B64;
-      if (!ok) {
-        this.fails = (this.fails || 0) + 1;
-        err.textContent = this.fails >= 5 ? 'Too many attempts — reload the page to try again.' : 'Incorrect.';
-        if (this.fails >= 5) { inp.disabled = true; go.disabled = true; }
-        inp.value = ''; inp.focus();
+      if (!v) return;
+      Audio.play('ui');
+      if (step === 1) { this.pw = v; this.renderGate(2); return; }
+      go.disabled = true; err.textContent = '';
+      if (step === 2) {
+        const res = await api('login', { password: this.pw, pet: v });
+        this.pw = '';
+        if (!res.ok) {
+          if (res.status === 401) { this.renderGate(1); this.root.querySelector('.ag-err').textContent = res.message || 'Incorrect.'; return; }
+          fail(res.message || 'Sign-in failed.'); return;
+        }
+        saveSession(res);
+        this._granted();
+        toast('Signed in as admin on this device.');
+        this.renderGate(3);
         return;
       }
-      Audio.play('ui');
-      if (step === 1) { this.renderGate(2); return; }
-      try { sessionStorage.setItem(SESSION_KEY, '1'); } catch { /* ignore */ }
-      syncAdminPerks();
-      if (this.app.lobby) this.app.lobby.refreshAccess();
-      toast('Admin unlocked for this tab. Meteora is now available.');
+      const res = await api('add', { session: adminSession(), token: v, name: nameInp.value.trim() });
+      if (!res.ok) { fail(res.message || 'Could not grant admin.'); return; }
+      if (v === myToken()) setLocalGrant(true);
+      this._granted();
+      toast('Admin granted to ' + (nameInp.value.trim() || maskToken(v)) + '.');
       this.renderPanel();
     });
     box.appendChild(form);
     box.appendChild(err);
     r.appendChild(box);
     setTimeout(() => inp.focus(), 30);
+  }
+
+  // ---------------------------------------------------------------- admins (shared list on the server)
+  async renderAdmins(sec) {
+    sec.querySelectorAll('.ap-admins, .ap-addadmin, .ap-warn').forEach((n) => n.remove());
+    const list = el('div', 'ap-admins');
+    list.appendChild(el('p', 'muted', 'Loading admins…'));
+    sec.appendChild(list);
+    const res = await api('list', { session: adminSession() });
+    list.innerHTML = '';
+    if (!res.ok) {
+      if (res.error === 'session') { saveSession(null); this.renderGate(1); return; }
+      const w = el('div', 'ap-warn', res.message || 'Could not load the admin list.');
+      sec.insertBefore(w, list);
+    } else if (!res.admins.length) list.appendChild(el('p', 'muted', 'No admin accounts yet. Add one below.'));
+    for (const a of res.admins || []) {
+      const row = el('div', 'ap-admin');
+      const who = el('div', 'ap-who');
+      who.appendChild(el('b', '', a.name || 'Unnamed'));
+      who.appendChild(el('span', 'mono', maskToken(a.token)));
+      if (a.token === myToken()) who.appendChild(el('span', 'ap-you', 'THIS DEVICE'));
+      row.appendChild(who);
+      row.appendChild(el('span', 'muted', a.added ? new Date(a.added).toLocaleDateString() : ''));
+      const rm = el('button', 'btn-side danger', 'REMOVE');
+      rm.onclick = async () => {
+        if (!confirm(`Remove admin from ${a.name || maskToken(a.token)}?`)) return;
+        const out = await api('remove', { session: adminSession(), token: a.token });
+        if (!out.ok) { toast(out.message || 'Could not remove.'); return; }
+        if (a.token === myToken()) setLocalGrant(false);
+        this._granted(); toast('Admin removed.'); this.renderAdmins(sec);
+      };
+      row.appendChild(rm);
+      list.appendChild(row);
+    }
+    // add
+    const add = el('form', 'ap-addadmin');
+    const ti = el('input'); ti.placeholder = 'Player token (magebreak-…)'; ti.autocomplete = 'off'; ti.spellcheck = false;
+    const ni = el('input'); ni.placeholder = 'Name (optional)'; ni.maxLength = 24;
+    const mine = el('button', 'btn-side', 'MY TOKEN'); mine.type = 'button'; mine.onclick = () => { ti.value = myToken(); };
+    const go = el('button', 'btn-side primary', 'ADD ADMIN'); go.type = 'submit';
+    add.append(ti, ni, mine, go);
+    add.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const t = ti.value.trim(); if (!t) return;
+      const out = await api('add', { session: adminSession(), token: t, name: ni.value.trim() });
+      if (!out.ok) { toast(out.message || 'Could not add admin.'); return; }
+      if (t === myToken()) setLocalGrant(true);
+      this._granted(); toast('Admin added.'); this.renderAdmins(sec);
+    });
+    sec.appendChild(add);
   }
 
   // ---------------------------------------------------------------- panel
@@ -98,9 +174,13 @@ export class AdminPanel {
     const body = el('div', 'ap-body');
     p.appendChild(body);
 
+    const sec = (title, note) => { const s = el('section', 'ap-sec'); s.appendChild(el('h3', '', title)); if (note) s.appendChild(el('p', 'muted', note)); body.appendChild(s); return s; };
+    // -- admins
+    const sA = sec('ADMINS', 'Accounts with admin in the normal game (Meteora, admin perks). Players find their token in Settings → Account.');
+    this.renderAdmins(sA);
+
     // -- balance
     const bal = loadBalance();
-    const sec = (title, note) => { const s = el('section', 'ap-sec'); s.appendChild(el('h3', '', title)); if (note) s.appendChild(el('p', 'muted', note)); body.appendChild(s); return s; };
     const s1 = sec('BALANCE', 'Applies to Custom and Practice games that you host. Everyone in your lobby uses your numbers. Public Free-For-All always uses the defaults.');
     const grid = el('div', 'ap-grid');
     const num = (key, label, min, max, step) => {
@@ -182,7 +262,7 @@ export class AdminPanel {
     tool('START PRACTICE', () => { this.close(); app.session.startPractice(); });
     tool('CLEAR MATCH HISTORY', () => { localStorage.removeItem('magebreak.history'); app.lobby.renderCareer(); toast('History cleared.'); });
     tool('CLEAR RECENT PLAYERS', () => { localStorage.removeItem('magebreak.recent'); app.lobby.renderSocial(); toast('Recent players cleared.'); });
-    tool('LOCK ADMIN', () => { try { sessionStorage.removeItem(SESSION_KEY); } catch { /* ignore */ } syncAdminPerks(); if (app.lobby) app.lobby.refreshAccess(); this.close(); toast('Admin locked.'); });
+    tool('SIGN OUT OF ADMIN PANEL', () => { saveSession(null); this._granted(); this.close(); toast('Signed out of the admin panel on this device.'); });
     s5.appendChild(trow);
 
     r.appendChild(p);

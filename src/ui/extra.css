@@ -213,3 +213,22 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 .card.name-card .pname { max-width: calc(100% - 20px); margin: 6px auto 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .card.name-card .ptag { margin-top: 4px; font-size: 11px; letter-spacing: 0.18em; color: var(--muted); }
 .card.name-card .meta { padding-bottom: 30%; }
+
+/* ---- settings: account token ---- */
+.set-account { margin: 10px 0 4px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); }
+.set-account h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.18em; opacity: 0.8; }
+.set-account label { display: block; font-size: 12px; margin-bottom: 6px; }
+.tok-row { display: flex; gap: 6px; }
+.tok-row input { flex: 1; min-width: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; background: rgba(0,0,0,0.35); color: #d8e6f2; border: 1px solid rgba(255,255,255,0.14); border-radius: 6px; padding: 8px 10px; }
+
+/* ---- admin: shared admin list ---- */
+.admin-gate .ag-note { font-size: 12px; max-width: 360px; margin: 0 auto 8px; text-align: center; }
+.ap-admins { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.ap-admin { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); }
+.ap-who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ap-who .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-you { font-size: 10px; letter-spacing: 0.12em; padding: 2px 6px; border-radius: 4px; background: rgba(120,200,255,0.18); color: #9fd8ff; }
+.ap-addadmin { display: flex; gap: 6px; flex-wrap: wrap; }
+.ap-addadmin input { flex: 1 1 180px; min-width: 0; }
+.ap-warn { padding: 8px 10px; border-radius: 8px; background: rgba(255,170,60,0.12); border: 1px solid rgba(255,170,60,0.35); color: #ffd29a; font-size: 12px; margin: 6px 0; }
+.btn-side.danger { color: #ff9a9a; border-color: rgba(255,90,90,0.4); }

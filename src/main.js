@@ -9,6 +9,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { TouchControls } from './ui/touch.js';
 import { AdminPanel, isAdminRoute, isAdmin, syncAdminPerks } from './ui/admin.js';
+import { refreshGrant } from './core/adminAccess.js';
 import { Input } from './core/input.js';
 import { Audio } from './core/audio.js';
 import { loadIdentity, saveIdentity, loadSettings, saveSettings, randomTag } from './core/storage.js';
@@ -150,6 +151,12 @@ class App {
     if (isAdminRoute()) this.admin.open();
     syncAdminPerks();
     if (isAdmin() || isAdminRoute()) this.lobby.showAdminBadge(() => this.admin.open());
+    // is this device's token on the admin list? (cached answer is used until the server replies)
+    refreshGrant().then((ok) => {
+      syncAdminPerks();
+      this.lobby.refreshAccess();
+      if (ok) this.lobby.showAdminBadge(() => this.admin.open());
+    });
     this._fps = { t: 0, n: 0 };
   }
 
