@@ -132,7 +132,7 @@ function fireballMaterial() {
       void main(){
         float facing = abs(dot(normalize(vN), vec3(0.0, 0.0, 1.0)));
         float core = pow(facing, 1.5);
-        vec3 hot = vec3(3.0, 1.7, 0.6), mid = vec3(2.3, 0.75, 0.16), cool = vec3(0.9, 0.12, 0.03);
+        vec3 hot = vec3(2.1, 0.95, 0.22), mid = vec3(1.35, 0.32, 0.05), cool = vec3(0.38, 0.05, 0.02);
         float k = clamp(core * uHeat + vNz * 0.3, 0.0, 1.0);
         vec3 col = mix(cool, mid, smoothstep(0.1, 0.55, k));
         col = mix(col, hot, smoothstep(0.55, 1.0, k));
@@ -140,7 +140,7 @@ function fireballMaterial() {
         // cooling into black-brown smoke as the heat drops
         float smoke = smoothstep(0.75, 0.15, uHeat) * (0.6 + 0.4 * (1.0 - vNz));
         col = mix(col, vec3(0.12, 0.08, 0.07), smoke);
-        col *= 0.75 + 0.5 * vNz;
+        col *= 0.45 + 0.9 * vNz; // churning bright and dark patches
         float a = clamp(0.55 + core * 0.4, 0.0, 0.95) * clamp(uHeat * 2.0 + 0.15, 0.0, 1.0);
         gl_FragColor = vec4(col, a);
         #include <tonemapping_fragment>
@@ -362,7 +362,7 @@ Object.assign(Fx.prototype, {
         ball.scale.set(s, s * (0.8 + bt * 0.14), s);
         ball.position.y = target.y + s * 0.25 + bt * 4.5;
         ballMat.uniforms.uT.value = t;
-        ballMat.uniforms.uHeat.value = Math.max(0, 1.2 - bt * 0.26);
+        ballMat.uniforms.uHeat.value = Math.max(0, 1.15 - bt * 0.4);
         colMat.opacity = Math.max(0, 1 - bt / 0.35);
         column.scale.x = column.scale.z = radius * 0.35 * Math.max(0.05, 1 - bt * 2);
         if (bt < 3.2) {
@@ -370,9 +370,9 @@ Object.assign(Fx.prototype, {
           const capY = ball.position.y + s * 0.55;
           for (let i = 0; i < 14 * Math.max(0.2, 1 - bt / 3.2); i++) {
             const a = R() * 6.283, rr = s * (0.15 + R() * 0.25);
-            this.fire.emit(target.x + Math.cos(a) * rr, target.y + R() * capY, target.z + Math.sin(a) * rr, Math.cos(a) * 1.5, 8 + R() * 6, Math.sin(a) * 1.5, 0.7 + R() * 0.6, 3 + R() * 3, 2, R() < 0.3 ? [3.6, 2.2, 0.8, 1] : [3.0, 1.0, 0.25, 0.95], DARKR, 0.8, 2);
+            this.fire.emit(target.x + Math.cos(a) * rr, target.y + R() * capY, target.z + Math.sin(a) * rr, Math.cos(a) * 1.5, 8 + R() * 6, Math.sin(a) * 1.5, 0.7 + R() * 0.6, 2.5 + R() * 2.5, 1.5, R() < 0.3 ? [2.4, 0.9, 0.2, 0.9] : [1.8, 0.45, 0.08, 0.85], DARKR, 0.8, 2);
             const b = R() * 6.283, cr = s * (0.5 + R() * 0.5);
-            this.fire.emit(target.x + Math.cos(b) * cr, capY + (R() - 0.3) * s * 0.4, target.z + Math.sin(b) * cr, Math.cos(b) * 5, 2 + R() * 3, Math.sin(b) * 5, 0.8 + R() * 0.6, 4 + R() * 4, 3, [3.0, 1.0, 0.25, 0.9], DARKR, 1, 1);
+            this.fire.emit(target.x + Math.cos(b) * cr, capY + (R() - 0.3) * s * 0.4, target.z + Math.sin(b) * cr, Math.cos(b) * 5, 2 + R() * 3, Math.sin(b) * 5, 0.8 + R() * 0.6, 3 + R() * 3, 2, [1.9, 0.5, 0.1, 0.85], DARKR, 1, 1);
           }
         }
         if (bt < 2.6) {
