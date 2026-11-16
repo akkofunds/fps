@@ -6,6 +6,7 @@ import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
 import { buildProps, treeTime } from './props.js';
 import { CollisionWorld } from './collision.js';
 import { buildVillage } from './village.js';
+import { buildLandmarks } from './landmarks.js';
 import { STYLE } from './stylize.js';
 
 // Sunvale Meadow: assembles the scene, lighting and collision for a quality level.
@@ -50,6 +51,7 @@ export class GameMap {
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
     this.village = buildVillage(); s.add(this.village);
+    this.landmarks = buildLandmarks(this.world, Q); s.add(this.landmarks);
     this.props = buildProps(this.world, quality, Q); s.add(this.props);
     const avoid = this.props.userData.avoid;
     this.grass = buildGrass(Q.grass, avoid, Q); s.add(this.grass);
@@ -119,6 +121,7 @@ export class GameMap {
     this.time += dt;
     WIND.uTime.value = this.time; treeTime.value = this.time; STYLE.uTime.value = this.time;
     this.village.userData.update(this.time);
+    this.landmarks.userData.update(this.time);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);
     this.water.material.uniforms.uTime.value = this.time;

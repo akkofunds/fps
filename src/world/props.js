@@ -5,6 +5,7 @@ import { mulberry32 } from './noise.js';
 import { windPatch } from './vegetation.js';
 import { stylize } from './stylize.js';
 import { VILLAGE_FOOTPRINTS } from './village.js';
+import { landmarkFootprints } from './landmarks.js';
 
 // Ruins (stone plaza, broken pillars, watchtower, arches, walls), trees, rocks and logs.
 // Everything is merged / instanced and registers simple colliders in the CollisionWorld.
@@ -298,7 +299,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
     }
   }
   const ruins = B.finish();
-  B.avoid.push(...VILLAGE_FOOTPRINTS);
+  B.avoid.push(...VILLAGE_FOOTPRINTS, ...landmarkFootprints());
   root.add(ruins);
 
   // ---------------- trees
