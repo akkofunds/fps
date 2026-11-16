@@ -57,6 +57,8 @@ export function stepMovement(b, cmd, dt, world, ev) {
   b.coyote = b.grounded ? 0.1 : Math.max(0, b.coyote - dt);
 
   // ---- dash
+  // the back half of a landing roll can be cancelled straight into a jump or a dash
+  if (b.rollT > 0 && b.rollT < MOVE.rollTime * 0.55 && (cmd.dashPressed || b.jumpBuf > 0)) b.rollT = 0;
   if (cmd.dashPressed && b.dashCharges > 0 && b.dashT <= 0 && b.rollT <= 0) {
     b.dashCharges--;
     if (b.dashCharges < MOVE.dashCharges && b.dashRecharge <= 0) b.dashRecharge = 0.0001;
