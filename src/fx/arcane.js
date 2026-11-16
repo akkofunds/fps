@@ -279,15 +279,15 @@ Object.assign(Fx.prototype, {
     const column = new THREE.Mesh(colGeo, colMat);
     column.position.set(target.x, topY, target.z); column.scale.set(1.6, 0.01, 1.6);
     const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.35, 0.2), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
-    const glow = new THREE.Mesh(colGeo, glowMat);
-    glow.position.copy(column.position); glow.scale.set(4.5, 0.01, 4.5);
-    scene.add(column); scene.add(glow);
+    const beamGlow = new THREE.Mesh(colGeo, glowMat);
+    beamGlow.position.copy(column.position); beamGlow.scale.set(4.5, 0.01, 4.5);
+    scene.add(column); scene.add(beamGlow);
     const glow = this.light(new THREE.Vector3(target.x, target.y + 6, target.z), 0, radius * 3, channel + 2.5, 0xff5020);
     let t = 0, boomed = false, ball = null, ballMat = null, cleanupAt = 0;
     const cleanup = () => {
       for (const L of layers) { scene.remove(L.m); L.m.geometry.dispose(); L.m.material.dispose(); }
       for (const o of [warn, own, column]) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); }
-      scene.remove(glow); glowMat.dispose();
+      scene.remove(beamGlow); glowMat.dispose();
       if (ball) { scene.remove(ball); ball.geometry.dispose(); ballMat.dispose(); }
       this.scene.remove(scene);
     };
@@ -332,7 +332,7 @@ Object.assign(Fx.prototype, {
           const k = Math.min(1, (t - (channel - beamT)) / beamT), e = k * k;
           const len = Math.max(0.01, (topY - target.y) * e);
           column.scale.set(1.6 + Math.sin(t * 60) * 0.15, len, 1.6 + Math.sin(t * 60) * 0.15); colMat.opacity = 1;
-          glow.scale.set(4.5, len, 4.5); glowMat.opacity = 0.35;
+          beamGlow.scale.set(4.5, len, 4.5); glowMat.opacity = 0.35;
           const tipY = topY - len;
           for (let i = 0; i < 18; i++) {
             const a = R() * 6.283, rr = 1.5 + R() * 2.5;
@@ -347,7 +347,7 @@ Object.assign(Fx.prototype, {
       // ---- impact
       if (!boomed && t >= channel) {
         boomed = true;
-        colMat.opacity = 1; column.scale.set(radius * 0.35, topY - target.y, radius * 0.35); glowMat.opacity = 0.5; glow.scale.set(radius * 0.6, topY - target.y, radius * 0.6);
+        colMat.opacity = 1; column.scale.set(radius * 0.35, topY - target.y, radius * 0.35); glowMat.opacity = 0.5; beamGlow.scale.set(radius * 0.6, topY - target.y, radius * 0.6);
         ballMat = fireballMaterial();
         ball = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 5), ballMat);
         ball.position.set(target.x, target.y, target.z);
@@ -387,7 +387,7 @@ Object.assign(Fx.prototype, {
         ballMat.uniforms.uHeat.value = Math.max(0, 1.15 - bt * 0.4);
         colMat.opacity = Math.max(0, 1 - bt / 0.35);
         column.scale.x = column.scale.z = radius * 0.35 * Math.max(0.05, 1 - bt * 2);
-        glowMat.opacity = Math.max(0, 0.5 - bt); glow.scale.x = glow.scale.z = radius * 0.6 * Math.max(0.05, 1 - bt * 1.5);
+        glowMat.opacity = Math.max(0, 0.5 - bt); beamGlow.scale.x = beamGlow.scale.z = radius * 0.6 * Math.max(0.05, 1 - bt * 1.5);
         if (bt < 3.2) {
           // a column of fire rising into a burning mushroom cap
           const capY = ball.position.y + s * 0.55;
