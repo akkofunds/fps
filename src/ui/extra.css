@@ -136,3 +136,66 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
   background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(0,0,0,0.92) 0deg 0.7deg, transparent 0.7deg 3.1deg, rgba(0,0,0,0.85) 3.1deg 3.5deg, transparent 3.5deg 7deg);
   -webkit-mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 48%); mask: radial-gradient(circle at 50% 50%, transparent 0 22%, #000 48%); }
 #impactLines.inv { filter: invert(1); }
+
+/* ===================================================================== LOBBY v2 (premium pass) */
+#lobby { --hero: #ff6a2b; }
+/* cinematic grade over the live 3D scene: deep vignette, color wash from the hero's element */
+#lobby .lobby-shade { background:
+  radial-gradient(ellipse 60% 70% at 46% 52%, rgba(10,14,22,0) 35%, rgba(8,11,18,0.72) 100%),
+  radial-gradient(ellipse 40% 50% at 46% 60%, color-mix(in srgb, var(--hero) 18%, transparent), transparent 70%),
+  linear-gradient(to bottom, rgba(8,11,18,0.85), rgba(8,11,18,0.1) 16%, rgba(8,11,18,0) 62%, rgba(8,11,18,0.9)); }
+/* drifting motes */
+#lobby::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.55; background-image:
+  radial-gradient(1.5px 1.5px at 12% 80%, rgba(255,200,150,0.9), transparent), radial-gradient(1.5px 1.5px at 27% 65%, rgba(160,220,255,0.9), transparent),
+  radial-gradient(2px 2px at 63% 90%, rgba(255,180,120,0.8), transparent), radial-gradient(1.5px 1.5px at 78% 72%, rgba(170,225,255,0.85), transparent),
+  radial-gradient(1px 1px at 40% 95%, rgba(255,230,200,0.9), transparent), radial-gradient(1.5px 1.5px at 88% 85%, rgba(255,190,140,0.8), transparent);
+  background-size: 100% 100%; animation: motes 14s linear infinite; }
+@keyframes motes { from { transform: translateY(0); } to { transform: translateY(-38%); } }
+
+/* top bar: glass strip with a thin accent line */
+.topbar { background: linear-gradient(to bottom, rgba(8,11,18,0.88), rgba(8,11,18,0.55)); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.06); box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--hero) 35%, transparent); }
+.brand span { background: linear-gradient(90deg, #fff, #ffd9c2 60%, #9fe0ff); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; }
+.nav-btn { transition: color .2s, letter-spacing .2s; }
+.nav-btn.active { color: #fff; text-shadow: 0 0 14px color-mix(in srgb, var(--hero) 70%, transparent); }
+.nav-btn.active::after { width: 26px; height: 2px; bottom: -6px; transform: translateX(-50%); background: var(--hero); box-shadow: 0 0 10px var(--hero); }
+
+/* agent-select style name watermark behind the character */
+.hero-name { position: absolute; left: calc(50% - 10px); top: 18%; transform: translateX(-50%); pointer-events: none; z-index: 0;
+  font-family: var(--font-d); font-weight: 700; font-size: clamp(90px, 15vw, 230px); letter-spacing: 0.06em; line-height: 1; white-space: nowrap;
+  color: transparent; -webkit-text-stroke: 1.5px color-mix(in srgb, var(--accent, #fff) 55%, transparent);
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--accent, #fff) 22%, transparent), transparent 85%); -webkit-background-clip: text; background-clip: text;
+  opacity: 0.75; animation: heroIn .7s cubic-bezier(.2,.9,.2,1) both; }
+@keyframes heroIn { from { opacity: 0; transform: translateX(-46%); letter-spacing: 0.2em; } }
+
+/* party banners: sleeker glass with element-tinted top glow */
+.card .frame { background: linear-gradient(to bottom, rgba(18,26,38,0.55), rgba(10,15,24,0.78)); border: 1px solid rgba(255,255,255,0.09); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08); }
+.card:not(.me):hover .frame { border-color: rgba(255,255,255,0.22); }
+.card .plus { transition: transform .2s, color .2s; }
+.card:not(.me):hover .plus { transform: scale(1.15); color: #fff; }
+.card.me .frame { background: linear-gradient(to bottom, rgba(18,26,38,0.08), rgba(10,15,24,0.55) 70%); border: 1px solid color-mix(in srgb, var(--accent, #fff) 55%, transparent);
+  box-shadow: 0 0 40px -6px color-mix(in srgb, var(--accent, #fff) 45%, transparent), inset 0 0 30px -10px color-mix(in srgb, var(--accent, #fff) 50%, transparent); }
+.card.me .pname { background: linear-gradient(90deg, color-mix(in srgb, var(--accent, #fff) 70%, #fff), #fff); color: #0b1018; font-weight: 700; }
+.card.me .ptitle { color: color-mix(in srgb, var(--accent, #fff) 70%, #fff); }
+.card .pedestal { position: absolute; left: 50%; bottom: 17%; width: 150%; height: 34px; transform: translateX(-50%); pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--accent, #fff) 55%, transparent), transparent 70%); filter: blur(4px); animation: pedestal 3s ease-in-out infinite; }
+@keyframes pedestal { 50% { opacity: 0.55; transform: translateX(-50%) scaleX(0.9); } }
+
+/* mode tabs + start: punchier */
+.mode-tab.active { background: linear-gradient(to top, color-mix(in srgb, var(--hero) 22%, transparent), transparent); }
+.mode-tab.active::after { background: var(--hero); box-shadow: 0 0 10px var(--hero); }
+.btn-start { background: linear-gradient(100deg, #37d6b0, #6ff0c8 45%, #37d6b0); background-size: 200% 100%; animation: startSheen 3.2s linear infinite;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.15) inset, 0 10px 30px -8px rgba(55,214,176,0.65); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+@keyframes startSheen { to { background-position: -200% 0; } }
+.btn-start:hover { transform: translateY(-1px); }
+.btn-side { background: rgba(10,15,24,0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border-color: rgba(255,255,255,0.18); clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.btn-side:hover { border-color: rgba(255,255,255,0.45); background: rgba(20,28,40,0.7); }
+.mode-desc { text-shadow: 0 1px 3px #000; color: #cfd6de; }
+
+/* social panel: glass */
+.social { background: linear-gradient(to bottom, rgba(10,14,22,0.82), rgba(10,14,22,0.92)); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-left: 1px solid rgba(255,255,255,0.07); }
+.me-avatar { box-shadow: 0 0 16px -2px color-mix(in srgb, var(--hero) 70%, transparent); border-color: var(--hero); }
+
+/* mages tab: tinted roster */
+.mage-tile.sel { box-shadow: 0 0 0 1px var(--hero) inset, 0 0 22px -6px var(--hero); }
+.mage-tile.locked { opacity: 0.55; filter: grayscale(0.6); }
+.mage-tile.locked .soon { background: #6b2a3a; color: #ffd6dc; }

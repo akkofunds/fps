@@ -39,6 +39,10 @@ const ACTIONS = {
   kick: { clip: C.KICK_CLIP, in: 0.03, out: 0.14, aimOff: true },
   stomp: { clip: C.STOMP_CLIP, in: 0.04, out: 0.16 },
   adolla: { clip: C.ADOLLA_CLIP, in: 0.06, out: 0.2 },
+  ray: { clip: C.M_RAY, in: 0.06, out: 0.2 },
+  skate: { clip: C.SKATE_CLIP, in: 0.05, out: 0.1, aimOff: true },
+  uppercut: { clip: C.UPPERCUT_CLIP, in: 0.04, out: 0.16 },
+  zeroburn: { clip: C.ZEROBURN_CLIP, in: 0.06, out: 0.2 },
   doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true },
 };
 const CASTS = {
@@ -51,6 +55,8 @@ const CASTS = {
   mBlink: { clip: C.M_BLINK, in: 0.04, out: 0.15 },
   mBolt2: { clip: C.M_BOLT2, in: 0.04, out: 0.16 },
   jabR: { clip: C.JAB_R, in: 0.02, out: 0.08 },
+  freezeCast: { clip: C.FREEZE_CAST, in: 0.04, out: 0.16 },
+  lance: { clip: C.LANCE_CLIP, in: 0.04, out: 0.14 },
   jabL: { clip: C.JAB_L, in: 0.02, out: 0.08 },
   fidgetP: { clip: C.FIDGET_P, in: 0.3, out: 0.4, fidget: true },
   fidgetM: { clip: C.FIDGET_M, in: 0.3, out: 0.4, fidget: true },

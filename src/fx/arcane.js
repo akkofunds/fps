@@ -481,6 +481,67 @@ Object.assign(Fx.prototype, {
     } });
   },
 
+  // C — Scarlet Ray: three magic circles spin up in front of the staff while she channels
+  rayCharge(getTip, getDir, dur) {
+    const circles = [0, 1, 2].map((i) => {
+      const m = circleMesh(circleTexture(41 + i * 5, 512), 0.5 + i * 0.35, new THREE.Color(2.4, 0.4 - i * 0.05, 0.2));
+      m.rotation.set(0, 0, 0); m.material.opacity = 0; this.scene.add(m);
+      return m;
+    });
+    let t = 0;
+    const tip = new THREE.Vector3(), dir = new THREE.Vector3(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      getTip(tip); dir.copy(getDir());
+      const k = Math.min(1, t / dur);
+      q.setFromUnitVectors(Z, dir);
+      circles.forEach((m, i) => {
+        m.position.copy(tip).addScaledVector(dir, 0.35 + i * 0.45);
+        m.quaternion.copy(q); m.rotateZ(t * (i % 2 ? -3 : 4) * (1 + k * 2));
+        const s = Math.min(1, Math.max(0, (t - i * 0.18) / 0.3)) * (1 + 0.05 * Math.sin(t * 20));
+        m.scale.setScalar(Math.max(0.001, s * (0.6 + 0.6 * k)));
+        m.material.opacity = Math.min(1, s) * (0.7 + 0.3 * Math.sin(t * 15 + i));
+      });
+      for (let i = 0; i < 4 + k * 10; i++) {
+        const a = R() * 6.283, rr = 1.2 + R() * 1.4;
+        const p = new THREE.Vector3(Math.cos(a) * rr, Math.sin(a) * rr, 0).applyQuaternion(q).add(tip).addScaledVector(dir, 0.6);
+        const v = tip.clone().addScaledVector(dir, 0.6).sub(p).multiplyScalar(3.5);
+        this.fire.emit(p.x, p.y, p.z, v.x, v.y, v.z, 0.28, 0.16 + k * 0.1, 0.04, R() < 0.4 ? GOLD : CRIM, DARKR, 0, 0);
+      }
+      this.fire.emit(tip.x, tip.y, tip.z, 0, 0, 0, 0.06, 0.5 + k * 1.2, 0.4, [3.6, 1.6, 1.2, 1], CRIM, 0, 0);
+      if (t >= dur) { for (const m of circles) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); } return false; }
+      return true;
+    } });
+  },
+  rayBeam(o, t) {
+    const dir = new THREE.Vector3().subVectors(t, o), L = dir.length(); dir.normalize();
+    const geo = new THREE.CylinderGeometry(1, 1, 1, 18, 1, true); geo.translate(0, 0.5, 0);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const mk = (col, op) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide })); m.position.copy(o); m.quaternion.copy(q); m.frustumCulled = false; this.scene.add(m); return m; };
+    const core = mk(new THREE.Color(3.6, 2.4, 2.0), 1), mid = mk(new THREE.Color(3.0, 0.5, 0.35), 0.8), outer = mk(new THREE.Color(1.6, 0.15, 0.1), 0.35);
+    this.explosion(t, 3.2, 1.4); this.sparkBurst(t, 3.2);
+    this.ring(o, 2.2, 0.3, new THREE.Color(3, 0.6, 0.4));
+    this.light(o, 40, 12, 0.4, 0xff4050); this.light(t, 60, 14, 0.5, 0xff6040);
+    let tt = 0;
+    const life = 0.6;
+    this.effects.push({ update: (dt) => {
+      tt += dt;
+      const k = Math.max(0, 1 - tt / life), grow = Math.min(1, tt / 0.06), pulse = 1 + Math.sin(tt * 60) * 0.08;
+      core.scale.set(0.16 * k * pulse + 0.01, L * grow, 0.16 * k * pulse + 0.01);
+      mid.scale.set(0.42 * k * pulse + 0.01, L * grow, 0.42 * k * pulse + 0.01);
+      outer.scale.set(0.9 * k + 0.01, L * grow, 0.9 * k + 0.01);
+      core.material.opacity = k; mid.material.opacity = 0.8 * k; outer.material.opacity = 0.35 * k;
+      for (let i = 0; i < 18 * k; i++) {
+        const u = R() * L * grow;
+        const p = o.clone().addScaledVector(dir, u);
+        this.fire.emit(p.x + (R() - 0.5) * 0.5, p.y + (R() - 0.5) * 0.5, p.z + (R() - 0.5) * 0.5, dir.x * 12 + (R() - 0.5) * 2, dir.y * 12 + (R() - 0.5) * 2 + 0.5, dir.z * 12 + (R() - 0.5) * 2, 0.25, 0.5, 0.1, R() < 0.35 ? GOLD : CRIM, DARKR, 2, 0);
+      }
+      if (tt > life) { for (const m of [core, mid, outer]) { this.scene.remove(m); m.material.dispose(); } geo.dispose(); return false; }
+      return true;
+    } });
+    this.shake(0.35);
+  },
+
   // V — the afterimage left behind: a burning crimson silhouette that flickers, then detonates
   blinkEcho(p, delay, onBoom) {
     let t = 0;

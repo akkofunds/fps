@@ -18,7 +18,7 @@ export const MOVE = {
   dashCharges: 2,
   dashRecharge: 3.4,
   rollSpeed: 9.4,
-  rollTime: 0.5,
+  rollTime: 0.62,
   waterSlow: 0.7,
 };
 

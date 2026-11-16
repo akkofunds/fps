@@ -16,7 +16,7 @@ const MODE_DESC = {
   practice: 'Practice: a solo range on Sunvale with training dummies. Learn Pyro\'s combos — dash-cancel your casts, roll out of air dashes, and land the Meteor.',
 };
 const MAGES = [
-  { id: 'pyro', name: 'PYRO', icon: ICONS.flame, open: true },
+  { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },
   { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true, admin: true }, // admin-only
   { id: 'tide', name: 'TIDE', icon: ICONS.water },
   { id: 'terra', name: 'TERRA', icon: ICONS.earth },
@@ -180,6 +180,7 @@ export class Lobby {
       }
     });
     $('partyCount').textContent = `${members.length}/${MODES.ffa.size}`;
+    this._heroName();
     this._startLabel();
   }
 
@@ -202,10 +203,9 @@ export class Lobby {
     c.appendChild(meta);
     const rank = el('div', 'rank'); rank.innerHTML = ICONS.rank; c.appendChild(rank);
     if (isMe) {
-      c.appendChild(el('div', 'chev l')); c.appendChild(el('div', 'chev r'));
-      c.title = 'Drag to turn your mage';
-      c.style.cursor = 'grab';
-      this.app.lobbyScene.bindDrag(c);
+      // the showcase character is fixed (no dragging): a hero pedestal + glow instead
+      c.appendChild(el('div', 'pedestal'));
+      c.style.setProperty('--accent', md.color);
     }
     return c;
   }
@@ -279,6 +279,16 @@ export class Lobby {
     this.app.lobbyScene.setMage(id);
     Audio.play('found', 0.4);
     this.renderMages(); this.renderParty();
+  }
+
+  // big agent-select style name watermark behind the lobby character
+  _heroName() {
+    let h = document.getElementById('heroName');
+    if (!h) { h = el('div', 'hero-name'); h.id = 'heroName'; const tab = $('tabPlay'); tab.insertBefore(h, tab.firstChild); }
+    const md = mageOf(this.mage);
+    h.textContent = md.name;
+    h.style.setProperty('--accent', md.color);
+    document.body.style.setProperty('--hero', md.color);
   }
 
   renderMages() {

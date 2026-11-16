@@ -239,7 +239,10 @@ export class Hud {
   }
 
   denied(id) { const a = this.ab[id]; if (!a) return; a.d.classList.remove('deny'); void a.d.offsetWidth; a.d.classList.add('deny'); }
-  flashUlt() { this.banner('METEOR READY', 'PRESS X', 1.6); }
+  flashUlt() {
+    const k = this.match && this.match.kit, u = k && k.def.abilities.find((a) => a.ult);
+    this.banner(((u && u.name) || 'ULTIMATE').toUpperCase().replace(/^CALAMITY: /, '') + ' READY', this.app.input.mode === 'touch' ? 'TAP X' : 'PRESS X', 1.6);
+  }
 
   banner(t1, t2 = '', secs = 2, cls = '') {
     const b = $('banner');
