@@ -187,22 +187,23 @@ Object.assign(Fx.prototype, {
       t += dt;
       const k = Math.min(1, t / 5.5);
       const top = H * (1 - (1 - Math.min(1, t / 2.4)) ** 3);
-      const stemN = Math.round(26 * (1 - k * 0.7));
+      const stemN = Math.round(34 * (1 - k * 0.7));
       for (let i = 0; i < stemN; i++) {
-        const y = c.y + R() * top, rr = (1.5 + (y - c.y) * 0.08) * (0.4 + R() * 0.6), a = R() * 6.283;
+        const y = c.y + R() * top, rr = (3.2 + (y - c.y) * 0.1) * (0.35 + R() * 0.65), a = R() * 6.283;
         const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr;
         if (R() < 0.55 - k * 0.4) this.fire.emit(x, y, z, Math.cos(a) * 1.5, 6 + R() * 6, Math.sin(a) * 1.5, 0.7 + R() * 0.6, 3 + R() * 3, 1.2, [3.0, 1.2, 0.3, 1], [0.8, 0.12, 0.04, 0], 1.2, 0.5);
         this.smoke.emit(x, y, z, Math.cos(a) * 1.2, 4 + R() * 4, Math.sin(a) * 1.2, 2.4 + R() * 1.6, 3 + R() * 2.5, 7 + R() * 5, [0.28, 0.16, 0.12, 0.7], [0.32, 0.27, 0.25, 0], 1.0, 0.2);
       }
       // the cap: a torus of fire-lit smoke rolling outward at the top
-      if (t > 1.2) {
-        const capR = Math.min(radius * 0.9, 4 + (t - 1.2) * 6);
-        const capN = Math.round(30 * (1 - k * 0.6));
+      if (t > 0.9) {
+        const capR = Math.min(radius * 1.0, 6 + (t - 0.9) * 7);
+        const capN = Math.round(44 * (1 - k * 0.6));
         for (let i = 0; i < capN; i++) {
           const a = R() * 6.283, rr = capR * (0.6 + R() * 0.5);
           const x = c.x + Math.cos(a) * rr, z = c.z + Math.sin(a) * rr, y = c.y + top + (R() - 0.3) * 6;
           const lit = R() < 0.35 * (1 - k);
-          this.smoke.emit(x, y, z, Math.cos(a) * 3, 1 + R() * 2, Math.sin(a) * 3, 2.8 + R() * 2, 4 + R() * 3, 10 + R() * 6, lit ? [0.9, 0.35, 0.12, 0.8] : [0.25, 0.15, 0.12, 0.75], [0.36, 0.3, 0.28, 0], 1.0, 0.1);
+          this.smoke.emit(x, y, z, Math.cos(a) * 3, 1 + R() * 2, Math.sin(a) * 3, 3.2 + R() * 2, 6 + R() * 4, 13 + R() * 7, lit ? [1.3, 0.5, 0.16, 0.85] : [0.3, 0.17, 0.13, 0.8], [0.4, 0.33, 0.3, 0], 1.0, 0.1);
+          if (lit && R() < 0.5) this.fire.emit(x, y, z, Math.cos(a) * 2, 1 + R(), Math.sin(a) * 2, 1 + R(), 4 + R() * 3, 2, [3.0, 1.1, 0.3, 1], [0.7, 0.1, 0.03, 0], 1.0, 0.2);
         }
       }
       // embers raining from the cloud
