@@ -112,8 +112,9 @@ export class Hud {
       ult.pct.textContent = up >= ULT_COST ? 'READY' : `${up}%`;
       ult.d.classList.toggle('full', up >= ULT_COST);
     }
+    if (this.q) this.set('qt', Math.floor((performance.now() - this.q.start) / 1000), (v) => { document.querySelector('#queueBar .qt').textContent = fmtTime(v); });
     // top center
-    if (m.cfg.mode !== 'practice') {
+    if (m.cfg.mode !== 'practice' && !this.q) {
       const t = m.phase === 'warmup' ? m.timeLeft : m.timeLeft;
       this.set('time', fmtTime(t), (v) => { $('tcTime').textContent = v; });
       this.set('meK', me.kills, (v) => { $('tcMe').textContent = v; });
@@ -251,7 +252,18 @@ export class Hud {
   }
   respawned() { show('deathScreen', false); this.deathAt = 0; }
 
+  // matchmaking lobby bar (shown while the queue is still filling); q = null hides it
+  queueState(q) {
+    let el = document.getElementById('queueBar');
+    if (!el) { el = document.createElement('div'); el.id = 'queueBar'; el.innerHTML = '<b>FINDING PLAYERS</b><span class="qn"></span><span class="qt"></span><i>Warm up while the lobby fills · Esc to leave the queue</i>'; document.getElementById('hud').appendChild(el); }
+    this.q = q && q.searching ? q : null;
+    el.classList.toggle('on', !!this.q);
+    if (this.q) el.querySelector('.qn').textContent = `${q.found || 1} / ${q.size || 8}`;
+    show('topCenter', !this.q && this.match && this.match.cfg.mode !== 'practice');
+  }
+
   phase(p, tl) {
+    if (p === 'queue') { this.banner('QUEUE LOBBY', 'ROAM AND WARM UP WHILE PLAYERS JOIN', 2.4); return; }
     if (p === 'warmup') this.banner('GET READY', `MATCH STARTS IN ${Math.ceil(tl)}`, Math.max(1, tl - 0.3));
     if (p === 'live' && this.match && this.match.cfg.mode !== 'practice') this.banner('FIGHT', this.match.killsToWin ? `FIRST TO ${this.match.killsToWin} KILLS` : '', 1.6);
   }

@@ -112,3 +112,13 @@ body.touch .top-center { transform: translateX(-50%) scale(0.8); transform-origi
 #cine .cine-tag { position: absolute; top: 3vh; left: 50%; transform: translateX(-50%); color: #ff9a8a; font: 700 12px/1 'Rajdhani', sans-serif; letter-spacing: 0.5em; opacity: 0.85; }
 body.cine-on #hud > *:not(#flash) { visibility: hidden; }
 body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
+
+/* ---------------- queue lobby bar */
+#queueBar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 14px; padding: 9px 18px; background: rgba(12, 16, 22, 0.78); border: 1px solid rgba(255, 140, 90, 0.45); border-radius: 4px; color: #f2ece4; font: 600 14px/1 'Rajdhani', sans-serif; letter-spacing: 0.12em; backdrop-filter: blur(4px); }
+#queueBar.on { display: flex; }
+#queueBar b { color: #ff9a63; letter-spacing: 0.2em; animation: qPulse 1.6s ease-in-out infinite; }
+#queueBar .qn { font-size: 18px; }
+#queueBar .qt { color: #b9c2cc; min-width: 40px; }
+#queueBar i { font-style: normal; font-size: 11px; color: #9aa4ad; letter-spacing: 0.06em; }
+@keyframes qPulse { 50% { opacity: 0.55; } }
+@media (max-width: 700px) { #queueBar i { display: none; } }

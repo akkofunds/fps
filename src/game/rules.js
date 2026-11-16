@@ -27,12 +27,31 @@ export class Rules {
   }
 
   start() {
+    if (this.m.cfg.queue) {
+      // matchmaking lobby: free roam + warm-up fights until the lobby fills
+      this.phase = 'queue'; this.phaseEnd = 0;
+      this.spawnAll();
+      this.bcast({ t: 'phase', p: 'queue', tl: 0 });
+      return;
+    }
     const practice = this.m.cfg.mode === 'practice';
     this.phase = practice ? 'live' : 'warmup';
     this.phaseEnd = this.now + (practice ? 0 : 4);
     this.spawnAll();
     if (practice) this.spawnDummies();
     this.bcast({ t: 'phase', p: this.phase, tl: practice ? 0 : 4 });
+  }
+
+  // lobby full → reset the warm-up scores and start the real match in place
+  goLive() {
+    if (this.phase !== 'queue') return;
+    for (const e of this.m.ents.values()) { e.kills = 0; e.deaths = 0; e.dmg = 0; }
+    this.burns.clear(); this.respawnAt.clear();
+    this.phase = 'warmup'; this.phaseEnd = this.now + 5;
+    this.bcast({ t: 'qlive' });
+    this.spawnAll();
+    this.bcast({ t: 'phase', p: 'warmup', tl: 5 });
+    this.sendBoard();
   }
 
   spawnAll() { for (const e of this.m.ents.values()) if (!e.dummy && !e.left) this.spawn(e); }
@@ -75,7 +94,7 @@ export class Rules {
   }
 
   onHit(from, msg) {
-    if (this.phase !== 'live') return;
+    if (this.phase !== 'live' && this.phase !== 'queue') return;
     const v = this.m.ents.get(msg.v);
     if (!v || !v.alive || v === from) return;
     if (v.spawnProt && this.m.time < v.spawnProt) return;
@@ -114,12 +133,12 @@ export class Rules {
     v.alive = false;
     v.deaths++;
     if (k && k !== v && !v.dummy) k.kills++;
-    const rt = v.dummy ? 2 : BAL.respawn;
+    const rt = v.dummy ? 2 : this.phase === 'queue' ? 1.5 : BAL.respawn;
     this.respawnAt.set(v.n, this.now + rt);
     this.burns.delete(v.n);
     this.bcast({ t: 'kill', k: k ? k.n : -1, v: v.n, ab, kk: k ? k.kills : 0, vd: v.deaths, rt });
     this.sendBoard();
-    if (this.killsToWin && k && k.kills >= this.killsToWin) this.end();
+    if (this.phase === 'live' && this.killsToWin && k && k.kills >= this.killsToWin) this.end();
   }
 
   end() {

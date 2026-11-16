@@ -136,6 +136,7 @@ class App {
     });
     this.session = new SessionController(this);
     this.session.on('start', (opts) => this.startMatch(opts));
+    this.session.on('queue', (q) => { if (this.match && this.match.cfg.queue) this.hud.queueState(q); });
     this.lobby = new Lobby(this);
     this.chat.setContext('lobby', (text) => this.pm.chat(text));
     this.lobby.show(true);
@@ -340,6 +341,11 @@ class App {
     this.chat.setContext('match', (text) => m.sendChat(text));
     this.match = m;
     m.resize(this.width, this.height);
+    this.session.matchReady(m);
+    if (m.cfg.queue) {
+      this.hud.queueState({ searching: true, start: this.session.queueStart, found: (this.session.humans || []).length || m.players.length, size: 8 });
+      $('btnLeave').textContent = 'LEAVE QUEUE';
+    } else $('btnLeave').textContent = 'LEAVE MATCH';
     this.input.enabled = true;
     Audio.init(); Audio.resume();
     document.body.classList.add('in-match');
@@ -355,8 +361,9 @@ class App {
     $('btnResume').textContent = 'PLAY';
   }
 
-  leaveMatch(reason) {
+  leaveMatch(reason, opts = {}) {
     if (!this.match) return;
+    this.hud.queueState(null);
     const m = this.match;
     this.match = null;
     m.dispose();
@@ -373,6 +380,7 @@ class App {
     this.lobby.setTab('play');
     $('btnResume').textContent = 'RESUME';
     if (reason) toast(reason, 3500);
+    if (opts.requeue) setTimeout(() => { if (!this.match && this.session && !this.session.busy) this.session.startQueue(); }, 600);
   }
 
   loop(tMs) {

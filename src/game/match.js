@@ -76,7 +76,7 @@ export class Match {
     } else {
       this._offs = [
         net.on('msg', (msg) => { if (this._ready) this.clientHandle(msg); else this._queue.push(['c', msg]); }),
-        net.on('close', () => { if (!this.ended) this.app.leaveMatch('Disconnected from the match host.'); }),
+        net.on('close', () => { if (!this.ended && this.app.match === this) { if (this.phase === 'queue') this.app.leaveMatch('Lost the lobby host — searching again…', { requeue: true }); else this.app.leaveMatch('Disconnected from the match host.'); } }),
       ];
     }
   }
@@ -91,27 +91,13 @@ export class Match {
     // without bloom, additive HDR fire saturates to white; tone it down
     if (!app.composer || app.noPost) this.fx.fire.mat.uniforms.uGain.value = 0.55;
     this.proj = new Projectiles(this);
-    const templates = {};
-    for (const p of this.players) { const md = mageOf(p.mage); if (!templates[md.id]) templates[md.id] = await loadMageModel(md.model); }
-    if (!templates.pyro) templates.pyro = await loadMageModel(mageOf('pyro').model);
-    const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);
+    this.templates = {};
+    for (const md of [mageOf('pyro'), mageOf('meteora')]) this.templates[md.id] = await loadMageModel(md.model);
     const list = [...this.players];
     if (this.cfg.mode === 'practice') {
       for (let i = 0; i < 5; i++) list.push({ n: 100 + i, id: `dummy-${i}`, name: 'Training Dummy', tag: '', dummy: true });
     }
-    for (const p of list) {
-      const e = new Ent(p, p.id === this.localId);
-      e.view = new MageInstance(templates[mageOf(e.mage).id] || templates.pyro, { groundAt, outlines: Q.outlines, lowPoly: !Q.outlines }).uniqueMaterials();
-      if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
-      e.view.setVisible(false);
-      this.scene.add(e.view.root);
-      // footfall dust puffs (close to the camera only)
-      e.view.anim.onFootPlant = (side, speed) => {
-        const f = e.view.rig.bones[side === 'L' ? 16 : 20].getWorldPosition(tmpV2);
-        if (f.distanceToSquared(this.camera.position) < 900 && this.world.inWater(f.x, f.z) <= 0) this.fx.dust(f, Math.min(1, speed / 6));
-      };
-      this.ents.set(e.n, e); this.byId.set(e.id, e);
-    }
+    for (const p of list) this._makeEnt(p);
     this.local = this.byId.get(this.localId);
     this.view = this.local.view;
     this.body = new Body();
@@ -135,6 +121,44 @@ export class Match {
     this._queue.length = 0;
     // camera starts behind the local spawn
     this._placeCamera();
+  }
+
+  _makeEnt(p) {
+    if (this.byId.has(p.id)) return this.byId.get(p.id);
+    const Q = this.map.Q;
+    const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);
+    const e = new Ent(p, p.id === this.localId);
+    e.view = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { groundAt, outlines: Q.outlines, lowPoly: !Q.outlines }).uniqueMaterials();
+    if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
+    e.view.setVisible(false);
+    this.scene.add(e.view.root);
+    // footfall dust puffs (close to the camera only)
+    e.view.anim.onFootPlant = (side, speed) => {
+      const f = e.view.rig.bones[side === 'L' ? 16 : 20].getWorldPosition(tmpV2);
+      if (f.distanceToSquared(this.camera.position) < 900 && this.world.inWater(f.x, f.z) <= 0) this.fx.dust(f, Math.min(1, speed / 6));
+    };
+    this.ents.set(e.n, e); this.byId.set(e.id, e);
+    return e;
+  }
+
+  // ---------------------------------------------------------------- queue lobby (FFA)
+  // While matchmaking, the queue host runs this match in a 'queue' phase: everyone who joins
+  // spawns in immediately and can roam/fight. When the lobby fills, goLive() starts the match.
+  hostAddPlayer(p) {
+    if (!this.isHost || this.byId.has(p.id)) return;
+    const e = this._makeEnt(p);
+    this.players.push(p);
+    this.net.broadcast({ t: 'join', p }, p.id);
+    // catch the newcomer up: where everyone is, the phase, the board
+    for (const o of this.ents.values()) {
+      if (o === e || !o.alive) continue;
+      const pos = o.isLocal ? this.body.pos : o.pos;
+      this.net.send(p.id, { t: 'spawn', n: o.n, x: pos.x, y: pos.y, z: pos.z, yaw: o.isLocal ? this.body.yaw : o.yaw, quiet: 1 });
+    }
+    this.net.send(p.id, { t: 'phase', p: this.rules.phase, tl: 0 });
+    this.rules.spawn(e);
+    this.rules.sendBoard();
+    this.app.chat.system(`${p.name} joined the lobby.`);
   }
 
   _placeCamera() {
@@ -653,10 +677,8 @@ export class Match {
         if (!e) return;
         e.alive = true; e.hp = BAL.hp; e.burnT = 0; e.hideAt = 0;
         e.pos.set(msg.x, msg.y, msg.z); e.vel.set(0, 0, 0); e.yaw = msg.yaw; e.snaps.length = 0;
-        e.view.anim.play('respawn');
+        if (!msg.quiet) { e.view.anim.play('respawn'); this.fx.spawnPillar(e.pos); e.spawnProt = this.time + 1.5; }
         e.view.setVisible(true);
-        e.spawnProt = this.time + 1.5;
-        this.fx.spawnPillar(e.pos);
         if (e === this.local) {
           this.body.teleport(msg.x, msg.y, msg.z, msg.yaw);
           this.cam.yaw = msg.yaw; this.cam.pitch = -0.08; this.cam.pivotY = null;
@@ -688,7 +710,14 @@ export class Match {
         e.alive = false; e.left = true; e.view.setVisible(false);
         break;
       }
-      case 'hostLeft': this.app.leaveMatch('The match host left.'); break;
+      case 'join': {
+        if (!msg.p || this.byId.has(msg.p.id)) break;
+        this._makeEnt(msg.p); this.players.push(msg.p);
+        this.app.chat.system(`${msg.p.name} joined the lobby.`);
+        break;
+      }
+      case 'qlive': this.app.hud.queueState(null); break;
+      case 'hostLeft': if (this.phase === 'queue') this.app.leaveMatch('Lobby host left — searching again…', { requeue: true }); else this.app.leaveMatch('The match host left.'); break;
       default: break;
     }
   }
