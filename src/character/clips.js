@@ -69,6 +69,22 @@ const SR_TUCK = {
 };
 const srKey = (t, deg, hip, ease) => ({ t, ease, hip, b: { ...SR_TUCK, hips: shoulderHips(deg) } });
 const KNEEL_R = { L: [0.15, 0, 0.3, 0], R: [-0.16, 0.03, -0.3, 58] };
+// play a clip faster (scale its key times)
+const fast = (keys, k = 0.68) => keys.map((x) => ({ ...x, t: x.t * k }));
+// Landing roll: the curved right-shoulder combat roll (restored), played ~1.25× faster
+export const ROLL = compileClip(fast([
+  // dip the right shoulder in, right arm reaching across, head tucked to the left
+  { t: 0, hip: [0, -0.2, 0.06], b: { hips: [20, -10, -8], spine: [22, -10, -10], chest: [8, -6, -4], neck: [10, 16, 12], head: [6, 14, 10], upperLegL: [-60, 0, 6], lowerLegL: [90, 0, 0], footL: [-16, 0, 0], upperLegR: [-30, 0, 6], lowerLegR: [72, 0, 0], footR: [-28, 0, 0], upperArmR: [-74, 0, -28], foreArmR: [-30, 0, 0], upperArmL: [-40, 0, 20], foreArmL: [-70, 0, 0] } },
+  srKey(0.08, 85, [-0.08, -0.34, 0.1], 'in'),
+  srKey(0.17, 185, [-0.16, -0.3, 0.05], 'linear'),
+  srKey(0.27, 285, [-0.1, -0.34, -0.01], 'linear'),
+  // up onto the right knee, left foot planted, arms out for balance
+  { t: 0.36, ease: 'out', hip: [-0.02, -0.4, 0.02], ik: KNEEL_R, b: { hips: shoulderHips(360, [12, 0, 0]), spine: [16, 4, 0], chest: [6, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0], upperArmR: [-20, 0, 44], foreArmR: [-40, 0, 0], upperArmL: [-46, 0, 22], foreArmL: [-60, 0, 0] } },
+  { t: 0.42, ease: 'linear', hip: [-0.01, -0.38, 0.02], ik: KNEEL_R, b: { hips: shoulderHips(360, [10, 0, 0]), spine: [14, 4, 0], neck: [-8, 0, 0], head: [-10, 0, 0], upperArmR: [-16, 0, 40], foreArmR: [-40, 0, 0], upperArmL: [-40, 0, 20], foreArmL: [-60, 0, 0] } },
+  // drive back up into the run
+  { t: 0.54, ease: 'smooth', hip: [0, -0.06, 0], b: { hips: shoulderHips(360, [8, 0, 0]), spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [44, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [36, 0, 0], upperArmL: [6, 0, 14], foreArmL: [-50, 0, 0], upperArmR: [-10, 0, 16], foreArmR: [-60, 0, 0] } },
+], 0.8));
+
 // Dive roll (from the reference): sprint lean → a horizontal superman dive with the arms reaching
 // and legs extended → hands touch down and the head tucks → roll over the (right) shoulders with the
 // knees tucked → land in a crouch → drive up into the run.
@@ -79,7 +95,7 @@ function diveHips(deg, extra = [0, 0, 0]) {
   return [(_e.x * 180) / Math.PI + extra[0], (_e.y * 180) / Math.PI + extra[1], (_e.z * 180) / Math.PI + extra[2]];
 }
 const diveTuck = (deg, extra = {}) => { const b = TUCK(0, 0); delete b._hip; return { ...b, ...extra, hips: diveHips(deg) }; };
-export const ROLL = compileClip([
+export const DIVE_ROLL = compileClip(fast([
   // push off: low sprint lean, arms swung back
   { t: 0, hip: [0, -0.16, 0.04], b: { hips: [24, 0, 0], spine: [16, 0, 0], chest: [6, 0, 0], neck: [-14, 0, 0], head: [-16, 0, 0], upperLegL: [-58, 0, 6], lowerLegL: [80, 0, 0], footL: [-10, 0, 0], upperLegR: [22, 0, 6], lowerLegR: [30, 0, 0], footR: [36, 0, 0], upperArmL: [46, 0, 24], foreArmL: [-20, 0, 0], upperArmR: [50, 0, 22], foreArmR: [-20, 0, 0] } },
   // the dive: body near horizontal, face down, arms reaching forward, legs stretched back together
@@ -94,16 +110,16 @@ export const ROLL = compileClip([
   { t: 0.54, ease: 'out', hip: [0, -0.36, 0], b: { hips: diveHips(368), spine: [22, 0, 0], chest: [8, 0, 0], neck: [-12, 0, 0], head: [-14, 0, 0], upperLegL: [-90, 0, 8], lowerLegL: [124, 0, 0], footL: [-30, 0, 0], upperLegR: [-60, 0, 8], lowerLegR: [120, 0, 0], footR: [-50, 0, 0], upperArmL: [-56, 0, 26], foreArmL: [-40, 0, 0], upperArmR: [-50, 0, 28], foreArmR: [-44, 0, 0] } },
   // up into the run
   { t: 0.66, ease: 'smooth', hip: [0, -0.06, 0], b: { hips: diveHips(368, [-4, 0, 0]), spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [44, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [36, 0, 0], upperArmL: [6, 0, 14], foreArmL: [-50, 0, 0], upperArmR: [-10, 0, 16], foreArmR: [-60, 0, 0] } },
-]);
+]));
 
-export const ROLL_BACK = compileClip([
+export const ROLL_BACK = compileClip(fast([
   { t: 0, hip: [0, -0.16, -0.02], b: { hips: [-8, 0, 0], spine: [12, 0, 0], upperLegL: [-44, 0, 6], lowerLegL: [76, 0, 0], upperLegR: [-30, 0, 6], lowerLegR: [64, 0, 0], upperArmL: [-40, 0, 20], upperArmR: [-40, 0, 20], foreArmL: [-60, 0, 0], foreArmR: [-60, 0, 0] } },
   tuckKey(0.09, -80, -0.38, -0.08, 'in'),
   tuckKey(0.19, -185, -0.22, -0.04, 'linear'),
   tuckKey(0.3, -290, -0.36, 0.02, 'linear'),
   { t: 0.4, ease: 'out', hip: [0, -0.2, 0], b: { hips: [-360, 0, 0], spine: [16, 0, 0], upperLegL: [-70, 0, 8], lowerLegL: [100, 0, 0], footL: [-28, 0, 0], upperLegR: [-30, 0, 8], lowerLegR: [96, 0, 0], footR: [-50, 0, 0], upperArmL: [-20, 0, 30], foreArmL: [-40, 0, 0], upperArmR: [-10, 0, 34], foreArmR: [-50, 0, 0] } },
   { t: 0.5, hip: [0, -0.06, 0], b: { hips: [-360, 0, 0], spine: [6, 0, 0], upperLegL: [-20, 0, 4], lowerLegL: [32, 0, 0], upperLegR: [-8, 0, 4], lowerLegR: [30, 0, 0], foreArmL: [-34, 0, 0], foreArmR: [-44, 0, 0] } },
-]);
+], 0.84));
 
 // C — Firewall: wind up and slam the right palm into the ground
 export const SLAM = compileClip([

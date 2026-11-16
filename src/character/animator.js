@@ -29,7 +29,7 @@ const windowW = (win, t) => (win === true ? 1 : !win ? 0 : Math.min(sstep(win[0]
 const ACTIONS = {
   dash: { clip: C.DASH, in: 0.05, out: 0.12, turn: true },
   dashBack: { clip: C.DASH_BACK, in: 0.05, out: 0.12, turn: true, back: true },
-  roll: { clip: C.ROLL, in: 0.05, out: 0.1, turn: true, aimOff: true },
+  roll: { clip: C.ROLL, in: 0.04, out: 0.08, turn: true, aimOff: true, airBlendOut: true },
   rollBack: { clip: C.ROLL_BACK, in: 0.05, out: 0.1, turn: true, back: true, aimOff: true },
   slam: { clip: C.SLAM, in: 0.06, out: 0.18 },
   leap: { clip: C.LEAP, in: 0.04, out: 0.25, airBlendOut: true },
@@ -219,7 +219,7 @@ export class Animator {
       const def = a.def, dur = def.clip.duration;
       const ending = !def.hold && a.t > dur;
       a.w = ending ? Math.max(0, a.w - dt / Math.max(def.out, 1e-3)) : Math.min(1, a.w + dt / def.in);
-      if (def.airBlendOut && a.t > 0.3 && s.grounded === false) a.w = Math.min(a.w, Math.max(0, 1 - (a.t - 0.3) / 0.3));
+      if (def.airBlendOut && s.grounded === false) { const t0 = def.clip === C.ROLL ? 0.05 : 0.3, d0 = def.clip === C.ROLL ? 0.12 : 0.3; if (a.t > t0) a.w = Math.min(a.w, Math.max(0, 1 - (a.t - t0) / d0)); }
       if (a.w <= 0 && ending) this.action = null;
       else {
         sampleClip(def.clip, Math.min(a.t, dur), this.act);
