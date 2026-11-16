@@ -14,7 +14,7 @@ export const METEORA = {
   color: '#ff2f4a',
   bio: 'An archmage who devoted her whole life to a single spell. Her staff fires crimson sparks, rains small stars on her enemies and seals the ground with explosive sigils. When the chant finishes, the sky itself catches fire.',
   abilities: [
-    { key: 'LMB', id: 'spark', name: 'Crimson Spark', desc: 'Your staff fires a bolt of crimson flame that bursts on impact. 16 damage, plus 10 splash damage.' },
+    { key: 'LMB', id: 'spark', name: 'Crimson Spark', desc: 'Your staff fires a bolt of crimson flame. Aim it: 20 damage on a direct hit, 30 on headshots.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land.' },
     { key: 'E', id: 'starfall', name: 'Starfall', cd: 8, desc: 'Raise your staff and call down a barrage of 5 burning stars that rain across the target area one after another.' },
     { key: 'C', id: 'sigil', name: 'Blast Sigil', cd: 11, desc: 'Brand an explosive rune on the ground where you aim. When an enemy steps on it, it drags everyone nearby into its center, then detonates. Up to 2 at a time.' },
