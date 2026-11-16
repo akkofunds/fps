@@ -498,7 +498,7 @@ export class Match {
     this._cineSetStage(onStage);
     const I = t < 3.6 ? Math.min(1, t / 3.2) : Math.min(1, 0.7 + (t - 5.4) / 1.2);
     C.stage.update(dt, I);
-    this.app.hud.cineDark(onStage ? 0 : t < 6.6 ? 0.55 : Math.max(0, 0.6 - (t - 6.6) / 2));
+    this.app.hud.cineDark(onStage ? 0 : t < 6.6 ? 0.3 : Math.max(0, 0.45 - (t - 6.6) / 2));
     if (t >= C.dur) this._endCine();
   }
 
@@ -525,12 +525,12 @@ export class Match {
       L.set(o.x, o.y + 1.2, o.z); fov = 46;
     } else if (t < 3.6) { // stage: close-up from below, face and staff
       const k = (t - 2.2) / 1.4;
-      P.set(o.x + f.x * (1.9 - k * 0.3) + sd.x * 0.7, o.y + 0.6, o.z + f.z * (1.9 - k * 0.3) + sd.z * 0.7);
-      L.set(o.x, o.y + 1.55, o.z); fov = 40;
+      P.set(o.x + f.x * (2.0 - k * 0.35) + sd.x * 0.8, o.y + 1.15, o.z + f.z * (2.0 - k * 0.35) + sd.z * 0.8);
+      L.set(o.x, o.y + 1.5, o.z); fov = 40;
     } else if (t < 5.4) { // the battlefield: behind her, tilting up as the seals stack over the target
       const k = (t - 3.6) / 1.8;
-      P.set(o.x - f.x * 3.0 + sd.x * 1.2, o.y + 1.2, o.z - f.z * 3.0 + sd.z * 1.2);
-      L.set(c.x, c.y + 4 + k * 26, c.z); fov = 64;
+      P.set(o.x - f.x * 7 + sd.x * 2.5, o.y + 3.5 + k * 2, o.z - f.z * 7 + sd.z * 2.5);
+      L.set(c.x, c.y + 10 + k * 16, c.z); fov = 62;
     } else if (t < 6.6) { // stage: fast spin, then a whip zoom on the final word
       const k = (t - 5.4) / 1.2;
       const a = face + Math.PI * 0.2 + k * Math.PI * 1.6, r = 4.6 - k * 1.8;
@@ -539,9 +539,9 @@ export class Match {
       fov = t < 5.95 ? 58 : Math.max(30, 58 - (t - 5.95) * 70);
     } else { // the catastrophe, from far away, slowly pushing in
       const k = t - 6.6;
-      const back = NOVA.radius * (3.1 - k * 0.12);
-      P.set(c.x - f.x * back + sd.x * NOVA.radius * 1.1, c.y + 15 + k * 3, c.z - f.z * back + sd.z * NOVA.radius * 1.1);
-      L.set(c.x, c.y + 9 + k * 4.5, c.z); fov = 64;
+      const back = NOVA.radius * (3.0 - k * 0.15);
+      P.set(c.x - f.x * back + sd.x * NOVA.radius * 1.1, c.y + 30 + k * 2.5, c.z - f.z * back + sd.z * NOVA.radius * 1.1);
+      L.set(c.x, c.y + 12 + k * 4, c.z); fov = 66;
       const sh = this.fx.shakeAmt * 0.7;
       P.x += Math.sin(t * 47) * sh; P.y += Math.sin(t * 59 + 1) * sh;
     }

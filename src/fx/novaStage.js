@@ -12,7 +12,7 @@ const GOLD = [3.2, 2.0, 0.6, 1], VIOLET = [1.6, 0.6, 3.0, 1], PINK = [3.0, 1.2, 
 
 function stageMaterial() {
   return new THREE.ShaderMaterial({
-    side: THREE.BackSide, depthWrite: false, fog: false,
+    side: THREE.BackSide, depthWrite: true, fog: false, // opaque backdrop: hides everything beyond it
     uniforms: { uT: { value: 0 }, uI: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: /* glsl */`
@@ -38,8 +38,8 @@ function stageMaterial() {
         pil *= (0.4 + 0.6 * sin(uT * (1.5 + h(vec2(ci, 2.0)) * 3.0) + ci)) * smoothstep(1.0, 0.0, uv.y);
         col += vec3(0.6, 0.4, 1.0) * pil * 0.5 * (0.4 + uI * 0.6);
         // twinkling stars
-        vec2 g = floor(uv * vec2(260.0, 120.0));
-        float st = step(0.992, h(g)) * (0.5 + 0.5 * sin(uT * 6.0 + h(g + 3.0) * 40.0));
+        vec2 gc = uv * vec2(420.0, 200.0), g = floor(gc);
+        float st = step(0.985, h(g)) * (0.5 + 0.5 * sin(uT * 6.0 + h(g + 3.0) * 40.0)) * smoothstep(0.32, 0.0, length(fract(gc) - 0.5)); // round, small
         col += vec3(1.4, 1.1, 1.8) * st;
         // warm glow rising off the golden circle on the floor
         col += vec3(1.2, 0.5, 0.1) * smoothstep(0.18, 0.0, uv.y) * (0.3 + uI * 0.6);
@@ -101,8 +101,9 @@ Object.assign(Fx.prototype, {
     const pm = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.0, 2.6), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2 + R() * 0.4, rr = 5 + R() * 9;
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.18 + R() * 0.3, 0.4 + R() * 0.5, 40, 12, 1, true), pm);
-      m.position.set(Math.cos(a) * rr, 20, Math.sin(a) * rr);
+      const pg = new THREE.CylinderGeometry(0.12 + R() * 0.2, 0.3 + R() * 0.4, 40, 12, 1, true); pg.translate(0, 20, 0); // grows from the floor
+      const m = new THREE.Mesh(pg, pm);
+      m.position.set(Math.cos(a) * rr, 0, Math.sin(a) * rr);
       pillars.push(m); g.add(m);
     }
     g.add(base, floor, sky, seal2, seal);
@@ -119,7 +120,7 @@ Object.assign(Fx.prototype, {
         seal.rotation.z += dt * (0.5 + I * 2); seal2.rotation.z -= dt * (0.3 + I);
         seal.material.opacity = Math.min(1, t * 1.5) * (0.7 + 0.3 * Math.sin(t * 9));
         seal2.material.opacity = Math.min(1, t * 0.8) * 0.8;
-        pm.opacity = Math.min(0.16, I * 0.2) * (0.7 + 0.3 * Math.sin(t * 5));
+        pm.opacity = Math.min(0.12, I * 0.15) * (0.7 + 0.3 * Math.sin(t * 5));
         for (const p of pillars) p.scale.y = 0.2 + Math.min(1, I * 1.4);
         if (!g.visible) return;
         // sparkles drifting up and orbiting her (violet, pink and gold motes like the anime)

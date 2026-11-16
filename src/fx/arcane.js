@@ -250,7 +250,7 @@ Object.assign(Fx.prototype, {
     const n = stagger.length;
     for (let i = 0; i < n; i++) {
       const s = radius * (0.98 - (i / (n - 1)) * 0.66);
-      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(2.6, 0.5 - i * 0.04, 0.08));
+      const m = circleMesh(circleTexture(21 + i * 7, 1024), s, new THREE.Color(1.7, 0.32 - i * 0.025, 0.05));
       m.position.set(target.x, target.y + 8 + i * (40 / (n - 1)), target.z);
       m.scale.setScalar(0.001);
       scene.add(m);
@@ -346,18 +346,28 @@ Object.assign(Fx.prototype, {
         this.shake(1.6);
         if (onFlash) onFlash();
         if (onImpact) onImpact();
-        cleanupAt = t + 3.2;
+        cleanupAt = t + 4.2;
       }
       if (boomed) {
         const bt = t - channel;
         // the fireball swells, rises and cools into a mushroom
-        const s = radius * (0.9 * (1 - Math.exp(-bt * 5)) + bt * 0.12);
-        ball.scale.set(s, s * (0.85 + bt * 0.12), s);
-        ball.position.y = target.y + s * 0.25 + bt * 3.5;
+        const s = radius * (1.05 * (1 - Math.exp(-bt * 4)) + bt * 0.14);
+        ball.scale.set(s, s * (0.8 + bt * 0.14), s);
+        ball.position.y = target.y + s * 0.25 + bt * 4.5;
         ballMat.uniforms.uT.value = t;
-        ballMat.uniforms.uHeat.value = Math.max(0, 1.15 - bt * 0.42);
+        ballMat.uniforms.uHeat.value = Math.max(0, 1.2 - bt * 0.26);
         colMat.opacity = Math.max(0, 1 - bt / 0.35);
         column.scale.x = column.scale.z = radius * 0.35 * Math.max(0.05, 1 - bt * 2);
+        if (bt < 3.2) {
+          // a column of fire rising into a burning mushroom cap
+          const capY = ball.position.y + s * 0.55;
+          for (let i = 0; i < 14 * Math.max(0.2, 1 - bt / 3.2); i++) {
+            const a = R() * 6.283, rr = s * (0.15 + R() * 0.25);
+            this.fire.emit(target.x + Math.cos(a) * rr, target.y + R() * capY, target.z + Math.sin(a) * rr, Math.cos(a) * 1.5, 8 + R() * 6, Math.sin(a) * 1.5, 0.7 + R() * 0.6, 3 + R() * 3, 2, R() < 0.3 ? [3.6, 2.2, 0.8, 1] : [3.0, 1.0, 0.25, 0.95], DARKR, 0.8, 2);
+            const b = R() * 6.283, cr = s * (0.5 + R() * 0.5);
+            this.fire.emit(target.x + Math.cos(b) * cr, capY + (R() - 0.3) * s * 0.4, target.z + Math.sin(b) * cr, Math.cos(b) * 5, 2 + R() * 3, Math.sin(b) * 5, 0.8 + R() * 0.6, 4 + R() * 4, 3, [3.0, 1.0, 0.25, 0.9], DARKR, 1, 1);
+          }
+        }
         if (bt < 2.6) {
           for (let i = 0; i < 10; i++) {
             const a = R() * 6.283, rr = s * (0.4 + R() * 0.6);
