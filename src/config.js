@@ -17,8 +17,8 @@ export const MOVE = {
   dashTime: 0.17,
   dashCharges: 2,
   dashRecharge: 3.4,
-  rollSpeed: 10.4,
-  rollTime: 0.42, // landing roll: short and snappy; the back half can be cancelled by jump/dash
+  rollSpeed: 9.4,
+  rollTime: 0.5, // landing roll at its natural pace; the back half can be cancelled by jump/dash
   waterSlow: 0.7,
 };
 

@@ -11,6 +11,8 @@ const cache = new Map();
 
 export function loadMageModel(url) {
   if (!/^(\/|https?:)/.test(url)) url = (import.meta.env.BASE_URL || '/') + url;
+  // cache-bust with the models' content hash (a stale cached model would pair old meshes with new code)
+  if (typeof __MODELS_VER__ !== 'undefined' && !url.includes('?')) url += '?v=' + __MODELS_VER__;
   if (!cache.has(url)) {
     cache.set(url, new Promise((resolve, reject) => {
       new GLTFLoader().load(url, async (g) => {
