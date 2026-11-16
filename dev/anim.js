@@ -53,7 +53,15 @@ function sim(inst) {
   if (st === 'hitf') a.play('hit', { dir: 0, dmg: 30 });
   if (st === 'hitl') a.play('hit', { dir: 1.57, dmg: 30 });
   const n = Math.round(t / dtt);
-  for (let k = 0; k < n; k++) a.update(dtt, s);
+  const walk = q.get('move') ? s.vel.clone() : new THREE.Vector3();
+  const home = m.root.position.clone();
+  for (let k = 0; k < n; k++) {
+    a.update(dtt, s);
+    if (st === 'air' || st === 'fall' || st === 'djump') { s.vel.y -= 18 * dtt; walk.y = s.vel.y; }
+    m.root.position.addScaledVector(walk, dtt); s.pos.copy(m.root.position);
+    m.root.rotation.y = a.yawOffset; m.root.updateMatrixWorld(true); m.stepCape(dtt);
+  }
+  m.root.position.copy(home);
   m.root.rotation.y = a.yawOffset;
 }
 if (q.get('wcol')) for (const { m } of insts) m.model.traverse((o) => {
@@ -81,4 +89,6 @@ for (const v of views) {
 }
 for (const { m, st } of insts) { m.root.updateMatrixWorld(true); const r = m.rig; if (r.ends.prop) { const a = r.bones[22].getWorldPosition(new THREE.Vector3()), b = r.ends.prop.getWorldPosition(new THREE.Vector3()); const h = r.bones[13].getWorldPosition(new THREE.Vector3()), f = r.bones[12].getWorldPosition(new THREE.Vector3()); console.log('LOG', st, 'staffdir', b.sub(a).normalize().toArray().map((x) => x.toFixed(2)).join(','), 'forearm', h.sub(f).normalize().toArray().map((x) => x.toFixed(2)).join(','), 'rooty', m.root.rotation.y.toFixed(2)); } }
 document.getElementById('ui').textContent = states.join(',') + ' t=' + times.join(',');
+if (q.get("dbgcape")) for (const { m } of insts) { const r = m.rig; const c = r.bones[23]; const s = new THREE.Vector3(), p = new THREE.Vector3(), qq = new THREE.Quaternion(); c.matrixWorld.decompose(p, qq, s); console.log("LOG cape", c.name, p.toArray().map((x) => x.toFixed(2)).join(","), "scale", s.toArray().map((x) => x.toFixed(3)).join(","), "q", qq.toArray().map((x) => x.toFixed(2)).join(","), "local", c.quaternion.toArray().map((x) => x.toFixed(2)).join(",")); m.model.traverse((o) => { if (o.isSkinnedMesh && o.name.startsWith("cape")) console.log("LOG capemesh", o.name, o.visible, o.material.visible, o.material.opacity); }); }
+window.__insts = insts; window.__THREE = THREE;
 window.done = true;

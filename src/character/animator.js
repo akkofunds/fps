@@ -248,7 +248,6 @@ export class Animator {
         blend(out, out, this.cast, ca.w * (1 - rollW), UPPER_MASK);
       }
     }
-    if (rig.hasCape) this._cape(dt, out, s);
     if (this.lobby) {
       // showcase pose, yielding to whatever the character is playing (fidgets, admin viewer)
       const busyW = Math.max(this.castA ? this.castA.w : 0, this.action ? this.action.w : 0);
@@ -528,8 +527,9 @@ export class Animator {
     const fwd = Math.max(0, this.vz);
     const wind = this.windBoost || 0; // cutscene gale
     const target = Math.min(70, fwd * 5.5 + Math.max(0, -this.vy) * 2.2 + (this.airW > 0.5 ? 8 : 0) + wind * 42);
-    this.capeV = (this.capeV || 0) + ((target - (this.capeA || 0)) * 60 - this.capeV * 9) * dt;
-    this.capeA = (this.capeA || 0) + this.capeV * dt;
+    const v0 = Number.isFinite(this.capeV) ? this.capeV : 0, a0 = Number.isFinite(this.capeA) ? this.capeA : 0;
+    this.capeV = v0 + ((target - a0) * 60 - v0 * 9) * Math.min(dt, 0.05);
+    this.capeA = Math.max(-25, Math.min(80, a0 + this.capeV * Math.min(dt, 0.05)));
     const flutter = (Math.sin(this.t * 7.3) * (2 + fwd * 0.6) + Math.sin(this.t * 2.1) * 2) * (1 + wind * 3) + Math.sin(this.t * 13.7) * wind * 4;
     addE(out, B.cape, this.capeA + flutter, Math.sin(this.t * 1.7) * 3, -this.vx * 1.5);
   }

@@ -967,6 +967,8 @@ export class Match {
       if (Q.outlines) v.setLod(d2 > 900); // beyond 30 m use the low-poly meshes
       if (e.animTick === 0) {
         v.anim.update(e.animAcc, { pos: e.pos, yaw: e.yaw, pitch: e.pitch, vel: e.vel, grounded: e.grounded });
+        v.root.rotation.y = e.yaw + v.anim.yawOffset;
+        v.stepCape(e.animAcc);
         e.animAcc = 0;
       }
       v.root.rotation.y = e.yaw + v.anim.yawOffset;
