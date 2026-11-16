@@ -70,7 +70,7 @@ export class PyroKit {
     const pr = input.pressed;
     // input buffer: a press during another ability's animation goes off as soon as it ends
     const buf = this.buf || (this.buf = { e: 0, c: 0, v: 0, x: 0 });
-    for (const k in buf) buf[k] = pr[k] ? 0.3 : Math.max(0, buf[k] - dt);
+    for (const k in buf) buf[k] = pr[k] ? 0.4 : Math.max(0, buf[k] - dt);
     const go = (k, fn) => { if (buf[k] > 0 && this.busy <= 0) { buf[k] = 0; fn(); } };
     go('e', () => this.kick());
     go('c', () => this.ignite());
