@@ -7,12 +7,12 @@ import * as THREE from 'three';
 const VERT = /* glsl */`
   attribute vec4 acolor; attribute float asize; attribute float aseed;
   varying vec4 vColor; varying float vSeed;
-  uniform float uScale;
+  uniform float uScale; uniform float uMax;
   void main(){
     vColor = acolor; vSeed = aseed;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = asize * uScale / max(0.1, -mv.z);
+    gl_PointSize = min(uMax, asize * uScale / max(0.1, -mv.z));
   }`;
 const FRAG_ADD = /* glsl */`
   varying vec4 vColor; varying float vSeed;
@@ -55,7 +55,7 @@ export class ParticlePool {
     g.setAttribute('position', this.aPos); g.setAttribute('acolor', this.aCol); g.setAttribute('asize', this.aSize); g.setAttribute('aseed', this.aSeed);
     g.setDrawRange(0, 0);
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { uScale: { value: 400 }, uGain: { value: 1 } },
+      uniforms: { uScale: { value: 400 }, uGain: { value: 1 }, uMax: { value: 400 } },
       vertexShader: VERT, fragmentShader: additive ? FRAG_ADD : FRAG_SMOKE,
       transparent: true, depthWrite: false,
       blending: additive ? THREE.CustomBlending : THREE.NormalBlending,

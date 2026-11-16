@@ -132,6 +132,33 @@ const SFX = {
     noise(oc, o, { dur: 2.0, type: 'lowpass', f: [6000, 900, 120], env: [[0.003, 1], [0.3, 0.6], [2.0, 0]], seed: 41 });
     crackle(oc, o, 0.1, 2.6, 60, 0.5, 43);
   }, { reverb: 0.6, tau: 0.9, drive: 3, level: 1 }],
+  spark: [0.45, (oc, o) => {
+    tone(oc, o, { dur: 0.25, f: [1800, 700], type: 'triangle', env: [[0.003, 0.5], [0.25, 0]] });
+    tone(oc, o, { dur: 0.18, f: [2600, 1200], type: 'sine', env: [[0.003, 0.35], [0.18, 0]] });
+    noise(oc, o, { dur: 0.3, f: [3000, 900], Q: 2, env: [[0.005, 0.6], [0.3, 0]], seed: 81 });
+    crackle(oc, o, 0.02, 0.3, 90, 0.35, 83);
+  }, { reverb: 0.25, tau: 0.3, drive: 1.4, level: 0.75 }],
+  sigil: [1.0, (oc, o) => {
+    [880, 1320, 1760].forEach((f, i) => tone(oc, o, { t0: i * 0.05, dur: 0.8, f: [f, f * 0.99], type: 'sine', env: [[0.01, 0.35], [0.8, 0]] }));
+    noise(oc, o, { dur: 0.4, type: 'lowpass', f: [600, 200], env: [[0.005, 0.6], [0.4, 0]], seed: 85 });
+  }, { reverb: 0.5, tau: 0.6, level: 0.6 }],
+  blink: [0.6, (oc, o) => {
+    noise(oc, o, { dur: 0.35, f: [5000, 400], Q: 1.5, env: [[0.005, 1], [0.35, 0]], seed: 87 });
+    tone(oc, o, { dur: 0.3, f: [300, 1600], type: 'sine', env: [[0.01, 0.4], [0.3, 0]] });
+  }, { reverb: 0.3, tau: 0.35, level: 0.7 }],
+  novaChant: [2.6, (oc, o) => {
+    // rising, detuned drone + shimmering partials: the incantation
+    for (const [f, d] of [[110, 0], [110.6, 0], [165, 0.2], [220, 0.5], [330, 0.9], [440, 1.3]]) tone(oc, o, { t0: d, dur: 2.5 - d, f: [f, f * 2.2], type: 'sawtooth', env: [[0.2, 0.12], [2.2 - d, 0.22], [2.5 - d, 0]] });
+    noise(oc, o, { dur: 2.5, f: [200, 4000], Q: 3, env: [[0.3, 0.2], [2.3, 0.6], [2.5, 0]], seed: 89 });
+    crackle(oc, o, 0.5, 2.0, 80, 0.4, 91);
+  }, { reverb: 0.7, tau: 1.0, drive: 1.3, level: 0.75 }],
+  novaBoom: [6.0, (oc, o) => {
+    tone(oc, o, { dur: 2.5, f: [90, 18], env: [[0.005, 1], [2.5, 0]] });
+    tone(oc, o, { dur: 1.2, f: [180, 30], type: 'triangle', env: [[0.005, 0.6], [1.2, 0]] });
+    noise(oc, o, { dur: 4.5, type: 'lowpass', f: [8000, 1200, 300, 80], env: [[0.004, 1], [0.6, 0.8], [2.5, 0.35], [4.5, 0]], seed: 93 });
+    noise(oc, o, { dur: 0.08, type: 'highpass', f: [1000, 1000], env: [[0.001, 1], [0.08, 0]], seed: 95 });
+    crackle(oc, o, 0.2, 5.0, 45, 0.5, 97);
+  }, { reverb: 0.8, tau: 1.6, drive: 3.5, level: 1 }],
   dash: [0.4, (oc, o) => {
     noise(oc, o, { dur: 0.32, f: [600, 3200, 900], Q: 0.8, env: [[0.02, 1], [0.32, 0]], seed: 47 });
     crackle(oc, o, 0.0, 0.25, 50, 0.3, 49);

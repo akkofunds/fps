@@ -120,7 +120,7 @@ const POLE = new THREE.Vector3();
 // target: ankle position in root space; footYaw/footPitch/footRoll: desired world foot orientation (deg)
 export function legIK(p, rig, side, target, footPitch = 0, footYaw = 0, footRoll = 0, kneeOut = 6) {
   const L = rig.legs[side];
-  const hipsBase = rig.restWorld[B.hips];
+  const hipsBase = rig.restHips;
   getQ(p, B.hips, _hq); _hqi.copy(_hq).invert();
   // hip joint in root space
   _hip.copy(L.hipOff).applyQuaternion(_hq).add(hipsBase); _hip.x += p.hip[0]; _hip.y += p.hip[1]; _hip.z += p.hip[2];

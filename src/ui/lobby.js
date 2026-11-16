@@ -1,6 +1,6 @@
 import { $, el, show, toast } from './dom.js';
 import { ICONS, ABILITY_ICON } from './icons.js';
-import { PYRO } from '../game/pyro.js';
+import { MAGES as MAGE_DEFS, mageOf } from '../game/mages.js';
 import { parseTag, sanitizeName, randomTag, saveIdentity, loadRecent } from '../core/storage.js';
 import { Audio } from '../core/audio.js';
 import { MODES } from '../config.js';
@@ -16,11 +16,11 @@ const MODE_DESC = {
 };
 const MAGES = [
   { id: 'pyro', name: 'PYRO', icon: ICONS.flame, open: true },
+  { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true },
   { id: 'tide', name: 'TIDE', icon: ICONS.water },
   { id: 'terra', name: 'TERRA', icon: ICONS.earth },
   { id: 'volt', name: 'VOLT', icon: ICONS.storm },
   { id: 'gale', name: 'GALE', icon: ICONS.wind },
-  { id: 'rime', name: 'RIME', icon: ICONS.frost },
 ];
 
 export class Lobby {
@@ -29,6 +29,8 @@ export class Lobby {
     this.pm = app.pm; this.session = app.session;
     this.mode = 'ffa';
     this.queue = { searching: false };
+    this.mage = MAGE_DEFS[app.settings.mage] ? app.settings.mage : 'pyro';
+    this.pm.setMage(this.mage);
     this._bind();
     this.renderParty(); this.renderSocial(); this.renderMages(); this.renderCareer();
     this.setMode('ffa');
@@ -80,17 +82,22 @@ export class Lobby {
     bindRange('sFov', 'vFov', 'fov', (v) => `${v}°`);
     bindRange('sVol', 'vVol', 'volume', (v) => `${Math.round(v * 100)}%`);
     $('sQuality').value = s.quality;
-    $('sQuality').onchange = () => { s.quality = $('sQuality').value; app.saveSettings(); toast('Graphics quality applies to the next match (reload to update the lobby).'); };
+    $('sQuality').onchange = () => { s.quality = $('sQuality').value; app.saveSettings(); toast('Reloading to apply graphics quality…'); setTimeout(() => location.reload(), 700); };
+    $('sScale').value = String(s.renderScale || 0);
+    $('sScale').onchange = () => { s.renderScale = Number($('sScale').value); app.saveSettings(); app.resize(); };
+    $('btnSocial').onclick = () => { $('social').classList.toggle('open'); app.resize(); };
     $('sShoulder').value = String(s.shoulder);
     $('sShoulder').onchange = () => { s.shoulder = Number($('sShoulder').value); app.saveSettings(); app.applySettings(); };
     $('sInvert').checked = !!s.invertY;
     $('sInvert').onchange = () => { s.invertY = $('sInvert').checked; app.saveSettings(); };
+    $('sDyn').checked = s.dynamicRes !== false;
+    $('sDyn').onchange = () => { s.dynamicRes = $('sDyn').checked; if (!s.dynamicRes) app.dynScale = 1; app.saveSettings(); app.resize(); };
     $('btnSettingsClose').onclick = () => { show('settings', false); };
   }
 
   show(on) {
     show('lobby', on);
-    if (on) { this.renderParty(); this.renderSocial(); this.renderCareer(); }
+    if (on) { this.renderParty(); this.renderSocial(); this.renderCareer(); this.app.resize(); }
   }
   frame() {
     if (this.queue.searching) {
@@ -104,7 +111,7 @@ export class Lobby {
     Audio.play('ui', 0.6);
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     show('tabPlay', tab === 'play'); show('tabMages', tab === 'mages'); show('tabCareer', tab === 'career');
-    this.app.lobbyScene.setActive(tab === 'play');
+    this.app.lobbyScene.setActive(tab !== 'career');
     if (tab === 'career') this.renderCareer();
   }
 
@@ -176,17 +183,18 @@ export class Lobby {
     const pm = this.pm;
     const c = el('div', 'card' + (isMe ? ' me' : ''));
     c.appendChild(el('div', 'frame'));
+    const md = mageOf(isMe ? this.mage : m.mage);
     if (!isMe) {
-      const art = el('div', 'art');
-      art.appendChild(el('div', 'art-name', 'PYRO'));
-      art.insertAdjacentHTML('beforeend', ICONS.flame);
+      const art = el('div', 'art' + (md.id === 'meteora' ? ' crimson' : ''));
+      art.appendChild(el('div', 'art-name', md.name));
+      art.insertAdjacentHTML('beforeend', md.id === 'meteora' ? ICONS.nova : ICONS.flame);
       c.appendChild(art);
     }
     if (pm.party.leader === m.id && pm.inParty) c.appendChild(el('div', 'leader', '★'));
     const meta = el('div', 'meta');
     meta.appendChild(el('div', 'ready', 'READY'));
     meta.appendChild(el('div', 'pname', m.name));
-    meta.appendChild(el('div', 'ptitle', PYRO.role));
+    meta.appendChild(el('div', 'ptitle', md.role));
     c.appendChild(meta);
     const rank = el('div', 'rank'); rank.innerHTML = ICONS.rank; c.appendChild(rank);
     if (isMe) {
@@ -252,23 +260,36 @@ export class Lobby {
   }
 
   // ---------------------------------------------------------------- mages + career
+  selectMage(id) {
+    if (!MAGE_DEFS[id] || id === this.mage) return;
+    if (this.queue.searching) { toast('Cancel the queue to switch mages.'); return; }
+    this.mage = id;
+    this.app.settings.mage = id; this.app.saveSettings();
+    this.pm.setMage(id);
+    this.app.lobbyScene.setMage(id);
+    Audio.play('found', 0.4);
+    this.renderMages(); this.renderParty();
+  }
+
   renderMages() {
     const ro = $('mageRoster');
     ro.textContent = '';
     for (const m of MAGES) {
-      const t = el('div', 'mage-tile' + (m.open ? ' sel' : ' locked'));
+      const t = el('div', 'mage-tile' + (m.open ? '' : ' locked') + (m.id === this.mage ? ' sel' : ''));
       t.innerHTML = m.icon;
       t.appendChild(document.createTextNode(m.name));
       if (!m.open) t.appendChild(el('span', 'soon', 'SOON'));
+      else t.onclick = () => this.selectMage(m.id);
       ro.appendChild(t);
     }
+    const D = mageOf(this.mage);
     const d = $('mageDetail');
     d.textContent = '';
-    d.appendChild(el('div', 'md-role', `// ${PYRO.role}`));
-    d.appendChild(el('div', 'md-name', PYRO.name));
-    d.appendChild(el('div', 'md-bio', PYRO.bio));
+    d.appendChild(el('div', 'md-role', `// ${D.role}`));
+    const nm = el('div', 'md-name', D.name); nm.style.color = D.color; d.appendChild(nm);
+    d.appendChild(el('div', 'md-bio', D.bio));
     const list = el('div', 'md-abils');
-    for (const a of PYRO.abilities) {
+    for (const a of D.abilities) {
       const row = el('div', 'md-ab' + (a.ult ? ' ult' : ''));
       const ic = el('div', 'ic'); ic.innerHTML = ABILITY_ICON[a.id]; ic.appendChild(el('b', '', a.key)); row.appendChild(ic);
       const txt = el('div');
@@ -303,6 +324,8 @@ export class Lobby {
     }
     c.appendChild(hist);
   }
+
+  showAdminBadge(open) { const b = $('adminBadge'); b.classList.remove('hidden'); b.onclick = open; }
 
   openSettings() { Audio.play('ui'); show('settings', true); }
   closeModals() { show('settings', false); }

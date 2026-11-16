@@ -2,15 +2,21 @@ import * as THREE from 'three';
 import { buildTerrain, groundH, WATER_Y, LAKE, PLAY_RADIUS } from './terrain.js';
 import { buildSky, buildMountains, SUN_DIR, SKY } from './sky.js';
 import { buildWater } from './water.js';
-import { buildGrass, buildFlowers, WIND } from './vegetation.js';
+import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
 import { buildProps, treeTime } from './props.js';
 import { CollisionWorld } from './collision.js';
+import { buildVillage } from './village.js';
+import { STYLE } from './stylize.js';
 
 // Sunvale Meadow: assembles the scene, lighting and collision for a quality level.
+// Budgets per preset. "low" is tuned for Chromebooks (Lenovo 500e: Celeron + UHD 600) at 60 FPS:
+// no shadows/post, short grass draw distance, coarse terrain, fewer lights/particles/outlines.
+// Every preset also gets dynamic resolution (see main.js) to hold 60 FPS.
 export const QUALITY = {
-  low: { grass: 14000, flowers: 900, shadow: 1024, shadows: false, bloom: false },
-  medium: { grass: 34000, flowers: 1800, shadow: 2048, shadows: true, bloom: true },
-  high: { grass: 62000, flowers: 2800, shadow: 2048, shadows: true, bloom: true },
+  low: { grass: 9000, blades: 3, grassDist: 28, pushers: 2, flowers: 500, bushes: 30, scenery: 70, leafDetail: 1, terrainStep: 2, shadow: 1024, shadows: false, bloom: false, msaa: 0, lights: 1, particles: 2500, outlines: false, dpr: 1, minScale: 0.6 },
+  medium: { grass: 30000, blades: 3, grassDist: 40, pushers: 4, flowers: 1600, bushes: 100, scenery: 170, leafDetail: 1, terrainStep: 1, shadow: 1024, shadows: true, bloom: true, msaa: 0, lights: 2, particles: 5000, outlines: true, dpr: 1.25, minScale: 0.6 },
+  high: { grass: 60000, blades: 4, grassDist: 55, pushers: 8, flowers: 3000, bushes: 200, scenery: 300, leafDetail: 2, terrainStep: 1, shadow: 2048, shadows: true, bloom: true, msaa: 4, lights: 3, particles: 8000, outlines: true, dpr: 1.5, minScale: 0.55 },
+  ultra: { grass: 100000, blades: 4, grassDist: 75, pushers: 8, flowers: 4500, bushes: 300, scenery: 420, leafDetail: 2, terrainStep: 1, shadow: 4096, shadows: true, bloom: true, msaa: 4, ao: true, lights: 4, particles: 9000, outlines: true, dpr: 2, minScale: 0.5 },
 };
 
 export class GameMap {
@@ -32,22 +38,26 @@ export class GameMap {
     this.sun.castShadow = Q.shadows;
     if (Q.shadows) {
       const sc = this.sun.shadow.camera;
-      sc.left = -36; sc.right = 36; sc.top = 36; sc.bottom = -36; sc.near = 1; sc.far = 220;
+      sc.left = -32; sc.right = 32; sc.top = 32; sc.bottom = -32; sc.near = 1; sc.far = 220;
       this.sun.shadow.mapSize.set(Q.shadow, Q.shadow);
-      this.sun.shadow.bias = -0.0006; this.sun.shadow.normalBias = 0.04;
+      this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.03; this.sun.shadow.radius = 3;
     }
     s.add(this.sun); s.add(this.sun.target);
 
     this.sky = buildSky(); s.add(this.sky);
     s.add(buildMountains());
-    this.terrain = buildTerrain(); s.add(this.terrain);
+    this.Q = Q;
+    this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
-    this.props = buildProps(this.world, quality); s.add(this.props);
+    this.village = buildVillage(); s.add(this.village);
+    this.props = buildProps(this.world, quality, Q); s.add(this.props);
     const avoid = this.props.userData.avoid;
-    this.grass = buildGrass(Q.grass, avoid); s.add(this.grass);
-    this.flowers = buildFlowers(Q.flowers, avoid); s.add(this.flowers);
+    this.grass = buildGrass(Q.grass, avoid, Q); s.add(this.grass);
+    this.flowers = buildFlowers(Q.flowers, avoid, Q); s.add(this.flowers);
+    this.bushes = buildBushes(Q.bushes, this.props.userData.anchors, avoid); s.add(this.bushes);
+    // undergrowth chunks culled by distance every frame
+    this.lod = [...this.grass.children.map((m) => [m, Q.grassDist]), ...this.flowers.children.map((m) => [m, Q.grassDist * 0.9]), ...this.bushes.children.map((m) => [m, Q.grassDist * 2.2])];
     this.altar = this.props.userData.altar;
-    this.pollen = this._pollen(); s.add(this.pollen);
     this.spawns = this._spawns();
     this.time = 0;
   }
@@ -106,18 +116,26 @@ export class GameMap {
   // focus = camera target (shadows follow it)
   update(dt, camera, focus, pushers) {
     this.time += dt;
-    WIND.uTime.value = this.time; treeTime.value = this.time;
+    WIND.uTime.value = this.time; treeTime.value = this.time; STYLE.uTime.value = this.time;
+    this.village.userData.update(this.time);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);
     this.water.material.uniforms.uTime.value = this.time;
-    this.pollen.material.uniforms.uTime.value = this.time;
-    this.pollen.material.uniforms.uCenter.value.copy(camera.position);
     if (focus) {
       // snap the shadow camera to texels to avoid shimmering
       const f = this.sun.shadow.mapSize.x / 72;
       const fx = Math.round(focus.x * f) / f, fz = Math.round(focus.z * f) / f;
       this.sun.target.position.set(fx, focus.y, fz);
       this.sun.position.set(fx, focus.y, fz).addScaledVector(SUN_DIR, 90);
+    }
+    // distance culling for grass/flower/bush chunks (the single biggest GPU saving)
+    const cp = camera.position;
+    this._lodTick = ((this._lodTick || 0) + 1) % 3;
+    if (this._lodTick === 0) for (const [m, dist] of this.lod) {
+      const bs = m.boundingSphere;
+      if (!bs) continue;
+      const dx = bs.center.x - cp.x, dz = bs.center.z - cp.z, r = dist + bs.radius;
+      m.visible = dx * dx + dz * dz < r * r;
     }
     if (pushers) {
       const arr = WIND.uPush.value;

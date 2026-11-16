@@ -32,13 +32,39 @@ const ACTIONS = {
   slam: { clip: C.SLAM, in: 0.06, out: 0.18 },
   leap: { clip: C.LEAP, in: 0.04, out: 0.25, airBlendOut: true },
   death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true },
+  plant: { clip: C.M_PLANT, in: 0.06, out: 0.18 },
+  nova: { clip: C.M_NOVA, in: 0.1, out: 0.2 },
+  exhausted: { clip: C.M_EXHAUSTED, in: 0.05, out: 0.25, aimOff: true },
+  respawn: { clip: C.RESPAWN, in: 0.02, out: 0.2, aimOff: true, freeProp: true },
 };
 const CASTS = {
   boltR: { clip: C.BOLT_R, in: 0.035, out: 0.12 },
   boltL: { clip: C.BOLT_L, in: 0.035, out: 0.12 },
   orb: { clip: C.ORB, in: 0.05, out: 0.16 },
   ult: { clip: C.ULT, in: 0.08, out: 0.2 },
+  mBolt: { clip: C.M_BOLT, in: 0.04, out: 0.16 },
+  mRaise: { clip: C.M_RAISE, in: 0.06, out: 0.2 },
+  mBlink: { clip: C.M_BLINK, in: 0.04, out: 0.15 },
+  mBolt2: { clip: C.M_BOLT2, in: 0.04, out: 0.16 },
+  fidgetP: { clip: C.FIDGET_P, in: 0.3, out: 0.4, fidget: true },
+  fidgetM: { clip: C.FIDGET_M, in: 0.3, out: 0.4, fidget: true },
 };
+
+// Movement personality per character (all multipliers on the shared procedural gait).
+//  brawler (Pyro): heavier, forward-driving run, big fist pump, more bounce
+//  caster (Meteora): lighter, graceful, hip sway, the staff arm stays steady, softer landings
+const STYLES = {
+  brawler: { swing: 1.15, swingR: 1, lean: 1.2, bounce: 1.15, sway: 0.5, settle: 0.5, fidget: 'fidgetP' },
+  caster: { swing: 0.85, swingR: 0.35, lean: 0.8, bounce: 0.85, sway: 1.5, settle: 0.42, fidget: 'fidgetM' },
+};
+
+// critically/under-damped spring (semi-implicit Euler); s = { x, v }
+function spring(st, target, k, zeta, dt) {
+  const c = 2 * Math.sqrt(k) * zeta;
+  st.v += (k * (target - st.x) - c * st.v) * dt;
+  st.x += st.v * dt;
+  return st.x;
+}
 
 export class Animator {
   constructor(rig, opts = {}) {
@@ -63,19 +89,37 @@ export class Animator {
     this.planted = false;
     this.lastStep = 'R';
     this.dead = false;
+    this.style = rig.hasProp ? STYLES.caster : STYLES.brawler;
+    // follow-through springs (torso lean/bank overshoot, arm drag in turns, head settle)
+    this.sLean = { x: 0, v: 0 }; this.sBank = { x: 0, v: 0 }; this.sArm = { x: 0, v: 0 }; this.sHead = { x: 0, v: 0 };
+    this.hitDir = 0; this.hitAmt = 1;
+    this.idleT = 0; this.nextFidget = 7 + Math.random() * 5;
+    this.lastBolt = -9; this.boltAlt = false;
   }
 
   // ---------------------------------------------------------------- events
   play(kind, data = {}) {
     if (kind === 'die') { this.dead = true; this._startAction('death', 0); this.castA = null; return; }
-    if (kind === 'respawn') { this.dead = false; this.action = null; this.castA = null; this.planted = false; this.dip = 0; this.dipV = 0; this.airW = 0; this.yawOffset = this.yawOffsetTarget = 0; return; }
+    if (kind === 'respawn') {
+      this.dead = false; this.action = null; this.castA = null; this.planted = false; this.dip = 0; this.dipV = 0; this.airW = 0; this.yawOffset = this.yawOffsetTarget = 0;
+      this.action = { def: ACTIONS.respawn, t: 0, w: 1, yaw: 0 };
+      return;
+    }
     if (this.dead) return;
     if (kind === 'land') {
       const impact = Math.max(0, -(data.vy || 0));
       this.dipV -= Math.min(2.4, impact * 0.16);
       return;
     }
-    if (kind === 'hit') { this.flinch = 1; this.flinchSide = Math.random() < 0.5 ? -1 : 1; return; }
+    if (kind === 'hit') {
+      // data.dir = local angle toward the attacker (0 = in front, + = on the left); unknown → random side
+      this.flinch = 1;
+      this.hitDir = data.dir !== undefined ? data.dir : (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random());
+      this.hitAmt = clamp((data.dmg || 20) / 28, 0.6, 1.5);
+      this.flinchSide = Math.sin(this.hitDir) >= 0 ? 1 : -1;
+      return;
+    }
+    if (kind === 'jumpStart') { this.dipV -= 0.9; this.jumpKick = 1; return; }
     if (kind === 'dash' || kind === 'roll') {
       // data.dir = local angle (rad, 0 = forward, + = toward the character's left)
       const a = data.dir || 0;
@@ -84,9 +128,17 @@ export class Animator {
       this._startAction(name, back ? wrapPi(a + Math.PI) : a);
       return;
     }
-    if (kind === 'slam' || kind === 'leap') { this._startAction(kind, 0); return; }
+    if (ACTIONS[kind] && !ACTIONS[kind].turn) { this._startAction(kind, 0); return; }
     if (kind === 'cast') {
-      const def = CASTS[data.anim];
+      let anim = data.anim;
+      // Meteora's staff shots alternate thrust / backhand sweep while you keep firing
+      if (anim === 'mBolt') {
+        this.boltAlt = this.t - this.lastBolt < 0.9 ? !this.boltAlt : false;
+        this.lastBolt = this.t;
+        if (this.boltAlt) anim = 'mBolt2';
+      }
+      this.idleT = 0;
+      const def = CASTS[anim];
       if (!def) return;
       const keep = this.castA && this.castA.def === def && this.castA.t < 0.05;
       if (!keep) this.castA = { def, t: 0, w: this.castA ? this.castA.w : 0 };
@@ -132,6 +184,12 @@ export class Animator {
     // yaw offset (body turns into a dash/roll, then back to the aim)
     if (this.action && !this.busy) this.yawOffsetTarget = 0;
     this.yawOffset = damp(this.yawOffset, this.yawOffsetTarget, 18, dt);
+    // turn rate → banking into turns / head leading the turn
+    if (this.lastYaw === undefined) this.lastYaw = s.yaw;
+    let dy = s.yaw - this.lastYaw; while (dy > Math.PI) dy -= 2 * Math.PI; while (dy < -Math.PI) dy += 2 * Math.PI;
+    this.lastYaw = s.yaw;
+    this.yawRate = damp(this.yawRate || 0, clamp(dy / Math.max(dt, 1e-3), -6, 6), 8, dt);
+    this.jumpKick = Math.max(0, (this.jumpKick || 0) - dt * 3);
 
     // ---- 1. locomotion
     this._locomotion(dt, s);
@@ -153,6 +211,16 @@ export class Animator {
         blend(out, out, this.act, a.w);
       }
     }
+    // ---- idle fidgets (every ~7-12 s standing still, also in the lobby)
+    const still = speed < 0.25 && s.grounded && !this.action && !this.dead && (!this.castA || this.castA.def.fidget);
+    this.idleT = still ? this.idleT + dt : 0;
+    if (still && !this.castA && this.idleT > this.nextFidget) {
+      this.castA = { def: CASTS[this.style.fidget], t: 0, w: 0 };
+      this.idleT = 0; this.nextFidget = 8 + Math.random() * 6;
+    }
+    if (this.castA && this.castA.def.fidget && !still) { this.castA.t = Math.max(this.castA.t, this.castA.def.clip.duration - this.castA.def.out); }
+    // ---- staff: stays upright in world space unless a clip drives it
+    if (rig.hasProp) this._stabilizeStaff(out, a && !a.def.freeProp ? a.w : 0);
     // ---- 4. upper-body cast
     const ca = this.castA;
     if (ca && !this.dead) {
@@ -167,9 +235,18 @@ export class Animator {
         blend(out, out, this.cast, ca.w * (1 - rollW), UPPER_MASK);
       }
     }
+    if (rig.hasCape) this._cape(dt, out, s);
     if (this.lobby) {
-      sampleClip(C.SHOWCASE, 0, this.cast);
-      blend(out, out, this.cast, 1, UPPER_MASK);
+      // showcase pose, yielding to whatever the character is playing (fidgets, admin viewer)
+      const busyW = Math.max(this.castA ? this.castA.w : 0, this.action ? this.action.w : 0);
+      sampleClip(rig.hasProp ? C.M_SHOWCASE : C.SHOWCASE, 0, this.cast);
+      blend(out, out, this.cast, 1 - busyW, UPPER_MASK);
+    }
+    // ---- landing recovery: arms flare and the torso folds with the dip spring
+    if (this.dip < -0.01 && !this.dead) {
+      const d = Math.min(1, -this.dip / 0.2);
+      addE(out, B.upperArmL, -8 * d, 0, 14 * d); addE(out, B.upperArmR, -8 * d, 0, -14 * d);
+      addE(out, B.spine, 10 * d, 0, 0); addE(out, B.head, -8 * d, 0, 0);
     }
     // ---- 5. additive
     const aimW = this.dead ? 0 : 1 - (this.action && this.action.def.aimOff ? this.action.w : 0);
@@ -179,9 +256,20 @@ export class Animator {
       addE(out, B.neck, -p * 0.14, 0, 0); addE(out, B.head, -p * 0.22, 0, 0);
     }
     if (this.flinch > 0) {
-      const f = this.flinch * this.flinch;
-      addE(out, B.spine, -10 * f, 6 * f * this.flinchSide, 4 * f * this.flinchSide); addE(out, B.head, -14 * f, -8 * f * this.flinchSide, 0);
+      // snap away from the attacker, then settle (ease-out from the impact frame)
+      const f = this.flinch * this.flinch * this.hitAmt;
+      const fb = Math.cos(this.hitDir), lr = Math.sin(this.hitDir);
+      addE(out, B.hips, -4 * fb * f, 0, 0);
+      addE(out, B.spine, -12 * fb * f, -9 * lr * f, 8 * lr * f);
+      addE(out, B.chest, -6 * fb * f, -6 * lr * f, 4 * lr * f);
+      addE(out, B.neck, -8 * fb * f, -6 * lr * f, 6 * lr * f);
+      addE(out, B.head, -12 * fb * f, -10 * lr * f, 8 * lr * f);
+      addE(out, B.upperArmL, -14 * f, 0, 18 * f); addE(out, B.upperArmR, -14 * f, 0, -18 * f);
+      out.hip[1] -= 0.04 * f;
     }
+    // head settle: the head lags a touch behind fast pitch/turn changes, then catches up
+    const hs = spring(this.sHead, this.yawRate * 2.2, 120, 0.55, dt) - this.yawRate * 2.2;
+    addE(out, B.head, 0, -hs * 0.8, 0);
     const br = Math.sin(this.t * 1.9) * (1 - Math.min(1, speed / 3)) * aimW;
     addE(out, B.chest, br * 1.2, 0, 0); addE(out, B.upperChest, br * 0.8, 0, 0);
     addE(out, B.shoulderL, 0, 0, br * 1.2); addE(out, B.shoulderR, 0, 0, -br * 1.2);
@@ -212,9 +300,12 @@ export class Animator {
     const fwdness = mz; // 1 forward, -1 back
 
     // hips
-    const bob = 0.026 * wFast * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) + 0.012 * (wRun - wFast) * Math.cos(4 * Math.PI * (this.phase - 0.15));
+    const st = this.style;
+    const bob = st.bounce * 0.026 * wFast * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) + 0.012 * (wRun - wFast) * Math.cos(4 * Math.PI * (this.phase - 0.15));
     const idleSink = this.lobby ? -0.012 : -0.03;
     P.hip[1] = lerp(idleSink, -0.035, wFast) - bob + this.dip;
+    // pelvis sways over the stance foot (more for the graceful caster)
+    P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * 0.016 * st.sway * wRun * (1 - 0.4 * wFast);
     const hipYawD = this.hipYaw * R2D;
     // feet paths
     const feet = {};
@@ -237,24 +328,38 @@ export class Animator {
         pitch = lerp(40, -14, sstep(0, 0.9, k2)) * wRun;
       }
       feet[side] = { along, lift, pitch, sg };
+      const inStance = u < beta;
+      const key = 'st' + side;
+      if (inStance && !this[key] && speed > 3 && this.onFootPlant) this.onFootPlant(side, speed);
+      this[key] = inStance;
     }
     // pelvis/torso motion from the stride
     const stride = Ls > 1e-3 ? (feet.L.along - feet.R.along) / Ls : 0; // + when L foot ahead
-    const lean = (3 + 9 * wFast) * Math.max(0, fwdness) - 4 * wFast * Math.max(0, -fwdness) + clamp(this.az * 1.4, -8, 10) * wRun;
-    const bank = clamp(-this.ax * 1.2, -8, 8) * wRun;
-    setE(P, B.hips, lean * 0.25, hipYawD - 9 * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * Math.sin(2 * Math.PI * this.phase) * wRun);
+    const leanT = ((3 + 9 * wFast) * Math.max(0, fwdness) - 4 * wFast * Math.max(0, -fwdness)) * st.lean + clamp(this.az * 1.4, -8, 10) * wRun;
+    const bankT = clamp(-this.ax * 1.2 + this.yawRate * 3.2 * Math.min(1, speed / 3), -14, 14) * wRun;
+    // under-damped springs: the torso overshoots a little when you stop or cut, then settles
+    const lean = spring(this.sLean, leanT, 70, st.settle, dt);
+    const bank = spring(this.sBank, bankT, 60, st.settle + 0.1, dt);
+    // idle: slow weight shift between the feet, occasional glance around
+    const idleW = 1 - wRun;
+    const shift = Math.sin(this.t * 0.55) * idleW;
+    P.hip[0] += shift * 0.018;
+    const glance = (Math.sin(this.t * 0.31) * 0.6 + Math.sin(this.t * 0.83 + 1) * 0.4) * idleW;
+    setE(P, B.hips, lean * 0.25, hipYawD - 9 * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * Math.sin(2 * Math.PI * this.phase) * wRun - shift * 2.5);
     const counter = -hipYawD + 9 * stride * wRun;
     setE(P, B.spine, 2 + lean * 0.45, counter * 0.35, bank * 0.3);
     setE(P, B.chest, lean * 0.25, counter * 0.35 + 6 * stride * wRun, 0);
     setE(P, B.upperChest, 0, counter * 0.2, 0);
     setE(P, B.neck, -lean * 0.4, counter * 0.06, -bank * 0.3);
-    setE(P, B.head, -lean * 0.35, counter * 0.04, -bank * 0.4);
+    setE(P, B.head, -lean * 0.35, counter * 0.04 + glance * 14 + this.yawRate * 4 * wRun, -bank * 0.4 + shift * 2);
 
     // arms: counter-swing to the legs; idle = guard stance with the casting hand raised
-    const swingAmt = (34 + 14 * wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness));
+    const swingAmt = (34 + 14 * wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness)) * st.swing;
+    // arms drag behind sharp turns / strafes, then swing back through
+    const drag = spring(this.sArm, this.yawRate * 5 - this.ax * 0.8, 45, 0.38, dt);
     for (const side of ['L', 'R']) {
       const sg = side === 'L' ? 1 : -1;
-      const sw = (Ls > 1e-3 ? feet[side].along / (Ls * 0.5) : 0) * swingAmt * 0.5;
+      const sw = (Ls > 1e-3 ? feet[side].along / (Ls * 0.5) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
       const idleX = side === 'R' ? -14 : -8, idleZ = side === 'R' ? 16 : 11, idleE = side === 'R' ? -72 : -36;
       const ax = lerp(idleX, 8 + sw, wRun);
       const az = lerp(idleZ, 10 + 4 * wFast, wRun);
@@ -263,6 +368,7 @@ export class Animator {
       setS(P, B['foreArm' + side], sg, ex, -10 * wRun, 0);
       setS(P, B['hand' + side], sg, -6, 0, -4);
       setS(P, B['shoulder' + side], sg, 0, 0, -2 * wFast);
+      addE(P, B['upperArm' + side], 0, 0, -clamp(drag, -16, 16));
     }
 
     // ---- feet targets (root space)
@@ -270,7 +376,8 @@ export class Animator {
     const tgt = {};
     for (const side of ['L', 'R']) {
       const f = feet[side];
-      const width = lerp(0.135, 0.12, wFast);
+      const hw = Math.max(0.085, Math.abs(rig.legs.L.hipOff.x) + 0.008);
+      const width = lerp(hw, hw * 0.9, wFast);
       // base under the hip, turned with the pelvis
       const bx = f.sg * width * cyaw, bz = -f.sg * width * syaw;
       tgt[side] = tmpV.set(bx + mx * f.along, ankleH + f.lift, bz + mz * f.along).clone();
@@ -306,7 +413,8 @@ export class Animator {
     const toWorld = (x, z, out) => out.set(s.pos.x + x * cy + z * sy, s.pos.y, s.pos.z - x * sy + z * cy);
     const toLocal = (w, out) => { const dx = w.x - s.pos.x, dz = w.z - s.pos.z; return out.set(dx * cy - dz * sy, 0, dx * sy + dz * cy); };
     // rest stance (combat: left foot a touch forward)
-    const rest = { L: [0.15, 0.07, 9], R: [-0.15, -0.07, -12] };
+    const hw = Math.max(0.09, Math.abs(this.rig.legs.L.hipOff.x) + 0.025);
+    const rest = { L: [hw, 0.07, 9], R: [-hw, -0.07, -12] };
     if (this.lobby) { rest.L = [0.13, 0.03, 8]; rest.R = [-0.13, -0.02, -8]; }
     const ankleH = this.rig.ankleHeight;
     for (const side of ['L', 'R']) {
@@ -377,6 +485,38 @@ export class Animator {
     addE(P, B.upperArmL, flail, 0, 0); addE(P, B.upperArmR, -flail, 0, 0);
     setE(P, B.hips, 8 * fwd, this.hipYaw * R2D * 0.5, 0);
     P.hip[1] = 0.02;
+    const kk = this.jumpKick || 0;
+    if (kk > 0) { addE(P, B.upperArmL, -40 * kk, 0, 10 * kk); addE(P, B.upperArmR, -40 * kk, 0, -10 * kk); addE(P, B.spine, -6 * kk, 0, 0); }
+    // tuck at the apex (|vy| small) for a floatier read
+    const apex = Math.max(0, 1 - Math.abs(vy) / 3);
+    addE(P, B.upperLegL, -10 * apex, 0, 0); addE(P, B.lowerLegL, 14 * apex, 0, 0);
+  }
+
+  _stabilizeStaff(out, actionW) {
+    // canonical world rotation of the right hand = product down the chain
+    const chain = [B.hips, B.spine, B.chest, B.upperChest, B.shoulderR, B.upperArmR, B.foreArmR, B.handR];
+    const w = this._sq || (this._sq = new THREE.Quaternion());
+    const t = this._sq2 || (this._sq2 = new THREE.Quaternion());
+    w.identity();
+    for (const i of chain) w.multiply(getQ(out, i, t));
+    // desired: upright, leaning a little with speed
+    const lean = Math.min(1, this.speed / RUN_SPEED);
+    const d = this._sq3 || (this._sq3 = new THREE.Quaternion());
+    d.setFromEuler(this._se || (this._se = new THREE.Euler(lean * 0.35 + Math.sin(this.t * 1.3) * 0.03, 0, -0.08)));
+    w.invert().multiply(d);
+    getQ(out, B.propR, t);
+    w.slerp(t, actionW);
+    putQ(out, B.propR, w);
+  }
+
+  _cape(dt, out, s) {
+    // damped spring: swings back with forward speed and upward motion, flutters a little
+    const fwd = Math.max(0, this.vz);
+    const target = Math.min(55, fwd * 5.5 + Math.max(0, -this.vy) * 2.2 + (this.airW > 0.5 ? 8 : 0));
+    this.capeV = (this.capeV || 0) + ((target - (this.capeA || 0)) * 60 - this.capeV * 9) * dt;
+    this.capeA = (this.capeA || 0) + this.capeV * dt;
+    const flutter = Math.sin(this.t * 7.3) * (2 + fwd * 0.6) + Math.sin(this.t * 2.1) * 2;
+    addE(out, B.cape, this.capeA + flutter, Math.sin(this.t * 1.7) * 3, -this.vx * 1.5);
   }
 
   // clip IK (legs planted during slams / crouches)

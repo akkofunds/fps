@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
-import { Fx } from '../fx/fire.js';
-import { PYRO } from '../game/pyro.js';
+import { Fx } from '../fx/arcane.js';
+import { mageOf } from '../game/mages.js';
 
 // Lobby showcase: Pyro stands on the lake shore of Sunvale at golden hour, framed so he
 // appears inside the center party card. Drag the card to turn him around.
@@ -25,16 +25,27 @@ export class LobbyScene {
     this.scene = map.scene;
     const P = this.P;
     P.y = map.world.groundAt(P.x, P.z, 50);
-    this.fx = new Fx(this.scene, map.world, 1);
-    const tmpl = await loadMageModel(PYRO.model);
-    this.inst = new MageInstance(tmpl, { lobby: true, groundAt: (x, z) => map.world.groundAt(x, z, 50) });
-    this.inst.root.position.copy(P);
-    this.scene.add(this.inst.root);
+    this.fx = new Fx(this.scene, map.world, map.Q.lights > 1 ? 1 : 0, 1500);
+    await this.setMage(this.app.settings.mage || 'pyro');
     // face the camera
     this.baseYaw = Math.atan2(-this.lakeDir.x, -this.lakeDir.z);
     this.yaw = this.baseYaw + 0.35;
     this.ready = true;
     this._layout();
+  }
+
+  async setMage(id) {
+    const md = mageOf(id);
+    this.mageId = md.id;
+    const tmpl = await loadMageModel(md.model);
+    if (this.mageId !== md.id) return; // a newer pick won
+    const vis = this.inst ? this.inst.root.visible : true;
+    if (this.inst) this.scene.remove(this.inst.root);
+    this.inst = new MageInstance(tmpl, { lobby: true, outlines: this.map.Q.outlines, groundAt: (x, z) => this.map.world.groundAt(x, z, 50) });
+    this.inst.root.position.copy(this.P);
+    this.inst.root.visible = vis;
+    this.scene.add(this.inst.root);
+    this.fx.spawnPillar(this.P);
   }
 
   setActive(on) {
@@ -79,8 +90,11 @@ export class LobbyScene {
     const a = this.inst.anim;
     a.update(dt, { pos: this.inst.root.position, yaw: this.yaw, pitch: 0.05, vel: new THREE.Vector3(), grounded: true });
     this.inst.root.rotation.y = this.yaw;
-    this.fx.palmFlame(this.inst.palmWorld('R', new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0)), 1.3);
-    if (Math.random() < 0.06) this.fx.light(this.inst.palmWorld('R', new THREE.Vector3()), 3, 3, 0.4);
+    if (this.mageId === 'meteora') { if (Math.random() < 0.6) this.fx.staffGlow(this.inst.staffTip(new THREE.Vector3())); }
+    else {
+      this.fx.palmFlame(this.inst.palmWorld('R', new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0)), 1.3);
+      if (Math.random() < 0.06) this.fx.light(this.inst.palmWorld('R', new THREE.Vector3()), 3, 3, 0.4);
+    }
     this.fx.update(dt, this.camera, this.h);
     this.map.update(dt, this.camera, this.P, [this.P]);
   }

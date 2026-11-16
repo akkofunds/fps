@@ -157,13 +157,12 @@ export class CollisionWorld {
     }
     if (!skipTerrain) {
       // terrain march + bisection
-      const step = 0.5;
       let t = 0, prevT = 0;
       let prevAbove = oy - groundH(ox, oz) > pad;
       if (!prevAbove) { best = 0; nrmX = 0; nrmY = 1; nrmZ = 0; }
       else {
         while (t < best) {
-          t = Math.min(best, t + step);
+          t = Math.min(best, t + Math.max(0.5, t * 0.035)); // coarser far away (terrain is smooth)
           const y = oy + dy * t, x = ox + dx * t, z = oz + dz * t;
           if (y - groundH(x, z) <= pad) {
             let lo = prevT, hi = t;

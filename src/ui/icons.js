@@ -17,4 +17,9 @@ export const ICONS = {
   wind: '<svg viewBox="0 0 24 24"><path d="M3 8h11a3 3 0 1 0-3-3h2a1 1 0 1 1 1 1H3zm0 4h15a3 3 0 1 1-3 3h2a1 1 0 1 0 1-1H3zm0 4h7v2H3z"/></svg>',
   frost: '<svg viewBox="0 0 24 24"><path d="M11 2h2v5l3-2 1 1.7-4 2.3v2h2l2.3-4L19 8l-2 3h5v2h-5l2 3-1.7 1-2.3-4h-2v2l4 2.3-1 1.7-3-2v5h-2v-5l-3 2-1-1.7 4-2.3v-2H9l-2.3 4L5 16l2-3H2v-2h5L5 8l1.7-1L9 11h2V9L7 6.7 8 5l3 2z"/></svg>',
 };
-export const ABILITY_ICON = { bolt: ICONS.bolt, dash: ICONS.dash, orb: ICONS.orb, wall: ICONS.wall, leap: ICONS.leap, meteor: ICONS.meteor, burn: ICONS.burn };
+ICONS.spark = '<svg viewBox="0 0 24 24"><path d="M3 21l7.5-7.5"/><path d="M2.3 20.3l8-8 1.4 1.4-8 8z"/><circle cx="16" cy="8" r="4.5"/><path d="M16 1l1 3h-2zM23 8l-3 1V7zM16 15l-1-3h2zM9 8l3-1v2z"/></svg>';
+ICONS.starfall = '<svg viewBox="0 0 24 24"><path d="M15 2l1.6 3.6 3.9.4-2.9 2.6.8 3.8L15 10.5l-3.4 1.9.8-3.8L9.5 6l3.9-.4z"/><path d="M10.5 12.5L3 20l1.2 1.2 7.5-7.5zM8 10L2.5 15.5l1 1L9 11zM14 14l-5.5 5.5 1 1L15 15z"/></svg>';
+ICONS.sigil = '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 1.8a8.2 8.2 0 1 1 0 16.4 8.2 8.2 0 0 1 0-16.4z"/><path d="M12 4.5l2.2 6.6h6.3l-5.1 3.7 1.9 6-5.3-3.9-5.3 3.9 1.9-6-5.1-3.7h6.3zm0 4.4l-1 3.2H7.7l2.7 1.9-1 3 2.6-1.9 2.6 1.9-1-3 2.7-1.9h-3.3z"/></svg>';
+ICONS.blink = '<svg viewBox="0 0 24 24"><path d="M3 12a3 3 0 1 0 6 0 3 3 0 0 0-6 0zM10 11h3v2h-3zM14.5 11h2.5v2h-2.5z"/><path d="M18 7l5 5-5 5v-3.5h-1v-3h1z"/></svg>';
+ICONS.nova = '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="7" ry="2" fill="none" stroke="currentColor" stroke-width="1.6"/><ellipse cx="12" cy="9" rx="9" ry="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 11c5 0 8 3 8 6.5S16.5 23 12 23s-8-2-8-5.5S7 11 12 11z"/><path d="M11 10h2v3h-2z"/></svg>';
+export const ABILITY_ICON = { bolt: ICONS.bolt, dash: ICONS.dash, orb: ICONS.orb, wall: ICONS.wall, leap: ICONS.leap, meteor: ICONS.meteor, burn: ICONS.burn, spark: ICONS.spark, starfall: ICONS.starfall, sigil: ICONS.sigil, blink: ICONS.blink, nova: ICONS.nova };

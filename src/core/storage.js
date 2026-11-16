@@ -24,6 +24,8 @@ export const DEFAULT_SETTINGS = {
   shoulder: 1, // 1 = right shoulder, -1 = left
   crosshairColor: '#ffffff',
   invertY: false,
+  mage: 'pyro',
+  renderScale: 0, // 0 = auto (device pixel ratio)
 };
 export function loadSettings() { return { ...DEFAULT_SETTINGS, ...(read(KEY_SET) || {}) }; }
 export function saveSettings(s) { write(KEY_SET, s); }

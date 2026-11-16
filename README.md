@@ -22,9 +22,44 @@ peer-to-peer multiplayer, a Valorant-style lobby, and a golden-hour meadow map. 
 Other controls: `WASD` to move, `Space` to jump, `RMB` to focus aim, `Tab` for the scoreboard, `Enter` for chat
 and `Esc` for the menu. To invite friends, type their `Name#1234` tag in the sidebar.
 
+## Meteora — Crimson Archmage
+| Key | Ability | What it does |
+| --- | --- | --- |
+| `LMB` | Crimson Spark | Staff bolt that bursts on impact (16 damage + 10 splash) |
+| `Q` | Flare Step | Same dash as everyone (2 charges, air dash → landing roll) |
+| `E` | Starfall | A small star falls on the targeted spot after a short delay (8 s cooldown) |
+| `C` | Blast Sigil | Explosive rune trap on the ground, up to 2 at a time (11 s cooldown) |
+| `V` | Blink | Teleport up to 10 m, leaving an explosion behind you (9 s cooldown) |
+| `X` | Crimson Nova (ultimate) | A 2.35 s chant stacks five magic circles over the target, then a colossal blast deals 400 → 160 damage across 18 m, ignoring cover. Afterwards she collapses for 3.3 s and can't act |
+
+## Mobile
+Touch devices get a floating joystick (left side), drag-to-aim (right side; dragging from the fire button
+also aims), buttons for every ability, and a compact lobby with a party/friends drawer. Play in landscape.
+
+## Admin (`/admin`)
+The admin panel is built into the normal client: open `yoursite/admin`, then enter the admin code and
+answer the security question. It has a balance editor (HP, speed, gravity, damage, cooldowns, ult charge,
+respawn, no-cooldowns/infinite-ult/god-mode cheats) that applies only to Custom and Practice lobbies you
+host, an animation viewer, an FPS/draw-call meter, a custom PeerJS server setting, and data tools.
+**This check runs in the browser, so it is not real security.** Anyone who reads the JavaScript can find the
+code and the answer. It only keeps casual visitors out.
+
+## Graphics & performance
+Every preset uses **dynamic resolution**: the game measures its frame rate and lowers or raises the render
+resolution to hold 60 FPS. You can turn this off in Settings.
+- **Low** is tuned for Chromebooks such as the Lenovo 500e: no shadows or post-processing, a coarse terrain
+  mesh, a short grass draw distance, low-poly character LODs, no outlines, a capped particle size and 1
+  dynamic light.
+- **Medium** and **High** add shadows, bloom, colour grading and MSAA.
+- **Ultra** adds supersampling (up to 4K on a 1080p screen), ambient occlusion and 4096 px shadows.
+
+On every preset, grass, flower and bush chunks are culled by distance, and characters past 30 m switch to
+meshoptimizer-simplified meshes. Distant or off-screen characters also animate at a lower rate.
+
 ## Animation
-Pyro's model came as a static mesh. `tools/characters/rig_pyro.py` auto-rigs it with 22 bones and per-part
-skin weights. It also removes the fire aura and slims the baggy outfit. At runtime:
+Both models came as static meshes. `tools/characters/rig_pyro.py` auto-rigs Pyro (22 bones, per-part
+weights, fire aura removed, outfit slimmed). `tools/characters/rig_meteora.py` rigs Meteora from a mid-air pose
+using geodesic (surface-distance) skin weights, a staff bone and a cape bone. At runtime:
 - **Locomotion is procedural and phase-synced.** Each foot follows a stance/swing path whose stance slides
   back at exactly the body's speed, so feet never skate, in any direction. Two-bone IK plants the feet on
   the terrain. When you stand still, the feet stay locked in place and step when you turn.

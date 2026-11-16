@@ -3,20 +3,46 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { Rig, B } from './rig.js';
 import { Animator } from './animator.js';
+import { MeshoptSimplifier } from 'meshoptimizer/meshopt_simplifier.module.js';
 
 // Loads a rigged mage GLB once and hands out independent instances (own skeleton + animator).
 const cache = new Map();
 
 export function loadMageModel(url) {
+  if (!/^(\/|https?:)/.test(url)) url = (import.meta.env.BASE_URL || '/') + url;
   if (!cache.has(url)) {
     cache.set(url, new Promise((resolve, reject) => {
-      new GLTFLoader().load(url, (g) => {
+      new GLTFLoader().load(url, async (g) => {
         prepareMaterials(g.scene);
+        try { await buildLods(g.scene); } catch (e) { console.warn('LOD build failed', e); }
         resolve(g.scene);
       }, undefined, reject);
     }));
   }
   return cache.get(url);
+}
+
+// Low-poly LOD per mesh (meshoptimizer keeps the original vertices, only the index buffer changes,
+// so skinning attributes stay valid). Shared by every instance; swapped in by distance / on Low.
+const LOD = new WeakMap();
+async function buildLods(root) {
+  await MeshoptSimplifier.ready;
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry.index) return;
+    const g = o.geometry;
+    const idx = new Uint32Array(g.index.array);
+    if (idx.length < 3000) return;
+    const pos = g.attributes.position;
+    const P = pos.array instanceof Float32Array && pos.itemSize === 3 && !pos.isInterleavedBufferAttribute ? pos.array : Float32Array.from({ length: pos.count * 3 }, (_, i) => pos.getComponent(Math.floor(i / 3), i % 3));
+    const ratio = /hair|outline|stroke/i.test(o.name) ? 0.22 : 0.3;
+    const [lo] = MeshoptSimplifier.simplify(idx, P, 3, Math.floor((idx.length * ratio) / 3) * 3, 0.03, ['LockBorder']);
+    if (!lo.length || lo.length > idx.length * 0.85) return;
+    const lg = new THREE.BufferGeometry();
+    for (const [k, v] of Object.entries(g.attributes)) lg.setAttribute(k, v);
+    lg.setIndex(new THREE.BufferAttribute(lo, 1));
+    lg.boundingSphere = g.boundingSphere; lg.boundingBox = g.boundingBox;
+    LOD.set(g, lg);
+  });
 }
 
 function prepareMaterials(root) {
@@ -31,15 +57,29 @@ function prepareMaterials(root) {
     } else {
       // painted anime textures: mostly self-lit, with a touch of scene light so they sit in the world
       const map = m.map;
-      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4; }
+      if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 16; map.generateMipmaps = true; map.minFilter = THREE.LinearMipmapLinearFilter; }
       o.material = new THREE.MeshLambertMaterial({
         map, emissiveMap: map, emissive: new THREE.Color(0.62, 0.6, 0.6), side: THREE.DoubleSide,
       });
       o.material.name = m.name;
+      rimLight(o.material);
       o.castShadow = true;
     }
     o.frustumCulled = false;
   });
+}
+
+// anime-style rim light: a warm fresnel edge that separates characters from the background
+function rimLight(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float rimF = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 3.0);
+        totalEmissiveRadiance += uRim * rimF;`);
+    sh.uniforms.uRim = { value: new THREE.Color(0.55, 0.42, 0.32) };
+  };
+  mat.customProgramCacheKey = () => 'mage-rim';
 }
 
 export class MageInstance {
@@ -50,7 +90,10 @@ export class MageInstance {
     this.rig = new Rig(this.model);
     this.anim = new Animator(this.rig, opts);
     this.meshes = [];
-    this.model.traverse((o) => { if (o.isMesh) { this.meshes.push(o); o.receiveShadow = false; } });
+    this.model.traverse((o) => { if (o.isMesh) { this.meshes.push(o); o.receiveShadow = false; if (o.userData.outline && opts.outlines === false) o.visible = false; } });
+    this.baseGeo = this.meshes.map((m) => m.geometry);
+    this.lod = false;
+    if (opts.lowPoly) this.setLod(true);
     this.handR = this.rig.bones[B.handR];
     this.handL = this.rig.bones[B.handL];
     this.head = this.rig.bones[B.head];
@@ -67,10 +110,28 @@ export class MageInstance {
 
   setVisible(v) { this.root.visible = v; }
 
+  // swap to the simplified meshes (far away, or always on Low)
+  setLod(on) {
+    if (on === this.lod) return;
+    this.lod = on;
+    this.meshes.forEach((m, i) => { const b = this.baseGeo[i]; m.geometry = on ? (LOD.get(b) || b) : b; });
+  }
+
   // own (non-shared) materials so per-player flashes don't leak
   uniqueMaterials() {
-    for (const m of this.meshes) m.material = m.material.clone();
+    for (const m of this.meshes) {
+      const src = m.material;
+      m.material = src.clone();
+      m.material.onBeforeCompile = src.onBeforeCompile;
+      m.material.customProgramCacheKey = src.customProgramCacheKey;
+    }
     return this;
+  }
+
+  // tip of the staff (orb end) — falls back to the right palm for mages without a staff
+  staffTip(out) {
+    if (!this.rig.hasProp || !this.rig.ends.prop) return this.palmWorld('R', out);
+    return this.rig.ends.prop.getWorldPosition(out);
   }
 
   handWorld(side, out) { return (side === 'L' ? this.handL : this.handR).getWorldPosition(out); }

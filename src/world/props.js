@@ -3,6 +3,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { groundH, PLAZA, HILL, LAKE, PLAY_RADIUS, pathDist, terrainNoise as N } from './terrain.js';
 import { mulberry32 } from './noise.js';
 import { windPatch } from './vegetation.js';
+import { stylize } from './stylize.js';
+import { VILLAGE_FOOTPRINTS } from './village.js';
 
 // Ruins (stone plaza, broken pillars, watchtower, arches, walls), trees, rocks and logs.
 // Everything is merged / instanced and registers simple colliders in the CollisionWorld.
@@ -96,13 +98,14 @@ class Builder {
   finish() {
     const g = mergeGeometries(this.stone, false);
     g.computeVertexNormals();
-    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: stoneTexture() }));
+    const m = new THREE.Mesh(g, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, map: stoneTexture() }), { wrap: 0.3, band: 0.14 }));
     m.castShadow = true; m.receiveShadow = true; m.name = 'ruins';
     return m;
   }
 }
 
 // ---------------------------------------------------------------- trees
+let LEAF_DETAIL = 2;
 function oakGeometry(seed) {
   const r = mulberry32(seed);
   const trunk = [], leaves = [];
@@ -117,7 +120,7 @@ function oakGeometry(seed) {
   for (let i = 0; i < blobs; i++) {
     const a = (i / blobs) * 6.28 + r(), d = i === 0 ? 0 : 1.1 + r() * 0.9;
     const s = i === 0 ? 2.0 : 1.2 + r() * 0.7;
-    const lg = jitter(new THREE.IcosahedronGeometry(s, 1), 0.35, seed + i);
+    const lg = jitter(new THREE.IcosahedronGeometry(s, LEAF_DETAIL), 0.28, seed + i);
     lg.scale(1, 0.78, 1);
     lg.translate(Math.cos(a) * d, 3.9 + r() * 1.3 + (i === 0 ? 0.9 : 0), Math.sin(a) * d);
     leaves.push(lg);
@@ -161,11 +164,29 @@ function treeColors(def, kind) {
     c.multiplyScalar(0.9 + N.n2(x * 1.5 + y, z * 1.5) * 0.14);
   });
   def.trunk.computeVertexNormals(); def.leaves.computeVertexNormals();
+  canopyNormals(def.leaves, kind === 'pine' ? 0.35 : 0.72);
   return def;
 }
 
+// "fluffy" stylized canopies: bend the faceted leaf normals toward the direction from the canopy
+// center, so each tree shades like one soft, round volume (light side / shadow side) instead of a
+// pile of facets. Pines keep more of their own normals so the tiers still read.
+function canopyNormals(g, k) {
+  g.computeBoundingBox();
+  const c = g.boundingBox.getCenter(new THREE.Vector3());
+  const ext = g.boundingBox.getSize(new THREE.Vector3());
+  const p = g.attributes.position, n = g.attributes.normal, v = new THREE.Vector3(), f = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.set((p.getX(i) - c.x) / ext.x, (p.getY(i) - c.y) / ext.y * 0.8 + 0.12, (p.getZ(i) - c.z) / ext.z).normalize();
+    f.set(n.getX(i), n.getY(i), n.getZ(i));
+    f.lerp(v, k).normalize();
+    n.setXYZ(i, f.x, f.y, f.z);
+  }
+  n.needsUpdate = true;
+}
+
 function leafMaterial() {
-  const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
   // canopy sway: scale the wind by height (position.y in tree space, ~0-9 m)
   m.onBeforeCompile = (sh) => {
     const parent = windPatch;
@@ -193,7 +214,7 @@ function rockGeometry(seed) {
   g.scale(1, 0.62, 0.85);
   const ng = ni(g);
   colorize(ng, (x, y, z, c) => {
-    c.setRGB(0.5, 0.5, 0.47).multiplyScalar(0.82 + N.n2(x * 2 + seed, z * 2) * 0.18);
+    c.setRGB(0.56, 0.52, 0.45).multiplyScalar(0.82 + N.n2(x * 2 + seed, z * 2) * 0.18);
     if (y > 0.25 + N.n2(x * 3, z * 3) * 0.2) c.lerp(new THREE.Color(0.33, 0.47, 0.17), 0.65);
   });
   ng.computeVertexNormals();
@@ -201,7 +222,8 @@ function rockGeometry(seed) {
 }
 
 // ---------------------------------------------------------------- assemble
-export function buildProps(world, quality = 'high') {
+export function buildProps(world, quality = 'high', Q = {}) {
+  LEAF_DETAIL = Q.leafDetail || 2;
   const root = new THREE.Group(); root.name = 'props';
   const B = new Builder(world);
   const plazaY = groundH(0, 0);
@@ -276,6 +298,7 @@ export function buildProps(world, quality = 'high') {
     }
   }
   const ruins = B.finish();
+  B.avoid.push(...VILLAGE_FOOTPRINTS);
   root.add(ruins);
 
   // ---------------- trees
@@ -286,8 +309,8 @@ export function buildProps(world, quality = 'high') {
   const kinds = { oak: [oakGeometry(11), oakGeometry(23)], pine: [pineGeometry(5), pineGeometry(8)], birch: [birchGeometry(3)] };
   for (const [k, defs] of Object.entries(kinds)) defs.forEach((d) => treeColors(d, k));
   const placements = [];
-  const trunkMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  const leafMat = leafMaterial();
+  const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 });
+  const leafMat = stylize(leafMaterial(), { wrap: 0.55, translucency: 0.25, band: 0.16 });
   const tryTree = (x, z, kind, scale, collide) => {
     if (Math.hypot(x, z) < PLAZA.r + 3) return false;
     if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 1.5) return false;
@@ -314,7 +337,7 @@ export function buildProps(world, quality = 'high') {
     if (tryTree(Math.cos(a) * r, Math.sin(a) * r, rnd() < 0.6 ? 'oak' : 'birch', R(0.8, 1.2), true)) i++;
   }
   // forest on the surrounding hills (scenery)
-  const scenery = quality === 'low' ? 160 : quality === 'medium' ? 280 : 420;
+  const scenery = Q.scenery || 300;
   for (let i = 0, t = 0; i < scenery && t < scenery * 8; t++) {
     const a = rnd() * 6.28, r = R(PLAY_RADIUS + 2, 230);
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
@@ -322,22 +345,27 @@ export function buildProps(world, quality = 'high') {
     if (tryTree(x, z, rnd() < 0.55 ? 'pine' : rnd() < 0.7 ? 'oak' : 'birch', R(1.0, 1.6), r < PLAY_RADIUS + 12)) i++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+  // arena trees cast shadows; the forest on the surrounding hills doesn't (it's outside the shadow
+  // camera anyway, but splitting them keeps the shadow pass from even considering them)
   for (const [kind, defs] of Object.entries(kinds)) defs.forEach((def, v) => {
-    const list = placements.filter((p) => p.kind === kind && p.v === v);
-    if (!list.length) return;
-    const tm = new THREE.InstancedMesh(def.trunk, trunkMat, list.length);
-    const lm = new THREE.InstancedMesh(def.leaves, leafMat, list.length);
-    list.forEach((p, i) => {
-      q.setFromAxisAngle(up, p.rot);
-      m4.compose(new THREE.Vector3(p.x, groundH(p.x, p.z) - 0.15, p.z), q, new THREE.Vector3(p.scale, p.scale * R(0.9, 1.15), p.scale));
-      tm.setMatrixAt(i, m4); lm.setMatrixAt(i, m4);
-    });
-    for (const m of [tm, lm]) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); root.add(m); }
+    const all = placements.filter((p) => p.kind === kind && p.v === v);
+    for (const near of [true, false]) {
+      const list = all.filter((p) => (Math.hypot(p.x, p.z) < PLAY_RADIUS + 14) === near);
+      if (!list.length) continue;
+      const tm = new THREE.InstancedMesh(def.trunk, trunkMat, list.length);
+      const lm = new THREE.InstancedMesh(def.leaves, leafMat, list.length);
+      list.forEach((p, i) => {
+        q.setFromAxisAngle(up, p.rot);
+        m4.compose(new THREE.Vector3(p.x, groundH(p.x, p.z) - 0.15, p.z), q, new THREE.Vector3(p.scale, p.scale * R(0.9, 1.15), p.scale));
+        tm.setMatrixAt(i, m4); lm.setMatrixAt(i, m4);
+      });
+      for (const m of [tm, lm]) { m.castShadow = near; m.receiveShadow = near; m.computeBoundingSphere(); root.add(m); }
+    }
   });
 
   // ---------------- rocks
   const rockDefs = [rockGeometry(1), rockGeometry(2), rockGeometry(3)];
-  const rockMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const rockMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.3, band: 0.12 });
   const rocks = rockDefs.map(() => []);
   const addRock = (x, z, s, collide) => {
     if (Math.hypot(x, z) < PLAZA.r + 1.5 || avoidFn(x, z) || pathDist(x, z) < 1.5) return;
@@ -373,10 +401,15 @@ export function buildProps(world, quality = 'high') {
     B.avoid.push({ x, z, r: len * 0.5 });
   }
   const lg = mergeGeometries(logGeo); lg.computeVertexNormals();
-  const logMesh = new THREE.Mesh(lg, new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  const logMesh = new THREE.Mesh(lg, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 }));
   logMesh.castShadow = true; logMesh.receiveShadow = true;
   root.add(logMesh);
 
   root.userData.avoid = avoidFn;
+  // anchors for undergrowth: trees inside/near the arena, rocks and ruin walls
+  root.userData.anchors = [
+    ...placements.filter((p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 25).map((p) => ({ x: p.x, z: p.z })),
+    ...rocks.flat().filter((p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 10).map((p) => ({ x: p.x, z: p.z })),
+  ];
   return root;
 }

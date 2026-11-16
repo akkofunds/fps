@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: './',
+  // absolute base so /admin (served by the same client) resolves assets; VITE_BASE=./ for sub-path hosts
+  base: process.env.VITE_BASE || '/',
   build: {
     target: 'es2019',
     outDir: 'dist',

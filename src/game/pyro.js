@@ -1,3 +1,4 @@
+import { BAL, ADMIN } from './balance.js';
 import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ } from './projectiles.js';
@@ -21,12 +22,16 @@ export const PYRO = {
 };
 
 const COOLDOWN = { bolt: 0.3, orb: 7, wall: 15, leap: 10 };
+// bolt-type fire rates are not shortened below 60% even with admin cooldown tweaks
+const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
 export class PyroKit {
   constructor(match) {
     this.m = match;
+    this.def = PYRO;
     this.cd = { bolt: 0, orb: 0, wall: 0, leap: 0 };
+    this.max = { orb: 7, wall: 15, leap: 10 };
     this.ult = 0;
     this.side = 1; // alternating punch hand
     this.pending = [];
@@ -35,6 +40,7 @@ export class PyroKit {
   }
 
   reset() { this.cd = { bolt: 0, orb: 0, wall: 0, leap: 0 }; this.pending.length = 0; this.busy = 0; }
+  slots() { return [['orb', 'E'], ['wall', 'C'], ['leap', 'V'], ['meteor', 'X']]; }
   addUlt(v) {
     this.ult = Math.min(ULT_COST, this.ult + v);
     if (this.ult >= ULT_COST && !this.ultReadyAnnounced) { this.ultReadyAnnounced = true; this.m.onUltReady(); }
@@ -44,7 +50,8 @@ export class PyroKit {
     const m = this.m;
     for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
     this.busy = Math.max(0, this.busy - dt);
-    this.addUlt(dt * 0.35);
+    this.addUlt(dt * 0.35 * BAL.ult);
+    if (BAL.infiniteUlt || ADMIN.ult) this.ult = Math.max(this.ult, 100);
     for (let i = this.pending.length - 1; i >= 0; i--) {
       const p = this.pending[i];
       p.t -= dt;
@@ -61,7 +68,7 @@ export class PyroKit {
 
   _ready(id) {
     if (this.busy > 0) { return false; }
-    if (this.cd[id] > 0) { if (id !== 'bolt') this.m.hud.denied(id); return false; }
+    if (this.cd[id] > 0) { if (id !== 'bolt') this.m.app.hud.denied(id); return false; }
     return true;
   }
 
@@ -77,7 +84,7 @@ export class PyroKit {
   bolt() {
     if (!this._ready('bolt')) return;
     const m = this.m;
-    this.cd.bolt = COOLDOWN.bolt;
+    this.cd.bolt = cdOf(COOLDOWN.bolt);
     const side = this.side > 0 ? 'R' : 'L';
     this.side = -this.side;
     m.playAnim('cast', { anim: side === 'R' ? 'boltR' : 'boltL' });
@@ -96,7 +103,7 @@ export class PyroKit {
   orb() {
     if (!this._ready('orb')) return;
     const m = this.m;
-    this.cd.orb = COOLDOWN.orb; this.busy = 0.3;
+    this.cd.orb = cdOf(COOLDOWN.orb); this.busy = 0.3;
     m.playAnim('cast', { anim: 'orb' });
     m.sound('orb', m.local.pos, 0.8, 30);
     this.pending.push({ t: 0.24, fn: () => {
@@ -124,7 +131,7 @@ export class PyroKit {
     const dist = Math.max(3, Math.min(16, d));
     const cx = me.x + tmp.x * dist, cz = me.z + tmp.z * dist;
     const rot = Math.atan2(tmp.x, tmp.z); // wall runs perpendicular to the throw direction
-    this.cd.wall = COOLDOWN.wall; this.busy = 0.55;
+    this.cd.wall = cdOf(COOLDOWN.wall); this.busy = 0.55;
     m.body.locked = 0.42;
     m.playAnim('slam');
     this.pending.push({ t: 0.28, fn: () => {
@@ -137,7 +144,7 @@ export class PyroKit {
   leap() {
     if (!this._ready('leap')) return;
     const m = this.m;
-    this.cd.leap = COOLDOWN.leap; this.busy = 0.25;
+    this.cd.leap = cdOf(COOLDOWN.leap); this.busy = 0.25;
     m.playAnim('leap');
     this.pending.push({ t: 0.1, fn: () => {
       const b = m.body;
@@ -154,7 +161,7 @@ export class PyroKit {
 
   meteor() {
     const m = this.m;
-    if (this.ult < 100) { m.hud.denied('meteor'); return; }
+    if (this.ult < 100) { m.app.hud.denied('meteor'); return; }
     if (this.busy > 0) return;
     // target: crosshair point on the ground, up to 55 m away
     const me = m.local.pos;

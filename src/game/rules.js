@@ -1,8 +1,9 @@
-import { MAX_HP, REGEN_DELAY, REGEN_RATE, MODES } from '../config.js';
+import { REGEN_DELAY, REGEN_RATE, MODES } from '../config.js';
+import { BAL } from './balance.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100 };
+const MAX_HIT = { bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, spark: 30, starfall: 60, sigil: 70, blink: 35, nova: 400 };
 
 export class Rules {
   constructor(match) {
@@ -80,7 +81,8 @@ export class Rules {
     if (v.spawnProt && this.m.time < v.spawnProt) return;
     const cap = MAX_HIT[msg.ab];
     if (!cap) return;
-    const dmg = Math.max(0, Math.min(cap, Math.round(Number(msg.dmg) || 0)));
+    if (BAL.godMode && this.m.cfg.mode === 'practice' && v.isLocal) return;
+    const dmg = Math.max(0, Math.round(Math.min(cap, Number(msg.dmg) || 0) * BAL.dmg));
     if (!dmg) return;
     this.damage(v, dmg, from, msg.ab);
     if (v.alive && Array.isArray(msg.burn)) {
@@ -108,7 +110,7 @@ export class Rules {
     v.alive = false;
     v.deaths++;
     if (k && k !== v && !v.dummy) k.kills++;
-    const rt = v.dummy ? 2 : this.mode.respawn;
+    const rt = v.dummy ? 2 : BAL.respawn;
     this.respawnAt.set(v.n, this.now + rt);
     this.burns.delete(v.n);
     this.bcast({ t: 'kill', k: k ? k.n : -1, v: v.n, ab, kk: k ? k.kills : 0, vd: v.deaths, rt });
@@ -169,9 +171,9 @@ export class Rules {
       }
       const last = this.lastDamage.get(e.n) || -99;
       const delay = e.dummy ? 2.5 : REGEN_DELAY;
-      if (e.hp < MAX_HP && this.now - last > delay && !this.burns.has(e.n)) {
-        e.hp = Math.min(MAX_HP, e.hp + (e.dummy ? 200 : REGEN_RATE) * dt);
-        if (sendHp || e.hp >= MAX_HP) this.bcast({ t: 'hp', n: e.n, hp: Math.round(e.hp), by: -1 });
+      if (e.hp < BAL.hp && this.now - last > delay && !this.burns.has(e.n)) {
+        e.hp = Math.min(BAL.hp, e.hp + (e.dummy ? 200 : REGEN_RATE) * dt);
+        if (sendHp || e.hp >= BAL.hp) this.bcast({ t: 'hp', n: e.n, hp: Math.round(e.hp), by: -1 });
       }
     }
     this.boardT -= dt;

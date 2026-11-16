@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { $, el, show } from './dom.js';
 import { ABILITY_ICON, ICONS } from './icons.js';
-import { MAX_HP, ULT_COST, MOVE } from '../config.js';
-import { PYRO } from '../game/pyro.js';
+import { ULT_COST, MOVE } from '../config.js';
+import { BAL } from '../game/balance.js';
 
 // In-match HUD: health, ability bar with cooldown sweeps, timer/score, kill feed, name tags,
 // damage numbers, hit markers, damage direction, death/scoreboard/end screens.
@@ -20,26 +20,29 @@ export class Hud {
     this.nums = [];
     this.sbOpen = false;
     app.input.on('scoreboard', (on) => { this.sbOpen = on; if (this.match) this.renderBoard(); show('scoreboard', on && !!this.match && !this.match.ended); });
-    this._buildAbilities();
   }
 
-  _buildAbilities() {
+  // ability bar for the local mage's kit: dash + 3 abilities + ultimate (last slot)
+  _buildAbilities(kit) {
     const bar = $('abilBar');
     bar.textContent = '';
     this.ab = {};
-    const slots = [['dash', 'Q'], ['orb', 'E'], ['wall', 'C'], ['leap', 'V'], ['meteor', 'X']];
+    const slots = [['dash', 'Q'], ...kit.slots()];
+    this.ultId = slots[slots.length - 1][0];
     for (const [id, key] of slots) {
-      const d = el('div', 'ab' + (id === 'meteor' ? ' ult' : ''));
-      if (id === 'meteor') d.appendChild(el('div', 'ring'));
+      const isUlt = id === this.ultId;
+      const d = el('div', 'ab' + (isUlt ? ' ult' : ''));
+      if (isUlt) d.appendChild(el('div', 'ring'));
       d.insertAdjacentHTML('beforeend', ABILITY_ICON[id]);
       d.appendChild(el('div', 'sweep'));
-      const k = el('div', 'key' + (id === 'meteor' ? ' big' : ''), key);
+      const k = el('div', 'key' + (isUlt ? ' big' : ''), key);
       d.appendChild(k);
       const cdv = el('div', 'cdv hidden'); d.appendChild(cdv);
       let pips = null, pct = null;
       if (id === 'dash') { pips = el('div', 'pips'); for (let i = 0; i < MOVE.dashCharges; i++) pips.appendChild(el('i')); d.appendChild(pips); }
-      if (id === 'meteor') { pct = el('div', 'pct', '0%'); d.appendChild(pct); }
-      d.title = (PYRO.abilities.find((a) => a.id === id) || {}).name || id;
+      if (isUlt) { pct = el('div', 'pct', '0%'); d.appendChild(pct); }
+      d.title = (kit.def.abilities.find((a) => a.id === id) || {}).name || id;
+      d.dataset.id = id;
       bar.appendChild(d);
       this.ab[id] = { d, cdv, pips, pct, last: '' };
     }
@@ -48,9 +51,13 @@ export class Hud {
   enterMatch(m) {
     this.match = m;
     this.cache = {};
+    this._buildAbilities(m.kit);
+    $('hpName').textContent = m.kit.def.name;
+    $('hpName').style.color = m.kit.def.color;
     show('hud', true);
     show('deathScreen', false); show('endScreen', false); show('scoreboard', false);
     show('practiceHint', m.cfg.mode === 'practice');
+    $('practiceHint').innerHTML = this.app.input.mode === 'touch' ? 'PRACTICE RANGE · Training dummies regenerate · Tap ☰ to leave' : 'PRACTICE RANGE · Training dummies regenerate · Press <b>Esc</b> to leave';
     show('topCenter', m.cfg.mode !== 'practice');
     $('tcGoal').textContent = m.killsToWin ? `FIRST TO ${m.killsToWin}` : 'NO KILL LIMIT';
     $('killfeed').textContent = '';
@@ -68,15 +75,16 @@ export class Hud {
     const hp = Math.max(0, Math.round(me.hp));
     this.set('hp', hp, (v) => {
       $('hpNum').textContent = v;
-      $('hpFill').style.width = `${(v / MAX_HP) * 100}%`;
-      $('hpGhost').style.width = `${(v / MAX_HP) * 100}%`;
+      $('hpFill').style.width = `${(v / BAL.hp) * 100}%`;
+      $('hpGhost').style.width = `${(v / BAL.hp) * 100}%`;
       $('hpNum').parentElement.classList.toggle('low', v <= 50);
     });
     // abilities
     const k = m.kit, b = m.body;
-    const cds = { orb: [k.cd.orb, 7], wall: [k.cd.wall, 15], leap: [k.cd.leap, 10] };
-    for (const [id, [cd, max]] of Object.entries(cds)) {
+    for (const [id, max] of Object.entries(k.max)) {
       const a = this.ab[id];
+      if (!a) continue;
+      const cd = k.cd[id];
       const s = cd > 0 ? Math.ceil(cd) : 0;
       const key = `${s}|${Math.round((cd / max) * 40)}`;
       if (a.last !== key) {
@@ -96,7 +104,7 @@ export class Hud {
       dash.d.querySelector('.sweep').style.setProperty('--p', `${b.dashCharges <= 0 ? rem * 100 : 0}%`);
       dash.cdv.classList.toggle('hidden', b.dashCharges > 0); dash.cdv.textContent = Math.ceil(rem * MOVE.dashRecharge);
     }
-    const ult = this.ab.meteor;
+    const ult = this.ab[this.ultId];
     const up = Math.floor(k.ult);
     if (ult.last !== up) {
       ult.last = up;
@@ -155,16 +163,21 @@ export class Hud {
         proj.project(cam);
         vis = proj.z < 1 && d < 48 && Math.abs(proj.x) < 1.1 && Math.abs(proj.y) < 1.1;
         if (vis) {
-          // occlusion check (cheap: world only)
-          const c = cam.position;
-          const dx = e.pos.x - c.x, dy = e.pos.y + 1.6 - c.y, dz = e.pos.z - c.z, l = Math.hypot(dx, dy, dz);
-          const hit = m.world.raycast(c.x, c.y, c.z, dx / l, dy / l, dz / l, l - 0.5, 0);
-          vis = hit === Infinity;
+          // occlusion check, ~8 Hz per tag (raycasts are the costliest HUD work on slow CPUs)
+          const now = performance.now();
+          if (!t._occT || now - t._occT > 120) {
+            t._occT = now;
+            const c = cam.position;
+            const dx = e.pos.x - c.x, dy = e.pos.y + 1.6 - c.y, dz = e.pos.z - c.z, l = Math.hypot(dx, dy, dz);
+            t._occ = m.world.raycast(c.x, c.y, c.z, dx / l, dy / l, dz / l, l - 0.5, 0) !== Infinity;
+          }
+          vis = !t._occ;
         }
         if (vis) {
-          t.style.left = `${((proj.x + 1) / 2) * W}px`; t.style.top = `${((1 - proj.y) / 2) * H}px`;
+          // transform-only updates stay on the compositor (no layout per frame)
+          t.style.transform = `translate3d(${(((proj.x + 1) / 2) * W).toFixed(1)}px, ${(((1 - proj.y) / 2) * H).toFixed(1)}px, 0) translate(-50%, -100%)`;
           const hp = Math.round(e.hp);
-          if (t._hp !== hp) { t._hp = hp; t._fill.style.width = `${(hp / MAX_HP) * 100}%`; }
+          if (t._hp !== hp) { t._hp = hp; t._fill.style.width = `${(hp / BAL.hp) * 100}%`; }
         }
       }
       if (t._vis !== vis) { t._vis = vis; t.style.display = vis ? '' : 'none'; }
@@ -187,7 +200,7 @@ export class Hud {
       proj.project(m.camera);
       if (proj.z > 1) { n.d.style.display = 'none'; continue; }
       n.d.style.display = '';
-      n.d.style.left = `${((proj.x + 1) / 2) * W}px`; n.d.style.top = `${((1 - proj.y) / 2) * H}px`;
+      n.d.style.transform = `translate3d(${(((proj.x + 1) / 2) * W).toFixed(1)}px, ${(((1 - proj.y) / 2) * H).toFixed(1)}px, 0) translate(-50%, -50%)`;
       n.d.style.opacity = String(Math.min(1, (0.9 - n.t) * 3));
     }
   }
@@ -241,6 +254,21 @@ export class Hud {
   phase(p, tl) {
     if (p === 'warmup') this.banner('GET READY', `MATCH STARTS IN ${Math.ceil(tl)}`, Math.max(1, tl - 0.3));
     if (p === 'live' && this.match && this.match.cfg.mode !== 'practice') this.banner('FIGHT', this.match.killsToWin ? `FIRST TO ${this.match.killsToWin} KILLS` : '', 1.6);
+  }
+
+  novaWarning(c, radius, mine) {
+    const me = this.match && this.match.local;
+    if (mine) this.banner('CRIMSON NOVA', 'CHANTING…', 2.2);
+    else if (me && Math.hypot(me.pos.x - c.x, me.pos.z - c.z) < radius + 8) this.banner('CRIMSON NOVA INCOMING', 'GET OUT OF THE CIRCLE!', 2.2, 'kill');
+  }
+
+  // full-screen white flash (nova); 0..1
+  flash(k) {
+    const f = $('flash');
+    if (!f || k <= 0) return;
+    f.style.transition = 'none'; f.style.opacity = String(k);
+    void f.offsetWidth;
+    f.style.transition = 'opacity 1.6s ease-out'; f.style.opacity = '0';
   }
 
   meteorWarning(c) {
