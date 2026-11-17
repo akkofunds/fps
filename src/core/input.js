@@ -72,6 +72,7 @@ export class Input extends Emitter {
         case 'KeyV': this.pressed.v = true; break;
         case 'KeyX': this.pressed.x = true; break;
         case 'Tab': this.emit('scoreboard', true); break;
+        case 'ShiftLeft': case 'ShiftRight': this.emit('shiftlock'); break;
         default: break;
       }
     }

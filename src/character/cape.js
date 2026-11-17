@@ -13,12 +13,12 @@ const _a = new THREE.Vector3(), _avg = new THREE.Vector3(), _o = new THREE.Vecto
 const _pq = new THREE.Quaternion(), _q = new THREE.Quaternion(), _iq = new THREE.Quaternion();
 const _inv = new THREE.Matrix4(), _m = new THREE.Matrix4();
 // pull toward the draped shape per 60 Hz step (none at the pinned top): a heavy wool cloak, not silk
-const STIFF = [0, 0.11, 0.075, 0.05];
-const INNER = 0.86;      // internal damping per 60 Hz step (motion relative to her body dies out fast)
+const STIFF = [0, 0.07, 0.045, 0.03];
+const INNER = 0.93;      // internal damping per 60 Hz step (motion relative to her body dies out fast)
 const AIR = 1.4;         // air drag per second on the cloth's own velocity (streams out when moving)
-const COUPLE = 0.65;     // strands move together as one sheet (no jelly shearing between them)
-const BEND = 0.35;       // each segment keeps its parent's direction (no rubbery folding)
-const MAX_OFF = [0, 0.18, 0.32, 0.42]; // max distance (m) a joint may stray from the drape
+const COUPLE = 0.45;     // strands move together as one sheet (no jelly shearing between them)
+const BEND = 0.2;       // each segment keeps its parent's direction (no rubbery folding)
+const MAX_OFF = [0, 0.24, 0.42, 0.56]; // max distance (m) a joint may stray from the drape
 
 export class CapeSim {
   constructor(model) {

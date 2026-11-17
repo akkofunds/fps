@@ -293,7 +293,10 @@ export class Animator {
     const br = Math.sin(this.t * 1.9) * (1 - Math.min(1, speed / 3)) * aimW;
     addE(out, B.chest, br * 1.2, 0, 0); addE(out, B.upperChest, br * 0.8, 0, 0);
     addE(out, B.shoulderL, 0, 0, br * 1.2); addE(out, B.shoulderR, 0, 0, -br * 1.2);
-    // ---- 6. two-handed staff grip: the left hand takes hold of the shaft below the right
+    // ---- 6. right hand: keep the staff in the fist exactly as modelled; the wrist and forearm turn
+    // to point it where the pose wants it (instead of the staff turning inside the hand)
+    if (rig.hasProp) this._gripRight(out);
+    // ---- 7. two-handed staff grip: the left hand takes hold of the shaft below the right
     if (rig.hasProp && !this.dead) {
       const gw = Math.max(a && a.def.twoHand ? a.w * windowW(a.def.twoHand, a.t) : 0, ca && ca.def.twoHand ? ca.w * windowW(ca.def.twoHand, ca.t) : 0);
       if (gw > 0.001) this._gripLeft(out, gw);
@@ -531,6 +534,25 @@ export class Animator {
       else { R[i].copy(R[pi]).multiply(q); X[i].copy(rig.canon[i]).sub(rig.canon[pi]).applyQuaternion(R[pi]).add(X[pi]); }
     }
     return { R, X };
+  }
+
+  _gripRight(P) {
+    const rig = this.rig;
+    const { R } = this._fk(P);
+    const V = this._rv || (this._rv = [new THREE.Vector3(), new THREE.Vector3()]);
+    const Q = this._rq || (this._rq = Array.from({ length: 5 }, () => new THREE.Quaternion()));
+    const want = V[0].copy(rig.propDir).applyQuaternion(R[B.propR]);                 // where the pose points the staff
+    const have = V[1].copy(rig.propDir).applyQuaternion(Q[0].copy(R[B.handR]).multiply(rig.propGrip)); // where the grip points it
+    const turn = Q[1].setFromUnitVectors(have, want);
+    // forearm takes ~40% of the turn (the elbow/forearm rolls), the wrist the rest
+    const part = Q[2].identity().slerp(turn, 0.4);
+    const pInv = Q[3].copy(R[B.upperArmR]).invert();
+    const fore = Q[4].copy(pInv).multiply(part).multiply(R[B.foreArmR]);
+    putQ(P, B.foreArmR, fore);
+    // new forearm world = part * R[fore]; hand world must become turn * R[hand]
+    const foreW = Q[0].copy(part).multiply(R[B.foreArmR]).invert();
+    putQ(P, B.handR, foreW.multiply(Q[3].copy(turn).multiply(R[B.handR])));
+    putQ(P, B.propR, rig.propGrip);
   }
 
   // left-arm two-bone IK onto the staff shaft, a hand-width below the right hand

@@ -97,6 +97,10 @@ export class Rig {
         this.Wc[i].setFromUnitVectors(d.normalize(), c);
       } else this.Wc[i].setFromUnitVectors(d.normalize(), CANON[n]());
     });
+    // the staff keeps the grip it has in the source model: with this canonical rotation on prop_R
+    // the staff moves rigidly with the hand (world = hand world), exactly as it was modelled
+    this.propGrip = this.Wc[B.handR].clone().multiply(this.Wc[B.propR].clone().invert());
+    this.propDir = CANON.prop_R();
     this.WcParentInv = this.parent.map((p) => (p >= 0 ? this.Wc[p].clone().invert() : new THREE.Quaternion()));
 
     // ---- canonical FK (all A = identity): where every joint sits when standing straight

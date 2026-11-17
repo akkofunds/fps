@@ -200,24 +200,26 @@ def knn_transfer(Q, P, W, k=6):
 
 # ---------------------------------------------------------------- cape (re-draped + physics strands)
 CAPE_CX, CAPE_CZ = -3.0, -6.5      # body axis (source units)
-CAPE_TOP, CAPE_LEN = 45.5, 60.0    # collar height, collar → hem (hem ≈ mid-thigh standing)
-STRANDS = (('L', 40.0), ('C', 0.0), ('R', -40.0))   # angle around the back (+ = her left)
+CAPE_TOP, CAPE_LEN = 45.0, 64.0    # collar height, collar → hem (hem ≈ above the knee standing)
+STRANDS = (('L', 34.0), ('C', 0.0), ('R', -34.0))   # angle around the back (+ = her left)
 SEG_T = (0.1, 0.4, 0.7, 1.0)                         # joint positions down the cape (t)
 CAPE_BONES = [f'cape_{s}{k}' for s, _ in STRANDS for k in range(3)]
 
 
 def cape_wrap_deg(t):
-    """half-angle the cape covers around her (from straight behind): wraps the neck at the collar,
-    then hangs from the shoulder blades so the arms stay outside it"""
+    """half-angle the cape covers around her (from straight behind): a small collar round the back
+    of the neck, then it hangs from between the shoulder blades (shoulders stay free) and flares
+    out toward the hem like the original cloak"""
     ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
-    return 150 - 94 * sm - 6 * np.clip((t - 0.09) / 0.91, 0, 1)   # narrower: covers her back, not her sides
+    low = np.clip((t - 0.09) / 0.91, 0, 1)
+    return 150 - 108 * sm + 24 * low ** 0.9
 
 
 def cape_R(t, th=0.0):
     ramp = np.clip(t / 0.09, 0, 1); sm = ramp * ramp * (3 - 2 * ramp)
     low = np.clip((t - 0.09) / 0.91, 0, 1)
-    folds = np.sin(th * 8.0 + 0.6) * 0.8 * low ** 0.8          # soft vertical cloth folds toward the hem
-    return 6.5 + 7.6 * sm + 1.2 * low ** 1.2 + folds               # slimmer: lies close to her back
+    folds = np.sin(th * 9.0 + 0.6) * 1.4 * low ** 0.9          # deeper cloth folds toward the hem
+    return 6.5 + 3.4 * sm + 3.6 * low ** 1.1 + folds
 
 
 def cape_shape(a, t):

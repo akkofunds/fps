@@ -136,7 +136,7 @@ export class Match {
     if (!g) {
       if (this.ghosts.length >= 10) return;
       const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
-      const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.85, 0.88, 0.95), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
       for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
       inst.setLod(true);
       this.scene.add(inst.root);
@@ -150,7 +150,7 @@ export class Match {
     }
     dst.root.position.copy(src.root.position); dst.root.rotation.copy(src.root.rotation);
     dst.root.visible = true;
-    g.t = 0.3; g.mat.opacity = 0.4;
+    g.t = 0.32; g.mat.opacity = 0.55;
   }
 
   _updateGhosts(dt) {
@@ -158,7 +158,7 @@ export class Match {
     for (const g of this.ghosts) {
       if (g.t <= 0) continue;
       g.t -= dt;
-      g.mat.opacity = Math.max(0, g.t / 0.3) * 0.4;
+      g.mat.opacity = Math.max(0, g.t / 0.32) * 0.55;
       if (g.t <= 0) g.inst.root.visible = false;
     }
   }
@@ -218,7 +218,13 @@ export class Match {
   }
 
   // owner casts an ability: spawn locally (with damage authority) and tell everyone
+  toggleShiftLock(on = !this.cam.free) {
+    this.cam.free = on;
+    this.app.hud.banner(on ? 'SHIFT-LOCK OFF' : 'SHIFT-LOCK ON', on ? 'Camera orbits freely · Shift to lock' : 'Character faces the camera · Shift to unlock', 1.1);
+  }
+
   castAbility(data) {
+    this.faceLockT = 0.8; // free camera: turn to the crosshair to cast
     this.spawnAbility(this.local, data, true);
     this.sendToHost({ t: 'ev', k: 'ab', ...data });
   }
@@ -976,7 +982,16 @@ export class Match {
       for (let i = 0; i < steps; i++) {
         stepMovement(b, i === 0 ? cmd : { ...cmd, jumpPressed: false, dashPressed: false }, dt / steps, this.world, (k, d) => this._localEvent(k, d));
       }
-      me.pos.copy(b.pos); me.vel.copy(b.vel); me.yaw = b.yaw; me.pitch = b.pitch; me.grounded = b.grounded;
+      me.pos.copy(b.pos); me.vel.copy(b.vel); me.pitch = b.pitch; me.grounded = b.grounded;
+      // shift-lock OFF: the camera orbits freely and the character turns to face where it runs
+      // (so you can swing the camera round and see her front); it snaps to the camera to cast
+      if (this.cam.free && !st.aim) {
+        if (this.faceYaw === undefined) this.faceYaw = b.yaw;
+        const sp = Math.hypot(b.vel.x, b.vel.z);
+        if (this.faceLockT > 0) { this.faceLockT -= dt; this.faceYaw = b.yaw; }
+        else if (sp > 0.6 && canMove) this.faceYaw += wrapPi(Math.atan2(b.vel.x, b.vel.z) - this.faceYaw) * (1 - Math.exp(-12 * dt));
+        me.yaw = this.faceYaw;
+      } else { me.yaw = b.yaw; this.faceYaw = b.yaw; }
     }
     if (canMove) this.kit.update(dt, input); else this.kit.update(dt, { pressed: {}, state: {} });
     input.clearPressed();
