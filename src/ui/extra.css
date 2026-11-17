@@ -232,3 +232,34 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 .ap-addadmin input { flex: 1 1 180px; min-width: 0; }
 .ap-warn { padding: 8px 10px; border-radius: 8px; background: rgba(255,170,60,0.12); border: 1px solid rgba(255,170,60,0.35); color: #ffd29a; font-size: 12px; margin: 6px 0; }
 .btn-side.danger { color: #ff9a9a; border-color: rgba(255,90,90,0.4); }
+
+/* dash impact frames: lighter, tighter speed lines than the Nova's */
+#impactLines.dash { mix-blend-mode: screen; filter: invert(1) brightness(1.4); transform: scale(1.12); }
+
+/* ===================================================================== NOVA CUTSCENE motion graphics */
+#cineCard { position: fixed; inset: 0; z-index: 42; pointer-events: none; display: none; overflow: hidden; }
+#cineCard.go { display: block; }
+#cineCard .sl { position: absolute; left: -10%; width: 120%; height: 7vh; background: linear-gradient(90deg, transparent, #b3140c 12%, #ff3b1f 50%, #b3140c 88%, transparent);
+  transform-origin: 0 50%; box-shadow: 0 0 40px rgba(255,60,30,0.7); }
+#cineCard .sl.a { top: 39vh; transform: rotate(-7deg) scaleX(0); animation: cardSlash 1.9s cubic-bezier(.7,0,.2,1) both; }
+#cineCard .sl.b { top: 52vh; height: 2.2vh; transform: rotate(-7deg) scaleX(0); animation: cardSlash 1.9s 0.08s cubic-bezier(.7,0,.2,1) both; opacity: 0.85; }
+#cineCard .ct { position: absolute; left: 0; right: 0; top: 37vh; text-align: center; transform: rotate(-7deg); animation: cardText 1.9s cubic-bezier(.2,.9,.2,1) both; }
+#cineCard .ct b { display: block; font: 900 clamp(40px, 8.5vw, 120px)/1 'Rajdhani', 'Segoe UI', sans-serif; letter-spacing: 0.18em; color: #fff4e8;
+  text-shadow: 0 0 24px #ff3a20, 0 0 70px #ff1a08, 4px 4px 0 #3a0400; }
+#cineCard .ct span { display: block; margin-top: 1.4vh; font: 700 clamp(14px, 2.2vw, 28px)/1 'Rajdhani', sans-serif; letter-spacing: 0.9em; color: #ffd2a8; }
+@keyframes cardSlash { 0% { transform: rotate(-7deg) scaleX(0); } 22% { transform: rotate(-7deg) scaleX(1); } 78% { transform: rotate(-7deg) scaleX(1); opacity: 1; } 100% { transform: rotate(-7deg) translateX(60%) scaleX(1); opacity: 0; } }
+@keyframes cardText { 0% { opacity: 0; letter-spacing: 0.6em; filter: blur(8px); transform: rotate(-7deg) translateX(-6%); } 24% { opacity: 1; filter: blur(0); transform: rotate(-7deg) translateX(0); }
+  80% { opacity: 1; transform: rotate(-7deg) translateX(1.5%); } 100% { opacity: 0; transform: rotate(-7deg) translateX(14%) skewX(-24deg); } }
+#cineWipe { position: fixed; inset: -20% -40%; z-index: 43; pointer-events: none; display: none;
+  background: linear-gradient(100deg, transparent 38%, #fff 39.5%, #0a0203 41%, #0a0203 59%, #fff 60.5%, transparent 62%); }
+#cineWipe.red { background: linear-gradient(100deg, transparent 38%, #ff4a2a 39.5%, #160304 41%, #160304 59%, #ff4a2a 60.5%, transparent 62%); }
+#cineWipe.go { display: block; animation: cineWipe 0.34s cubic-bezier(.6,0,.4,1) both; }
+@keyframes cineWipe { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+#cineGlyph { position: fixed; left: 50%; top: 50%; width: 120vmin; height: 120vmin; margin: -60vmin 0 0 -60vmin; z-index: 39; pointer-events: none; opacity: 0;
+  mix-blend-mode: screen; transition: opacity 0.4s; animation: glyphSpin 14s linear infinite; filter: drop-shadow(0 0 6px #ff3a20); }
+#cineGlyph svg { width: 100%; height: 100%; }
+#cineGlyph .ticks { animation: glyphSpin 6s linear infinite reverse; transform-origin: 0 0; }
+@keyframes glyphSpin { to { transform: rotate(360deg); } }
+body.grade-warm #game { filter: saturate(1.35) contrast(1.12) sepia(0.18) hue-rotate(-12deg); }
+body.grade-cold #game { filter: saturate(0.35) contrast(1.25) brightness(0.86) hue-rotate(8deg); }
+body.grade-burn #game { filter: saturate(1.6) contrast(1.18) brightness(1.08) sepia(0.25) hue-rotate(-18deg); }

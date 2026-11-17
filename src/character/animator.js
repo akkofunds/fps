@@ -69,8 +69,10 @@ const CASTS = {
 //  brawler (Pyro): heavier, forward-driving run, big fist pump, more bounce
 //  caster (Meteora): lighter, graceful, hip sway, the staff arm stays steady, softer landings
 const STYLES = {
-  brawler: { swing: 1.15, swingR: 1, lean: 1.2, bounce: 1.15, sway: 0.5, settle: 0.5, fidget: 'fidgetP' },
-  caster: { swing: 0.85, swingR: 0.35, lean: 0.8, bounce: 0.85, sway: 1.5, settle: 0.42, fidget: 'fidgetM' },
+  brawler: { swing: 1.15, swingR: 1, lean: 1.2, bounce: 1.15, sway: 0.5, settle: 0.5, roll: 1, twist: 1, elbow: 1, fidget: 'fidgetP' },
+  // Meteora: anime run — leans into it, hips roll and sway, chest twists against the hips, the free
+  // arm pumps with a bent elbow, the staff arm rides the stride, a springy bounce
+  caster: { swing: 1.2, swingR: 0.55, lean: 1.55, bounce: 1.3, sway: 1.7, settle: 0.4, roll: 2.0, twist: 1.8, elbow: 1.25, fidget: 'fidgetM' },
 };
 
 // critically/under-damped spring (semi-implicit Euler); s = { x, v }
@@ -389,10 +391,11 @@ export class Animator {
     const shift = Math.sin(this.t * 0.55) * idleW;
     P.hip[0] += shift * 0.018;
     const glance = (Math.sin(this.t * 0.31) * 0.6 + Math.sin(this.t * 0.83 + 1) * 0.4) * idleW;
-    setE(P, B.hips, lean * 0.25, hipYawD - 9 * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * Math.sin(2 * Math.PI * this.phase) * wRun - shift * 2.5);
-    const counter = -hipYawD + 9 * stride * wRun;
-    setE(P, B.spine, 2 + lean * 0.45, counter * 0.35, bank * 0.3);
-    setE(P, B.chest, lean * 0.25, counter * 0.35 + 6 * stride * wRun, 0);
+    setE(P, B.hips, lean * 0.25, hipYawD - 9 * st.twist * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * st.roll * Math.sin(2 * Math.PI * this.phase) * wRun - shift * 2.5);
+    const counter = -hipYawD + 9 * st.twist * stride * wRun;
+    // the spine undoes the pelvis roll so the shoulders stay level
+    setE(P, B.spine, 2 + lean * 0.45, counter * 0.35, bank * 0.3 - 2.4 * (st.roll - 1) * Math.sin(2 * Math.PI * this.phase) * wRun);
+    setE(P, B.chest, lean * 0.25, counter * 0.35 + 6 * st.twist * stride * wRun, 0);
     setE(P, B.upperChest, 0, counter * 0.2, 0);
     setE(P, B.neck, -lean * 0.4, counter * 0.06, -bank * 0.3);
     setE(P, B.head, -lean * 0.35, counter * 0.04 + glance * 14 + this.yawRate * 4 * wRun, -bank * 0.4 + shift * 2);
@@ -408,7 +411,7 @@ export class Animator {
       const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
       const ax = lerp(idleX, 2 + sw, wRun);
       const az = lerp(idleZ, 7 + 3 * wFast, wRun);
-      const ex = lerp(idleE, -(46 + 34 * wFast) - Math.max(0, -sw) * 0.45, wRun);
+      const ex = lerp(idleE, (-(46 + 34 * wFast) - Math.max(0, -sw) * 0.45) * st.elbow, wRun);
       setS(P, B['upperArm' + side], sg, ax, 0, az);
       setS(P, B['foreArm' + side], sg, ex, -10 * wRun, 0);
       setS(P, B['hand' + side], sg, -6, 0, -4);

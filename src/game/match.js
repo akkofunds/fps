@@ -625,6 +625,22 @@ export class Match {
     ];
     if (t >= 6.6 && !C.beamSnd) { C.beamSnd = true; Audio.play('adollaBeam', 1.2, 0, 0.7); }
     while (C.subs < subs.length && t >= subs[C.subs][0]) { const [, text, big] = subs[C.subs]; this.app.hud.cineSub(text, !!big); C.subs++; }
+    // motion-design cues: title card, slash-wipe cuts, colour grades, the screen-space glyph
+    const hud = this.app.hud;
+    const cues = [
+      [0.15, () => { hud.cineCard('CRIMSON NOVA', '爆 裂 魔 法'); hud.cineGrade('warm'); }],
+      [2.2, () => hud.cineWipe(true)],
+      [3.0, () => hud.cineWipe(false)],
+      [3.6, () => { hud.cineWipe(true); hud.cineGrade(''); }],
+      [5.4, () => { hud.cineWipe(true); hud.cineGrade('burn'); }],
+      [6.55, () => { hud.flash(0.9); hud.cineGrade('cold'); }],
+      [7.15, () => hud.cineGrade('')],
+      [7.6, () => hud.cineGrade('burn')],
+      [9.6, () => hud.cineGrade('')],
+    ];
+    C.cue = C.cue || 0;
+    while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
+    hud.cineGlyph(t < 3.6 ? Math.min(1, t / 0.8) * (t > 3.3 ? (3.6 - t) / 0.3 : 1) : t >= 5.4 && t < 6.5 ? 1 : 0);
     const onStage = t < 3.6 || (t >= 5.4 && t < 6.6);
     this._cineSetStage(onStage);
     if (C.novaFx) C.novaFx.visible = !onStage;
@@ -650,40 +666,57 @@ export class Match {
     const C = this.cine, t = C.t, o = C.caster.pos, c = C.c, f = C.f, sd = C.side, cam = this.camera;
     const P = tmpV, L = tmpV2;
     const face = Math.atan2(f.x, f.z);
-    let fov = 50;
-    if (t < 2.2) { // stage: slow low orbit in front of her as the circle ignites
-      const a = face + 0.5 - t * 0.32, r = 3.6 - t * 0.25;
-      P.set(o.x + Math.sin(a) * r, o.y + 0.55 + t * 0.12, o.z + Math.cos(a) * r);
-      L.set(o.x, o.y + 1.2, o.z); fov = 46;
-    } else if (t < 3.6) { // stage: close-up from below, face and staff
-      const k = (t - 2.2) / 1.4;
-      P.set(o.x + f.x * (2.0 - k * 0.35) + sd.x * 0.8, o.y + 1.15, o.z + f.z * (2.0 - k * 0.35) + sd.z * 0.8);
-      L.set(o.x, o.y + 1.5, o.z); fov = 40;
-    } else if (t < 5.4) { // the battlefield: behind her, tilting up as the seals stack over the target
-      const k = (t - 3.6) / 1.8;
+    const ease = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
+    const expo = (k) => { k = Math.min(1, Math.max(0, k)); return 1 - Math.pow(2, -10 * k); };
+    const view = C.caster.view;
+    let fov = 50, roll = 0, hand = 0.012;
+    if (t < 2.2) { // stage: crane up from low behind her shoulder and round to her front as the circle ignites
+      const k = ease(t / 2.2);
+      const a = face + Math.PI * 0.85 - k * Math.PI * 0.75, r = 3.9 - k * 0.9;
+      P.set(o.x + Math.sin(a) * r, o.y + 0.35 + k * 0.9, o.z + Math.cos(a) * r);
+      L.set(o.x, o.y + 1.0 + k * 0.25, o.z); fov = 44 - k * 6;
+    } else if (t < 3.0) { // extreme close-up: her eye, the seal's light flickering across it
+      const k = ease((t - 2.2) / 0.8);
+      const hp = view.head.getWorldPosition(this._cv1 || (this._cv1 = new THREE.Vector3()));
+      P.set(hp.x + f.x * (0.62 - k * 0.12) - sd.x * 0.1, hp.y + 0.05, hp.z + f.z * (0.62 - k * 0.12) - sd.z * 0.1);
+      L.set(hp.x, hp.y + 0.07, hp.z); fov = 24; roll = -0.08; hand = 0.004;
+    } else if (t < 3.6) { // tracking up the staff to the orb as it ignites
+      const k = expo((t - 3.0) / 0.6);
+      const tip = view.staffTip(this._cv2 || (this._cv2 = new THREE.Vector3()));
+      const grip = view.handWorld('R', this._cv3 || (this._cv3 = new THREE.Vector3()));
+      L.lerpVectors(grip, tip, 0.3 + k * 0.7);
+      P.set(L.x + f.x * 1.15 + sd.x * 0.55, L.y - 0.25 + k * 0.1, L.z + f.z * 1.15 + sd.z * 0.55); fov = 30; roll = 0.06;
+    } else if (t < 5.4) { // the battlefield: low behind her, craning up as the seals stack over the target
+      const k = ease((t - 3.6) / 1.8);
       const back = NOVA.radius * 1.9;
-      P.set(c.x - f.x * back + sd.x * 8, c.y + 4 + k * 4, c.z - f.z * back + sd.z * 8);
-      L.set(c.x, c.y + 14 + k * 10, c.z); fov = 62;
-    } else if (t < 6.6) { // stage: fast spin, then a whip zoom on the final word
+      P.set(c.x - f.x * back + sd.x * 8, c.y + 4 + k * 5, c.z - f.z * back + sd.z * 8);
+      L.set(c.x, c.y + 14 + k * 11, c.z); fov = 62 + k * 4; roll = -0.05 * k;
+    } else if (t < 6.6) { // stage: accelerating spin, then a whip zoom and a hard dutch on the final word
       const k = (t - 5.4) / 1.2;
-      const a = face + Math.PI * 0.2 + k * Math.PI * 1.6, r = 4.6 - k * 1.8;
-      P.set(o.x + Math.sin(a) * r, o.y + 1.0 + k * 0.6, o.z + Math.cos(a) * r);
+      const a = face + Math.PI * 0.2 + Math.pow(k, 1.6) * Math.PI * 1.8, r = 4.6 - ease(k) * 2.0;
+      P.set(o.x + Math.sin(a) * r, o.y + 0.9 + k * 0.5, o.z + Math.cos(a) * r);
       L.set(o.x, o.y + 1.35, o.z);
-      fov = t < 5.95 ? 58 : Math.max(30, 58 - (t - 5.95) * 70);
+      fov = t < 5.95 ? 58 : Math.max(26, 58 - expo((t - 5.95) / 0.5) * 32);
+      roll = t < 5.95 ? 0.04 * k : -0.22 * expo((t - 5.95) / 0.3);
+      hand = 0.02;
     } else if (t < 7.2) { // the beam: looking up from the battlefield as it drives down into the target
-      const k = (t - 6.6) / 0.6;
+      const k = expo((t - 6.6) / 0.6);
       P.set(c.x - f.x * NOVA.radius * 1.7 + sd.x * 7, c.y + 3, c.z - f.z * NOVA.radius * 1.7 + sd.z * 7);
-      L.set(c.x, c.y + 22 - k * 12, c.z); fov = 66;
-    } else { // the catastrophe, from far away, slowly pushing in
+      L.set(c.x, c.y + 22 - k * 13, c.z); fov = 70 - k * 6; roll = 0.12;
+    } else { // the catastrophe, from far away, slowly pushing in while the frame shakes and rolls
       const k = t - 7.2;
       const back = NOVA.radius * (3.0 - k * 0.15);
       P.set(c.x - f.x * back + sd.x * NOVA.radius * 1.1, c.y + 30 + k * 2.5, c.z - f.z * back + sd.z * NOVA.radius * 1.1);
-      L.set(c.x, c.y + 12 + k * 4, c.z); fov = 66;
+      L.set(c.x, c.y + 12 + k * 4, c.z); fov = 66 - Math.min(6, k * 2);
       const sh = this.fx.shakeAmt * 0.7;
       P.x += Math.sin(t * 47) * sh; P.y += Math.sin(t * 59 + 1) * sh;
+      roll = Math.sin(t * 31) * this.fx.shakeAmt * 0.04 - 0.03;
     }
     if (t >= 3.6 && (t < 5.4 || t >= 6.6)) P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 50) + 1.2);
+    // a little handheld drift so nothing feels like a rail camera
+    P.x += Math.sin(t * 1.7) * hand * 3; P.y += Math.sin(t * 2.3 + 1) * hand * 2; P.z += Math.cos(t * 1.3) * hand * 3;
     cam.position.copy(P); cam.lookAt(L);
+    if (roll) cam.rotateZ(roll);
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
     return L;
   }
@@ -1092,7 +1125,7 @@ export class Match {
       case 'jump': this.view.anim.play('jumpStart'); this.sound('jump', b.pos, 0.5, 20); break;
       case 'doubleJump': this.playAnim('doubleJump', d); this.sound('doubleJump', b.pos, 0.7, 25); this.fx.doubleJumpFx(b.pos, this.local.mage); break;
       case 'land': this.view.anim.play('land', d); if (d.vy < -6) this.sound('land', b.pos, Math.min(1, -d.vy / 14), 20); break;
-      case 'dash': this.playAnim('dash', d); this.sound('dash', b.pos, 0.8, 25); me.dashFx = 0.24; this.fx.dashBurst(b.pos, b.dashDir, me.mage); this.cam.dashKick = 1; break;
+      case 'dash': this.playAnim('dash', d); this.sound('dash', b.pos, 0.8, 25); me.dashFx = 0.24; this.fx.dashBurst(b.pos, b.dashDir, me.mage); this.cam.dashKick = 1; this.app.hud.dashImpact(); this.fx.shake(0.12); break;
       case 'roll': this.playAnim('roll', d); this.sound('roll', b.pos, 0.8, 20); break;
       case 'step': this.sound(d.water > 0.1 ? 'splash' : 'step', b.pos, d.water > 0.1 ? 0.4 : 0.25, 15); break;
       default: break;

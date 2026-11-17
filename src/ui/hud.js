@@ -344,7 +344,60 @@ export class Hud {
     step();
   }
 
-  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); }
+  // dash impact frames: two quick frames of radial speed lines + a contrast pop (~0.1 s)
+  dashImpact() {
+    if (this._dashT && performance.now() - this._dashT < 160) return;
+    this._dashT = performance.now();
+    const cv = document.getElementById('game');
+    let lines = document.getElementById('impactLines');
+    if (!lines) { lines = document.createElement('div'); lines.id = 'impactLines'; document.body.appendChild(lines); }
+    lines.classList.add('dash');
+    const frames = [['contrast(1.45) saturate(1.35) brightness(1.18)', 0.85, 45], ['contrast(1.2) saturate(1.15)', 0.45, 45], ['', 0, 0]];
+    let i = 0;
+    const step = () => {
+      const [flt, ln, ms] = frames[i++];
+      if (!document.body.classList.contains('cine-on')) cv.style.filter = flt;
+      lines.style.opacity = String(ln);
+      if (ms) setTimeout(step, ms); else lines.classList.remove('dash');
+    };
+    step();
+  }
+
+  // ---- Nova cutscene motion graphics -------------------------------------------------------
+  _cineLayer(id, html) {
+    let e = document.getElementById(id);
+    if (!e) { e = document.createElement('div'); e.id = id; if (html) e.innerHTML = html; document.body.appendChild(e); }
+    return e;
+  }
+  // title card: red brush slashes sweep in, the title snaps into place, then everything slices away
+  cineCard(title, sub) {
+    const e = this._cineLayer('cineCard');
+    e.innerHTML = `<i class="sl a"></i><i class="sl b"></i><div class="ct"><b>${title}</b><span>${sub}</span></div>`;
+    e.classList.remove('go'); void e.offsetWidth; e.classList.add('go');
+    clearTimeout(this._cardT); this._cardT = setTimeout(() => e.classList.remove('go'), 1900);
+  }
+  // diagonal slash wipe between shots (the cut happens under the blade)
+  cineWipe(red = false) {
+    const e = this._cineLayer('cineWipe');
+    e.classList.toggle('red', red);
+    e.classList.remove('go'); void e.offsetWidth; e.classList.add('go');
+  }
+  // colour grade of the whole frame: '', 'warm', 'cold', 'burn'
+  cineGrade(g) {
+    document.body.classList.remove('grade-warm', 'grade-cold', 'grade-burn');
+    if (g) document.body.classList.add('grade-' + g);
+  }
+  // a huge rotating magic circle drawn over the frame while she chants (0..1)
+  cineGlyph(k) {
+    const e = this._cineLayer('cineGlyph', `<svg viewBox="-100 -100 200 200">
+      <circle r="92" fill="none" stroke="#ff5a3a" stroke-width="1.2"/><circle r="84" fill="none" stroke="#ffb15a" stroke-width="0.5" stroke-dasharray="2 3"/>
+      <circle r="60" fill="none" stroke="#ff5a3a" stroke-width="0.8"/>
+      <polygon points="0,-84 72.7,42 -72.7,42" fill="none" stroke="#ffcf7a" stroke-width="0.7"/><polygon points="0,84 72.7,-42 -72.7,-42" fill="none" stroke="#ffcf7a" stroke-width="0.7"/>
+      <g class="ticks">${Array.from({ length: 48 }, (_, i) => `<line x1="0" y1="-92" x2="0" y2="${i % 4 ? -88 : -80}" transform="rotate(${i * 7.5})" stroke="#ffb15a" stroke-width="0.6"/>`).join('')}</g></svg>`);
+    e.style.opacity = String(Math.max(0, Math.min(1, k)) * 0.55);
+  }
+
+  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); this.cineGrade(''); this.cineGlyph(0); }
 
   // full-screen white flash (nova); 0..1
   flash(k) {
