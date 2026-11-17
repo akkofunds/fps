@@ -15,6 +15,7 @@ export class ShoulderCamera {
     this.pivot = new THREE.Vector3();
     this.pivotY = null;
     this.aimT = 0;
+    this.free = false; this.freeT = 0; // shift-lock off: centered orbit camera
     this.fwd = new THREE.Vector3(0, 0, 1);
     this.baseFov = 80;
     this.shakeT = 0;
@@ -31,6 +32,7 @@ export class ShoulderCamera {
 
   update(dt, target, aiming, shake = 0) {
     this.aimT += ((aiming ? 1 : 0) - this.aimT) * (1 - Math.exp(-14 * dt));
+    this.freeT += ((this.free ? 1 : 0) - this.freeT) * (1 - Math.exp(-8 * dt));
     // pivot follows the head; vertical spring hides step/landing jitter
     const py = target.y + 1.58;
     if (this.pivotY === null || Math.abs(this.pivotY - py) > 3) this.pivotY = py;
@@ -41,8 +43,8 @@ export class ShoulderCamera {
     const cp = Math.cos(pitch), sp = Math.sin(pitch), sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
     this.fwd.set(sy * cp, sp, cy * cp);
     const right = tmp.set(-cy, 0, sy);
-    const dist = this.dist * (1 - this.aimT * 0.42);
-    const sh = this.shoulder * this.side * (1 - this.aimT * 0.1);
+    const dist = this.dist * (1 - this.aimT * 0.42) * (1 + this.freeT * 0.15 * (1 - this.aimT));
+    const sh = this.shoulder * this.side * (1 - this.aimT * 0.1) * (1 - this.freeT * (1 - this.aimT));
     // shoulder point, then pull back along -fwd
     const shx = this.pivot.x + right.x * sh, shz = this.pivot.z + right.z * sh, shy = this.pivot.y + 0.12;
     // collision: from head to shoulder, then shoulder back

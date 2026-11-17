@@ -241,6 +241,7 @@ class App {
       if (locked) { if (this.paused) this.pause(false); return; }
       if (!this.chat.isOpen && !this.match.ended) this.pause(true);
     });
+    input.on('shiftlock', () => { if (this.match && !this.paused) this.match.toggleShiftLock(); });
     input.on('escape', () => { if (this.match && !input.locked) this.pause(!this.paused); });
     $('btnResume').onclick = () => { this.pause(false); if (input.mode !== 'touch') input.requestLock(); };
     $('btnLeave').onclick = () => this.leaveMatch();

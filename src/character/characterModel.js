@@ -61,9 +61,12 @@ function prepareMaterials(root) {
       // painted anime textures: mostly self-lit, with a touch of scene light so they sit in the world
       const map = m.map;
       if (map) { map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 16; map.generateMipmaps = true; map.minFilter = THREE.LinearMipmapLinearFilter; }
+      const tint = map ? new THREE.Color(1, 1, 1) : (m.color ? m.color.clone() : new THREE.Color(1, 1, 1));
       o.material = new THREE.MeshLambertMaterial({
         // keep each model's own sidedness (Shoto ships a built-in inner ink shell that must stay culled)
-        map, emissiveMap: map, emissive: new THREE.Color(0.62, 0.6, 0.6), side: m.side,
+        map, emissiveMap: map, color: tint, emissive: new THREE.Color(0.62, 0.6, 0.6).multiply(tint), side: m.side,
+        // painted alpha (eyes, lace): blend without writing depth so it never cuts holes behind it
+        transparent: !!m.transparent, depthWrite: !m.transparent, alphaTest: m.transparent ? 0.01 : 0,
       });
       o.material.name = m.name;
       rimLight(o.material);
