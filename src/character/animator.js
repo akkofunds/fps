@@ -27,13 +27,13 @@ const R2D = 180 / Math.PI;
 const windowW = (win, t) => (win === true ? 1 : !win ? 0 : Math.min(sstep(win[0] - 0.15, win[0] + 0.1, t), 1 - sstep(win[1] - 0.1, win[1] + 0.15, t)));
 
 const ACTIONS = {
-  dash: { clip: C.DASH, in: 0.05, out: 0.12, turn: true },
-  dashBack: { clip: C.DASH_BACK, in: 0.05, out: 0.12, turn: true, back: true },
-  roll: { clip: C.ROLL, in: 0.04, out: 0.08, turn: true, aimOff: true, airBlendOut: true },
-  rollBack: { clip: C.ROLL_BACK, in: 0.05, out: 0.1, turn: true, back: true, aimOff: true },
+  dash: { clip: C.DASH, in: 0.05, out: 0.12, turn: true, staffBody: true },
+  dashBack: { clip: C.DASH_BACK, in: 0.05, out: 0.12, turn: true, back: true, staffBody: true },
+  roll: { clip: C.ROLL, in: 0.04, out: 0.08, turn: true, aimOff: true, airBlendOut: true, staffBody: true },
+  rollBack: { clip: C.ROLL_BACK, in: 0.05, out: 0.1, turn: true, back: true, aimOff: true, staffBody: true },
   slam: { clip: C.SLAM, in: 0.06, out: 0.18 },
   leap: { clip: C.LEAP, in: 0.04, out: 0.25, airBlendOut: true },
-  death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true },
+  death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true, staffBody: true },
   plant: { clip: C.M_PLANT, in: 0.06, out: 0.18 },
   nova: { clip: C.M_NOVA, in: 0.1, out: 0.2, upright: [0.3, 6.1], twoHand: [0.25, 99] },
   exhausted: { clip: C.M_EXHAUSTED, in: 0.05, out: 0.25, aimOff: true },
@@ -46,7 +46,7 @@ const ACTIONS = {
   uppercut: { clip: C.UPPERCUT_CLIP, in: 0.04, out: 0.16 },
   zeroburn: { clip: C.ZEROBURN_CLIP, in: 0.06, out: 0.2 },
   freeze: { clip: C.FREEZE_STOMP, in: 0.05, out: 0.2 },
-  doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true },
+  doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true, staffBody: true },
 };
 const CASTS = {
   boltR: { clip: C.BOLT_R, in: 0.035, out: 0.12 },
@@ -209,6 +209,16 @@ export class Animator {
 
     // ---- 1. locomotion
     this._locomotion(dt, s);
+    // signature idle: the arms settle into the model's own pose when she stands still
+    if (rig.hasProp && rig.bindQ) {
+      const w = (1 - (this.wRunNow || 0)) * (1 - this.airW) * (this.lobby ? 1 : 0.92);
+      if (w > 0.001) {
+        const qa = this._iq1 || (this._iq1 = new THREE.Quaternion());
+        for (const i of [B.shoulderL, B.upperArmL, B.foreArmL, B.handL, B.shoulderR, B.upperArmR, B.foreArmR, B.handR]) {
+          getQ(this.loco, i, qa); qa.slerp(rig.bindQ[i], w); putQ(this.loco, i, qa);
+        }
+      }
+    }
     const out = this.pose.copy(this.loco);
     // ---- 2. air
     if (this.airW > 0.001) { this._airPose(s); blend(out, out, this.air, this.airW); }
@@ -224,6 +234,10 @@ export class Animator {
       else {
         sampleClip(def.clip, Math.min(a.t, dur), this.act);
         if (this.act.ikW > 0.001) this._clipIK(s);
+        if (def.staffBody && rig.hasProp && rig.bindQ) {
+          // rolls / dashes / jumps: the staff arm keeps the modelled carry (staff tucked against her)
+          for (const i of [B.shoulderR, B.upperArmR, B.foreArmR, B.handR]) putQ(this.act, i, rig.bindQ[i]);
+        }
         blend(out, out, this.act, a.w);
       }
     }
@@ -240,7 +254,8 @@ export class Animator {
       // actions drive the staff from their clip, except inside an `upright` window where it is
       // held perfectly vertical in world space (planted / raised for a long incantation)
       const up = a ? windowW(a.def.upright, a.t) : 0;
-      this._stabilizeStaff(out, a && !a.def.freeProp ? a.w * (1 - up) : 0);
+      this._carryW = a && a.def.staffBody ? a.w : 0;
+      this._stabilizeStaff(out, a && !a.def.freeProp && !a.def.staffBody ? a.w * (1 - up) : 0);
     }
     // ---- 4. upper-body cast
     const ca = this.castA;
@@ -310,6 +325,7 @@ export class Animator {
     const rig = this.rig;
     const speed = this.speed;
     const wRun = sstep(0.15, 1.8, speed);
+    this.wRunNow = wRun;
     const wFast = sstep(2.5, RUN_SPEED, speed);
     // gait timing: cadence rises with speed; stance length is exactly speed*stanceTime
     const T = lerp(0.95, 0.56, clamp((speed - 1) / (RUN_SPEED - 1), 0, 1)) * (this.lobby ? 1.05 : 1);
@@ -544,6 +560,7 @@ export class Animator {
     const want = V[0].copy(rig.propDir).applyQuaternion(R[B.propR]);                 // where the pose points the staff
     const have = V[1].copy(rig.propDir).applyQuaternion(Q[0].copy(R[B.handR]).multiply(rig.propGrip)); // where the grip points it
     const turn = Q[1].setFromUnitVectors(have, want);
+    if (this._carryW > 0.001) turn.slerp(Q[2].identity(), this._carryW); // carrying: exactly as modelled
     // forearm takes ~40% of the turn (the elbow/forearm rolls), the wrist the rest
     const part = Q[2].identity().slerp(turn, 0.4);
     const pInv = Q[3].copy(R[B.upperArmR]).invert();
@@ -603,7 +620,7 @@ export class Animator {
     }
   }
 
-  _stabilizeStaff(out, actionW) {
+  _stabilizeStaff(out, actionW, bodyW = 0) {
     // canonical world rotation of the right hand = product down the chain
     const chain = [B.hips, B.spine, B.chest, B.upperChest, B.shoulderR, B.upperArmR, B.foreArmR, B.handR];
     const w = this._sq || (this._sq = new THREE.Quaternion());
@@ -614,6 +631,15 @@ export class Animator {
     const lean = Math.min(1, this.speed / RUN_SPEED);
     const d = this._sq3 || (this._sq3 = new THREE.Quaternion());
     d.setFromEuler(this._se || (this._se = new THREE.Euler(lean * 0.35 + Math.sin(this.t * 1.3) * 0.03, 0, -0.08)));
+    if (bodyW > 0.001) {
+      // rolling / dashing / double-jumping: the staff is tucked along her body (parallel to the spine)
+      const tb = this._sq4 || (this._sq4 = new THREE.Quaternion());
+      const u = this._sq5 || (this._sq5 = new THREE.Quaternion());
+      tb.identity();
+      for (const i of [B.hips, B.spine, B.chest, B.upperChest]) tb.multiply(getQ(out, i, u));
+      tb.multiply(u.setFromEuler(this._se2 || (this._se2 = new THREE.Euler(0.12, 0, -0.1))));
+      d.slerp(tb, bodyW);
+    }
     w.invert().multiply(d);
     getQ(out, B.propR, t);
     w.slerp(t, actionW);

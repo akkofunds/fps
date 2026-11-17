@@ -22,3 +22,9 @@ The terrain, vegetation, ruins, sky, water, VFX, animations and all audio are ge
 (`tools/characters/src/shoto_original.glb`) that appears to be a fan-made model of an existing anime
 character. As with Meteora: fine for a private/hobby build, but replace it with an original or properly
 licensed model before any public or commercial release.
+
+## Meteora model (v2)
+`public/models/meteora.glb` is now rigged by `tools/characters/rig_megumin.py` from a user-supplied model
+(`tools/characters/src/megumin_original.glb`) that appears to be a fan-made model of an existing anime
+character. Fine for a private/hobby build; replace it with an original or properly licensed model before
+any public or commercial release.

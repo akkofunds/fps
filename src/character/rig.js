@@ -101,6 +101,12 @@ export class Rig {
     // the staff moves rigidly with the hand (world = hand world), exactly as it was modelled
     this.propGrip = this.Wc[B.handR].clone().multiply(this.Wc[B.propR].clone().invert());
     this.propDir = CANON.prop_R();
+    // canonical local rotations that reproduce the model's own (bind) pose — used for a
+    // character's signature idle (Meteora: left hand on the hip, staff held as modelled)
+    this.bindQ = this.bones.map((b, i) => {
+      const p = this.parent[i];
+      return (p >= 0 ? this.Wc[p].clone() : new THREE.Quaternion()).multiply(this.Wc[i].clone().invert());
+    });
     this.WcParentInv = this.parent.map((p) => (p >= 0 ? this.Wc[p].clone().invert() : new THREE.Quaternion()));
 
     // ---- canonical FK (all A = identity): where every joint sits when standing straight
