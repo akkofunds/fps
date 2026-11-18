@@ -138,6 +138,7 @@ export class CapeSim {
           if (st === this.strands[1] && _l.z > st.restZ[k] * 0.4) _l.z = st.restZ[k] * 0.4;
           if (_l.y > -0.02 * k) _l.y = -0.02 * k; // never flips up over the shoulders
           p.copy(_l).applyMatrix4(this.root.matrixWorld);
+          if (opts.groundY !== undefined && p.y < opts.groundY + 0.03) p.y = opts.groundY + 0.03; // lies on the ground, never through it
         }
       }
     }

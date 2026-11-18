@@ -111,7 +111,7 @@ export class MageInstance {
   }
 
   // secondary motion (cape physics) — call after the root is placed and the pose is applied
-  stepCape(dt) { if (this.cape && this.root.visible) this.cape.step(dt, { wind: this.anim.windBoost || 0 }); }
+  stepCape(dt) { if (this.cape && this.root.visible) this.cape.step(dt, { wind: this.anim.windBoost || 0, groundY: this.root.position.y }); }
 
   // flash the body (hit feedback) / fade
   setFlash(v) {
