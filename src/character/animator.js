@@ -29,8 +29,8 @@ const windowW = (win, t) => (win === true ? 1 : !win ? 0 : Math.min(sstep(win[0]
 const ACTIONS = {
   dash: { clip: C.DASH, in: 0.05, out: 0.12, turn: true, staffBody: true },
   dashBack: { clip: C.DASH_BACK, in: 0.05, out: 0.12, turn: true, back: true, staffBody: true },
-  roll: { clip: C.ROLL, in: 0.04, out: 0.08, turn: true, aimOff: true, airBlendOut: true, staffBody: true },
-  rollBack: { clip: C.ROLL_BACK, in: 0.05, out: 0.1, turn: true, back: true, aimOff: true, staffBody: true },
+  roll: { clip: C.ROLL, in: 0.04, out: 0.08, turn: true, aimOff: true, airBlendOut: true, staffBody: true, staffAcross: true },
+  rollBack: { clip: C.ROLL_BACK, in: 0.05, out: 0.1, turn: true, back: true, aimOff: true, staffBody: true, staffAcross: true },
   slam: { clip: C.SLAM, in: 0.06, out: 0.18 },
   leap: { clip: C.LEAP, in: 0.04, out: 0.25, airBlendOut: true },
   death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true, staffBody: true },
@@ -69,10 +69,10 @@ const CASTS = {
 //  brawler (Pyro): heavier, forward-driving run, big fist pump, more bounce
 //  caster (Meteora): lighter, graceful, hip sway, the staff arm stays steady, softer landings
 const STYLES = {
-  brawler: { swing: 1.15, swingR: 1, lean: 1.2, bounce: 1.15, sway: 0.5, settle: 0.5, roll: 1, twist: 1, elbow: 1, fidget: 'fidgetP' },
+  brawler: { swing: 1.15, swingR: 1, lean: 1.2, bounce: 1.15, sway: 0.5, settle: 0.5, roll: 1, twist: 1, elbow: 1, kick: 1, stride: 1, fidget: 'fidgetP' },
   // Meteora: anime run — leans into it, hips roll and sway, chest twists against the hips, the free
   // arm pumps with a bent elbow, the staff arm rides the stride, a springy bounce
-  caster: { swing: 1.2, swingR: 0.55, lean: 1.55, bounce: 1.3, sway: 1.7, settle: 0.4, roll: 2.0, twist: 1.8, elbow: 1.25, fidget: 'fidgetM' },
+  caster: { swing: 1.2, swingR: 0.55, lean: 1.55, bounce: 1.3, sway: 1.7, settle: 0.4, roll: 2.0, twist: 1.8, elbow: 1.3, kick: 1.55, stride: 1.14, fidget: 'fidgetM' },
 };
 
 // critically/under-damped spring (semi-implicit Euler); s = { x, v }
@@ -256,8 +256,9 @@ export class Animator {
       // actions drive the staff from their clip, except inside an `upright` window where it is
       // held perfectly vertical in world space (planted / raised for a long incantation)
       const up = a ? windowW(a.def.upright, a.t) : 0;
-      this._carryW = a && a.def.staffBody ? a.w : 0;
-      this._stabilizeStaff(out, a && !a.def.freeProp && !a.def.staffBody ? a.w * (1 - up) : 0);
+      this._carryW = a && a.def.staffBody && !a.def.staffAcross ? a.w : 0;
+      // rolls: the staff is held ACROSS her body (side to side), so it stays level as she goes over
+      this._stabilizeStaff(out, a && !a.def.freeProp && !a.def.staffBody ? a.w * (1 - up) : 0, a && a.def.staffAcross ? a.w : 0);
     }
     // ---- 4. upper-body cast
     const ca = this.castA;
@@ -330,7 +331,8 @@ export class Animator {
     this.wRunNow = wRun;
     const wFast = sstep(2.5, RUN_SPEED, speed);
     // gait timing: cadence rises with speed; stance length is exactly speed*stanceTime
-    const T = lerp(0.95, 0.56, clamp((speed - 1) / (RUN_SPEED - 1), 0, 1)) * (this.lobby ? 1.05 : 1);
+    // cadence: longer, bounding strides for styles with stride > 1 (fewer, bigger steps at the same speed)
+    const T = lerp(0.95, 0.56 * (this.style.stride || 1), clamp((speed - 1) / (RUN_SPEED - 1), 0, 1)) * (this.lobby ? 1.05 : 1);
     let beta = clamp(0.62 / Math.max(speed * T, 1e-3), 0.17, 0.66);
     const Ls = speed * beta * T;
     if (speed > 0.05) this.phase = (this.phase + dt / T) % 1;
@@ -368,9 +370,11 @@ export class Animator {
       } else {
         const k2 = (u - beta) / (1 - beta);
         const e = k2 * k2 * k2 * (k2 * (k2 * 6 - 15) + 10);
-        along = Ls * (-0.5 + e) - 0.34 * wFast * Math.sin(Math.PI * k2) * (1 - k2) * 1.6;
-        const H = lerp(0.08, 0.38, wFast);
-        lift = H * Math.pow(Math.sin(Math.PI * Math.pow(k2, 0.8)), 1.2) * wRun;
+        const kick = st.kick || 1;
+        // early swing: the heel kicks up behind toward the seat; late swing: the knee drives forward
+        along = Ls * (-0.5 + e) - 0.34 * wFast * kick * Math.sin(Math.PI * k2) * (1 - k2) * 1.6 + 0.08 * wFast * (kick - 1) * Math.sin(Math.PI * Math.min(1, k2 * 1.25));
+        const H = lerp(0.08, 0.38 * kick, wFast);
+        lift = H * Math.pow(Math.sin(Math.PI * Math.pow(k2, 0.7)), 1.2) * wRun;
         pitch = lerp(40, -14, sstep(0, 0.9, k2)) * wRun;
       }
       feet[side] = { along, lift, pitch, sg };
@@ -640,7 +644,7 @@ export class Animator {
       const u = this._sq5 || (this._sq5 = new THREE.Quaternion());
       tb.identity();
       for (const i of [B.hips, B.spine, B.chest, B.upperChest]) tb.multiply(getQ(out, i, u));
-      tb.multiply(u.setFromEuler(this._se2 || (this._se2 = new THREE.Euler(0.12, 0, -0.1))));
+      tb.multiply(u.setFromEuler(this._se2 || (this._se2 = new THREE.Euler(0, 0.35, Math.PI / 2))));
       d.slerp(tb, bodyW);
     }
     w.invert().multiply(d);

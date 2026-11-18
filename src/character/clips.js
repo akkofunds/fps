@@ -72,34 +72,59 @@ const KNEEL_R = { L: [0.15, 0, 0.3, 0], R: [-0.16, 0.03, -0.3, 58] };
 // play a clip faster (scale its key times)
 const fast = (keys, k = 0.68) => keys.map((x) => ({ ...x, t: x.t * k }));
 // Landing roll: the curved right-shoulder combat roll, at its natural (real-life) pace
-// Landing roll — a parkour/combat roll in one continuous motion (0.5 s):
-//   absorb the landing (deep knees, torso folds) → the free hand reaches down to cushion, chin
-//   tucked, right shoulder leading → roll diagonally across the back (right shoulder → left hip),
-//   compact, keyed every ~50° so the rotation reads as one smooth wheel → feet land under her in a
-//   low crouch, eyes forward, arms out for balance → drive up into the run.
-const ROLL_TUCK = {
-  spine: [40, -6, 4], chest: [30, -4, 2], upperChest: [16, 0, 0], neck: [30, 14, 10], head: [24, 12, 8],
-  upperLegL: [-124, 0, 8], lowerLegL: [142, 0, 0], footL: [34, 0, 0],
-  upperLegR: [-112, 0, 12], lowerLegR: [134, 0, 0], footR: [30, 0, 0],
-  upperArmL: [-60, 0, -10], foreArmL: [-100, 0, 0], upperArmR: [-60, 0, -20], foreArmR: [-70, 0, 0],
-};
-const rk = (t, deg, hip, extra = {}) => ({ t, ease: 'linear', hip, b: { ...ROLL_TUCK, ...extra, hips: shoulderHips(deg, extra._hx || [0, 0, 0]) } });
-const ROLL_CROUCH = { L: [0.13, 0, 0.12, 0], R: [-0.12, 0, -0.06, 0] };
+// Landing roll — from the reference: lunge forward, both hands reach for the ground, the hips go
+// over the top with the legs extended up (a piked shoulder roll), roll diagonally across the back,
+// fold the legs and come up kneeling on the right knee, then rise into the run. ~0.55 s.
+const RL = (b) => b; // (readability)
+// in-between key: limbs averaged from two keys, hips rotated to an intermediate angle on the roll
+// axis (Euler-interpolating a big rotation would swing the body the wrong way)
+function rollMid(k1, k2, t, deg, hip) {
+  const b = {};
+  for (const key of new Set([...Object.keys(k1.b), ...Object.keys(k2.b)])) {
+    if (key === 'hips') continue;
+    const x = k1.b[key] || [0, 0, 0], y = k2.b[key] || [0, 0, 0];
+    b[key] = [0, 1, 2].map((i) => (x[i] + y[i]) / 2);
+  }
+  b.hips = shoulderHips(deg);
+  return { t, ease: 'linear', hip, b };
+}
+const ROLL_KEYS = [
+  // lunge: long step, torso folds forward, both arms reach ahead and down
+  { t: 0, ease: 'out', hip: [0, -0.26, 0.12], b: RL({ hips: [34, -4, -4], spine: [22, -6, -4], chest: [10, -4, 0], neck: [6, 6, 4], head: [2, 6, 4],
+    upperLegL: [-78, 0, 6], lowerLegL: [70, 0, 0], footL: [-6, 0, 0], upperLegR: [14, 0, 6], lowerLegR: [40, 0, 0], footR: [30, 0, 0],
+    upperArmL: [-96, 0, 18], foreArmL: [-10, 0, 0], upperArmR: [-90, 0, -10], foreArmR: [-14, 0, 0] }) },
+  // hands to the ground, chin tucked, the back leg sweeps up
+  { t: 0.07, ease: 'linear', hip: [-0.02, -0.2, 0.2], b: RL({ hips: shoulderHips(70), spine: [26, -4, 2], chest: [16, -2, 0], neck: [34, 10, 8], head: [26, 8, 6],
+    upperLegL: [-46, 0, 6], lowerLegL: [40, 0, 0], footL: [20, 0, 0], upperLegR: [18, 0, 8], lowerLegR: [10, 0, 0], footR: [40, 0, 0],
+    upperArmL: [-150, 0, 26], foreArmL: [-20, 0, 0], upperArmR: [-140, 0, -4], foreArmR: [-24, 0, 0] }) },
+  // inverted: hips over the shoulders, legs extended up (pike), arms cushioning
+  { t: 0.15, ease: 'linear', hip: [-0.07, -0.29, 0.16], b: RL({ hips: shoulderHips(150), spine: [36, -6, 4], chest: [24, -4, 2], neck: [36, 12, 10], head: [26, 10, 8],
+    upperLegL: [-30, 0, 10], lowerLegL: [14, 0, 0], footL: [30, 0, 0], upperLegR: [-20, 0, 12], lowerLegR: [10, 0, 0], footR: [30, 0, 0],
+    upperArmL: [-120, 0, 30], foreArmL: [-40, 0, 0], upperArmR: [-110, 0, -10], foreArmR: [-50, 0, 0] }) },
+  // over the shoulder onto the back, legs start to fold
+  { t: 0.23, ease: 'linear', hip: [-0.11, -0.54, 0.08], b: RL({ hips: shoulderHips(225), spine: [40, -6, 4], chest: [28, -4, 2], neck: [30, 12, 10], head: [22, 10, 8],
+    upperLegL: [-80, 0, 10], lowerLegL: [90, 0, 0], footL: [30, 0, 0], upperLegR: [-64, 0, 12], lowerLegR: [70, 0, 0], footR: [30, 0, 0],
+    upperArmL: [-70, 0, 20], foreArmL: [-80, 0, 0], upperArmR: [-60, 0, -20], foreArmR: [-70, 0, 0] }) },
+  // tucked, rolling up over the hip
+  { t: 0.3, ease: 'linear', hip: [-0.09, -0.48, 0.03], b: RL({ hips: shoulderHips(300), spine: [40, -6, 4], chest: [28, -4, 2], neck: [22, 12, 10], head: [14, 10, 8],
+    upperLegL: [-124, 0, 8], lowerLegL: [142, 0, 0], footL: [34, 0, 0], upperLegR: [-112, 0, 12], lowerLegR: [134, 0, 0], footR: [30, 0, 0],
+    upperArmL: [-40, 0, 30], foreArmL: [-70, 0, 0], upperArmR: [-50, 0, -10], foreArmR: [-70, 0, 0] }) },
+  // up on the right knee, left foot planted, left hand touching down, eyes forward
+  { t: 0.37, ease: 'out', hip: [-0.02, -0.42, 0.04], ik: KNEEL_R, b: RL({ hips: shoulderHips(360, [20, 0, 0]), spine: [22, 6, 0], chest: [8, 2, 0], neck: [-12, 0, 0], head: [-16, 0, 0],
+    upperArmL: [-60, 0, 20], foreArmL: [-20, 0, 0], upperArmR: [-30, 0, 34], foreArmR: [-50, 0, 0] }) },
+  { t: 0.44, ease: 'linear', hip: [-0.01, -0.38, 0.04], ik: KNEEL_R, b: RL({ hips: shoulderHips(360, [16, 0, 0]), spine: [18, 4, 0], chest: [6, 0, 0], neck: [-10, 0, 0], head: [-12, 0, 0],
+    upperArmL: [-44, 0, 22], foreArmL: [-30, 0, 0], upperArmR: [-24, 0, 30], foreArmR: [-56, 0, 0] }) },
+  // rise into the run
+  { t: 0.56, ease: 'smooth', hip: [0, -0.06, 0], b: RL({ hips: shoulderHips(360, [8, 0, 0]), spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [44, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [36, 0, 0], upperArmL: [6, 0, 14], foreArmL: [-50, 0, 0], upperArmR: [-10, 0, 16], foreArmR: [-60, 0, 0] }) },
+];
+// keys 1..4 are 70 / 150 / 225 / 300 deg: add in-betweens so every step is <= ~40 deg
+const [R0, R1, R2, R3, R4, ...RREST] = ROLL_KEYS;
 export const ROLL = compileClip([
-  // absorb: knees give, torso folds forward, arms reach ahead
-  { t: 0, ease: 'out', hip: [0, -0.3, 0.08], b: { hips: [30, -6, -4], spine: [26, -8, -6], chest: [10, -4, -2], neck: [14, 6, 4], head: [8, 6, 4], upperLegL: [-84, 0, 8], lowerLegL: [116, 0, 0], footL: [-10, 0, 0], upperLegR: [-56, 0, 8], lowerLegR: [104, 0, 0], footR: [-20, 0, 0], upperArmL: [-74, 0, 14], foreArmL: [-24, 0, 0], upperArmR: [-62, 0, -18], foreArmR: [-40, 0, 0] } },
-  // contact: free hand to the ground, chin tucked, right shoulder drops in
-  rk(0.06, 42, [-0.04, -0.42, 0.14], { upperArmL: [-112, 0, 30], foreArmL: [-12, 0, 0] }),
-  rk(0.11, 96, [-0.08, -0.48, 0.12]),
-  rk(0.16, 150, [-0.12, -0.53, 0.08]),
-  rk(0.21, 204, [-0.13, -0.53, 0.05]),
-  rk(0.26, 258, [-0.11, -0.5, 0.02]),
-  rk(0.31, 312, [-0.07, -0.45, 0.01], { upperArmL: [-40, 0, 40], foreArmL: [-60, 0, 0] }),
-  // feet under her: low crouch, eyes forward, arms out for balance
-  { t: 0.36, ease: 'out', hip: [-0.02, -0.42, 0.04], ik: ROLL_CROUCH, b: { hips: shoulderHips(360, [24, 0, 0]), spine: [22, 4, 0], chest: [8, 0, 0], neck: [-14, 0, 0], head: [-18, 0, 0], upperArmL: [-46, 0, 34], foreArmL: [-46, 0, 0], upperArmR: [-30, 0, 30], foreArmR: [-50, 0, 0] } },
-  // drive up into the run
-  { t: 0.43, ease: 'in', hip: [0, -0.2, 0.03], ik: ROLL_CROUCH, b: { hips: shoulderHips(360, [16, 0, 0]), spine: [16, 2, 0], chest: [6, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0], upperArmL: [-20, 0, 24], foreArmL: [-60, 0, 0], upperArmR: [-14, 0, 20], foreArmR: [-60, 0, 0] } },
-  { t: 0.5, ease: 'smooth', hip: [0, -0.06, 0], b: { hips: shoulderHips(360, [8, 0, 0]), spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-30, 0, 4], lowerLegL: [44, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [36, 0, 0], upperArmL: [6, 0, 14], foreArmL: [-50, 0, 0], upperArmR: [-10, 0, 16], foreArmR: [-60, 0, 0] } },
+  R0, R1,
+  rollMid(R1, R2, 0.11, 110, [-0.05, -0.26, 0.19]), R2,
+  rollMid(R2, R3, 0.19, 188, [-0.09, -0.5, 0.12]), R3,
+  rollMid(R3, R4, 0.265, 262, [-0.1, -0.53, 0.05]), R4,
+  ...RREST,
 ]);
 
 // Dive roll (from the reference): sprint lean → a horizontal superman dive with the arms reaching
