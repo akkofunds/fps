@@ -123,6 +123,13 @@ export class Animator {
       const key = data.q.length + ':' + data.q[7] + ':' + data.q[101];
       if (!BAKED.has(key)) BAKED.set(key, bakeWorldClip(data, rig));
       this.baked = { purple: { clip: BAKED.get(key), in: 0.15, out: 0.35, aimOff: true } };
+      // the model's own finger bones play the source finger animation with it
+      if (data.fingers && data.fq) {
+        const by = {};
+        rig.root.traverse((o) => { if (o.isBone) by[o.name] = o; });
+        this.fingers = data.fingers.map((n) => by[n] || null);
+        this.fingerQ = data.fq instanceof Float32Array ? data.fq : Float32Array.from(data.fq);
+      }
     }
     // follow-through springs (torso lean/bank overshoot, arm drag in turns, head settle)
     this.sLean = { x: 0, v: 0 }; this.sBank = { x: 0, v: 0 }; this.sArm = { x: 0, v: 0 }; this.sHead = { x: 0, v: 0 };
@@ -337,6 +344,30 @@ export class Animator {
       if (gw > 0.001) this._gripLeft(out, gw);
     }
     rig.apply(out);
+    if (this.fingers) this._applyFingers();
+  }
+
+  // finger bones: the source finger animation while the retargeted clip plays, else at rest (curl)
+  _applyFingers() {
+    const a = this.action, pd = this.baked.purple, nf = this.fingers.length;
+    const w = a && a.def === pd ? a.w : 0;
+    if (w <= 0.001) {
+      if (this._fingOn) { for (const bn of this.fingers) if (bn) bn.quaternion.identity(); this._fingOn = false; }
+      return;
+    }
+    this._fingOn = true;
+    const cl = pd.clip, F = this.fingerQ;
+    const x = Math.max(0, Math.min(cl.n - 1, Math.min(a.t, cl.duration) * cl.fps));
+    const k = Math.min(cl.n - 2, Math.floor(x)), u = x - k;
+    const qa = this._fqa || (this._fqa = new THREE.Quaternion()), qb = this._fqb || (this._fqb = new THREE.Quaternion()), id = this._fqi || (this._fqi = new THREE.Quaternion());
+    for (let i = 0; i < nf; i++) {
+      const bn = this.fingers[i];
+      if (!bn) continue;
+      const oa = (k * nf + i) * 4, ob = ((k + 1) * nf + i) * 4;
+      qa.set(F[oa], F[oa + 1], F[oa + 2], F[oa + 3]); qb.set(F[ob], F[ob + 1], F[ob + 2], F[ob + 3]);
+      qa.slerp(qb, u);
+      bn.quaternion.copy(id).slerp(qa, w);
+    }
   }
 
   // ---------------------------------------------------------------- locomotion (procedural)

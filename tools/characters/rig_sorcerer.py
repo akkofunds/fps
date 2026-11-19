@@ -43,6 +43,15 @@ BONES = [  # (name, parent)
 ]
 NAMES = [b[0] for b in BONES]
 IDX = {n: i for i, n in enumerate(NAMES)}
+# real finger bones (not part of the canonical rig): they rest in the baked relaxed curl and play
+# the source finger animation during the retargeted Hollow Purple
+FING = [f'{f}_{k}_{sd}' for sd in ('L', 'R') for f in ('thumb', 'index', 'middle', 'ring', 'little') for k in ('proximal', 'intermediate', 'distal')]
+FSRC = {f.rsplit('_', 1)[0] + '.' + f[-1]: f for f in FING}          # 'index_proximal.L' → 'index_proximal_L'
+ALL = NAMES + FING
+AIDX = {n: i for i, n in enumerate(ALL)}
+def fparent(f):
+    base, sd = f.rsplit('_', 1); fin, k = base.split('_')
+    return {'proximal': 'hand_' + sd, 'intermediate': f'{fin}_proximal_{sd}', 'distal': f'{fin}_intermediate_{sd}'}[k]
 POS_FROM = {  # where each game joint sits (source joint name)
     'hips': 'hips', 'spine': 'spine', 'chest': 'chest', 'neck': 'neck', 'head': 'head',
     'shoulder_L': 'shoulder.L', 'upperArm_L': 'upper_arm.L', 'foreArm_L': 'lower_arm.L', 'hand_L': 'hand.L',
@@ -112,7 +121,9 @@ def finger_deltas(jname, jpos):
 # animation, retargeted: the body motion between these source times (after the hands-together
 # hold, up to the wide firing stance), played SPEED times faster in game. The camera rig above
 # `root` is removed so only the body moves.
-PURPLE_T0, PURPLE_T1, PURPLE_FPS, PURPLE_SPEED = 6.5, 11.9, 30, 1.9
+# exact timing: 1x speed. 6.5 s = hands together; 11.6 s = the wide firing stance, held (the body
+# does not move again in the source, where the orbs form and merge in camera close-ups)
+PURPLE_T0, PURPLE_T1, PURPLE_FPS, PURPLE_SPEED = 6.5, 13.1, 30, 1.0
 
 
 def quat_from_mat(R):
@@ -244,12 +255,14 @@ def main():
         wsum = Ws.sum(1, keepdims=True)
         P = np.where(wsum > 1e-6, P2 / np.maximum(wsum, 1e-6), P)
         if Nn is not None: Nn = N2 / np.maximum(np.linalg.norm(N2, axis=1, keepdims=True), 1e-9)
-        W = np.zeros((len(P), len(NAMES)))
+        W = np.zeros((len(P), len(ALL)))
         for k in range(4):
             for row in np.unique(Js[:, k]):
                 sel = Js[:, k] == row
                 gname = game_bone(jname[row])
-                if gname == 'chest':
+                if jname[row] in FSRC:
+                    W[sel, AIDX[FSRC[jname[row]]]] += Ws[sel, k]
+                elif gname == 'chest':
                     # split the source chest between chest / upperChest by height
                     u = smoothstep(split_lo, split_hi, P[sel, 1])
                     W[sel, IDX['chest']] += Ws[sel, k] * (1 - u)
@@ -353,9 +366,20 @@ def main():
     rest_root = Ws_t[0][root_i]
     srcOf = dict(POS_FROM); srcOf['upperChest'] = 'chest'
     kidx = {nm: k for k, nm in enumerate(jname)}
-    qs, hips, hip0 = [], [], None
+    qs, hips, hip0, fq = [], [], None, []
+    Dinv = {f: np.linalg.inv(DELTA[kidx[src]][:3, :3]) for src, f in FSRC.items()}
     for W in Ws_t[1:]:
         fix = rest_root @ np.linalg.inv(W[root_i])
+        # fingers: local rotation relative to the parent bone, accounting for the baked curl
+        Rw = {}
+        for sd in ('L', 'R'):
+            Rw['hand_' + sd] = (fix @ W[jnode['hand.' + sd]] @ IBM[kidx['hand.' + sd]])[:3, :3]
+        for f in FING:
+            src = f.rsplit('_', 1)[0] + '.' + f[-1]
+            Gm = (fix @ W[jnode[src]] @ IBM[kidx[src]])[:3, :3]
+            Rw[f] = Gm @ Dinv[f]
+            Lr = np.linalg.inv(Rw[fparent(f)]) @ Rw[f]
+            fq.extend(np.round(quat_from_mat(Lr), 4).tolist())
         frame = []
         for nm in NAMES:
             sj = srcOf[nm]
@@ -368,7 +392,7 @@ def main():
                 if hip0 is None: hip0 = pt.copy()
                 hips.extend(np.round((pt - hip0) * S, 4).tolist())
         qs.extend(frame)
-    purple = {'fps': PURPLE_FPS * PURPLE_SPEED, 'bones': NAMES, 'q': qs, 'hip': hips}
+    purple = {'fps': PURPLE_FPS * PURPLE_SPEED, 'bones': NAMES, 'q': qs, 'hip': hips, 'fingers': FING, 'fq': fq}
 
     nodes = [{'name': 'Sorcerer', 'children': [], 'extras': {'purple': purple}}]
     jnode = {}
@@ -382,10 +406,20 @@ def main():
         t_m = T(np.array([tp]))[0]
         nodes.append({'name': nm + '_end', 'translation': (t_m - jm[IDX[nm]]).astype(float).tolist()})
         nodes[jnode[nm]]['children'].append(len(nodes) - 1)
-    ibm = np.zeros((len(NAMES), 16), np.float32)
-    for i in range(len(NAMES)):
-        m4 = np.eye(4, dtype=np.float32); m4[:3, 3] = -jm[i]; ibm[i] = m4.T.reshape(-1)
-    skins = [{'joints': [jnode[n] for n in NAMES], 'skeleton': jnode['hips'], 'inverseBindMatrices': push(ibm, typ='MAT4')}]
+    # finger bones at their curled positions (identity rest rotation, like every game bone)
+    fpos = {}
+    for src, f in FSRC.items():
+        fpos[f] = T(np.array([(DELTA[kidx[src]] @ np.r_[jpos[src], 1])[:3]]))[0]
+    allpos = {n: jm[IDX[n]] for n in NAMES}; allpos.update(fpos)
+    for f in FING:
+        par = fparent(f)
+        jnode[f] = len(nodes)
+        nodes.append({'name': f, 'translation': (allpos[f] - allpos[par]).astype(float).tolist()})
+        nodes[jnode[par]].setdefault('children', []).append(jnode[f])
+    ibm = np.zeros((len(ALL), 16), np.float32)
+    for i, n in enumerate(ALL):
+        m4 = np.eye(4, dtype=np.float32); m4[:3, 3] = -allpos[n]; ibm[i] = m4.T.reshape(-1)
+    skins = [{'joints': [jnode[n] for n in ALL], 'skeleton': jnode['hips'], 'inverseBindMatrices': push(ibm, typ='MAT4')}]
 
     meshes = []
     for p in parts:

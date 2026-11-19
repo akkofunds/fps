@@ -244,13 +244,34 @@ Object.assign(Fx.prototype, {
     const hb = glowSprite(new THREE.Color(0.12, 0.35, 2.6), 1.6), hr = glowSprite(new THREE.Color(2.6, 0.1, 0.06), 1.6);
     this.scene.add(hb); this.scene.add(hr);
     const lb = this.light(new THREE.Vector3(), 0, 7, dur + 0.2, 0x4f8bff), lr = this.light(new THREE.Vector3(), 0, 7, dur + 0.2, 0xff3020);
+    // the purple mass that forms between the hands before the release
+    const purple = new THREE.Group(); purple.visible = false; this.scene.add(purple);
+    purple.add(new THREE.Mesh(SPHERE, orbMaterial([0.6, 0.12, 1.4], [2.0, 0.5, 3.8], { additive: true, swirl: 2.5 })));
+    purple.add(torus(new THREE.Color(2.4, 0.9, 3.8), 1.5, 0.05)); purple.add(torus(new THREE.Color(1.4, 0.3, 3.2), 1.8, 0.04));
+    const hp = glowSprite(new THREE.Color(0.9, 0.2, 2.2), 2); hp.material.opacity = 0; this.scene.add(hp);
     const L = new THREE.Vector3(), Rr = new THREE.Vector3(), mid = new THREE.Vector3();
     let t = 0;
     this.effects.push({ update: (dt) => {
       t += dt;
       getL(L); getR(Rr);
       const grow = Math.max(0, Math.min(1, (t - start) / 0.45));
-      const merge = Math.max(0, Math.min(1, (t - (dur - 0.4)) / 0.4));
+      // they converge (like the source: drawn together over ~0.7 s), then the purple mass grows
+      const merge = Math.max(0, Math.min(1, (t - (dur - 1.45)) / 0.7));
+      const mass = Math.max(0, Math.min(1, (t - (dur - 0.75)) / 0.75));
+      purple.position.copy(mid); purple.visible = mass > 0;
+      if (mass > 0) {
+        const ps = 0.12 + mass * 0.5;
+        purple.scale.setScalar(ps); purple.children[0].material.uniforms.uT.value = t;
+        purple.children[1].rotation.x += dt * 9; purple.children[2].rotation.y += dt * 7;
+        blue.g.visible = red.g.visible = hb.visible = hr.visible = mass < 0.15;
+        hp.position.copy(mid); hp.material.opacity = mass; hp.scale.setScalar(1.5 + mass * 3);
+        lb.color.setHex(0xa04cff); lr.color.setHex(0xa04cff);
+        for (let i = 0; i < 3; i++) {
+          const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = ps * 3;
+          this.fire.emit(mid.x + Math.cos(a) * sq * r, mid.y + u * r, mid.z + Math.sin(a) * sq * r, -Math.cos(a) * sq * 3, -u * 3, -Math.sin(a) * sq * 3, 0.25, 0.1, 0.03, R() < 0.4 ? VIOW : PURP, PURP2, 1, 0);
+        }
+        if (R() < 0.6) arc(this, mid, ps * 1.2, PURP, VIOW);
+      }
       mid.addVectors(L, Rr).multiplyScalar(0.5);
       const e = merge * merge;
       blue.g.position.lerpVectors(L, mid, e); red.g.position.lerpVectors(Rr, mid, e);
@@ -281,6 +302,8 @@ Object.assign(Fx.prototype, {
         this.fire.emit(mid.x, mid.y, mid.z, 0, 0, 0, 0.2, 2.0, 4.6, VIOW, PURP, 0, 0);
         this.light(mid, 50, 22, 0.4, 0xa04cff);
         for (const o of [blue, red]) { this.scene.remove(o.g); o.m.material.dispose(); o.r.material.dispose(); }
+        this.scene.remove(purple); purple.traverse((m) => { if (m.material) m.material.dispose(); });
+        this.scene.remove(hp); hp.material.map.dispose(); hp.material.dispose();
         for (const h of [hb, hr]) { this.scene.remove(h); h.material.map.dispose(); h.material.dispose(); }
         return false;
       }

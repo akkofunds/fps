@@ -18,7 +18,7 @@ export const SORCERER = {
     { key: 'Q', id: 'dash', name: 'Blink Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Press jump again in the air to double jump.' },
     { key: 'E', id: 'blue', name: 'Lapse: Blue', cd: 9, desc: 'Create a point of attraction where you aim. Everything nearby is dragged into it and ground down, then it collapses.' },
     { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (46 + splash).' },
-    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 16, desc: 'Open your arms to draw out Blue and Red, bring them together and release imaginary mass: a huge sphere that tears straight through everything in its path (95 damage).' },
+    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 18, desc: 'The full Hollow Purple: focus, draw out Blue and Red in each hand, bring them together into imaginary mass and release it, a huge sphere that tears straight through everything in its path (120 damage). A long, planted cast.' },
     { key: 'X', id: 'domain', name: 'Domain Expansion: Unlimited Void', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Expand your domain. Everyone caught inside is trapped in the void: frozen for a moment, then slowed and dealing 40% less damage for 9 s, while your cooldowns run twice as fast.' },
   ],
 };
@@ -26,11 +26,13 @@ export const SORCERER = {
 export const FLICK = { cd: 0.3 };
 export const BLUE = { range: 32, delay: 0.22, life: 1.9, pullR: 9, crushR: 3.4, pull: 24, tick: 0.3, tickDmg: 6, implode: 22 };
 export const RED = { charge: 0.36, radius: 3.8, splash: 32, minSplash: 12, kb: 15 };
-// charge = the model's own Hollow Purple animation up to the release (retargeted, ~1.9x speed)
-export const PURPLE = { charge: 2.62, orbsAt: 0.8, speed: 26, len: 70, radius: 3.0, dmg: 95 };
+// the model's own Hollow Purple animation at its real speed (source 6.5 s → 13.1 s): Blue and Red
+// appear at the hands at 4.5 s (source 11.0), converge, the purple mass grows, release at 6.4 s;
+// it travels at the source's speed (~16 m/s)
+export const PURPLE = { charge: 6.4, orbsAt: 4.5, speed: 16, len: 70, radius: 3.0, dmg: 120 };
 export const VOID = { cine: 5.6, radius: 30, dur: 9, enemyDmg: 0.6, enemySlow: 0.62, cdBoost: 2, stun: 1.2, dmg: 10 };
 
-const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 16 };
+const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 18 };
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
