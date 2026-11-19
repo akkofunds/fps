@@ -700,3 +700,34 @@ export const M_RAY = compileClip([
   { t: 1.8, ease: 'linear', hip: [0, -0.1, -0.05], ik: RAY_BRACE, b: { ...RAY_AIM, spine: [0, -8, 0] } },
   { t: 2.1, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: SGUARD },
 ]);
+
+
+// ================================================================== SPRINT CYCLE (Genshin reference)
+// One full stride, t in [0, 1): t = 0 the LEFT foot strikes in front, t = 0.5 the right. Hand-keyed
+// from the reference: heavy forward lean with the head up, the stance leg drives all the way back
+// (straight) at toe-off while the other knee drives up high, the trailing heel kicks right up behind,
+// elbows bent ~90 deg pumping hard opposite the legs. `hip` here is ADDITIVE height (bob).
+const SPR_TORSO = { hips: [17, 0, 0], spine: [7, 0, 0], chest: [4, 0, 0], upperChest: [0, 0, 0], neck: [-9, 0, 0], head: [-12, 0, 0] };
+const SPR_HALF = [
+  // contact: left heel strikes ahead, right heel rising behind; right arm forward, left back
+  { t: 0, hip: [0, -0.005, 0], b: { ...SPR_TORSO, hips: [17, 5, 2], chest: [4, -7, 0],
+    upperLegL: [-40, 0, 2], lowerLegL: [16, 0, 0], footL: [-10, 0, 0], upperLegR: [24, 0, 2], lowerLegR: [78, 0, 0], footR: [34, 0, 0],
+    upperArmR: [-44, 0, 10], foreArmR: [-96, 0, 0], handR: [-10, 0, 0], upperArmL: [40, 0, 12], foreArmL: [-62, 0, 0], handL: [-10, 0, 0] } },
+  // down: left leg under the body, right heel tucked up toward the seat as the knee swings through
+  { t: 0.11, hip: [0, -0.03, 0], b: { ...SPR_TORSO, hips: [18, 2, 1], chest: [4, -3, 0],
+    upperLegL: [-12, 0, 2], lowerLegL: [40, 0, 0], footL: [6, 0, 0], upperLegR: [-14, 0, 2], lowerLegR: [128, 0, 0], footR: [42, 0, 0],
+    upperArmR: [-16, 0, 10], foreArmR: [-98, 0, 0], handR: [-10, 0, 0], upperArmL: [14, 0, 12], foreArmL: [-80, 0, 0], handL: [-10, 0, 0] } },
+  // toe-off: left leg driven straight back, right knee high; arms at full swing the other way
+  { t: 0.23, hip: [0, 0.035, 0], b: { ...SPR_TORSO, hips: [17, -5, -2], chest: [4, 7, 0],
+    upperLegL: [32, 0, 2], lowerLegL: [14, 0, 0], footL: [48, 0, 0], upperLegR: [-80, 0, 2], lowerLegR: [104, 0, 0], footR: [24, 0, 0],
+    upperArmR: [42, 0, 12], foreArmR: [-58, 0, 0], handR: [-10, 0, 0], upperArmL: [-52, 0, 10], foreArmL: [-100, 0, 0], handL: [-10, 0, 0] } },
+  // flight: left heel lifts behind, right leg reaching forward for the next strike
+  { t: 0.37, hip: [0, 0.045, 0], b: { ...SPR_TORSO, hips: [17, -3, -1], chest: [4, 5, 0],
+    upperLegL: [24, 0, 2], lowerLegL: [72, 0, 0], footL: [36, 0, 0], upperLegR: [-56, 0, 2], lowerLegR: [40, 0, 0], footR: [2, 0, 0],
+    upperArmR: [34, 0, 12], foreArmR: [-62, 0, 0], handR: [-10, 0, 0], upperArmL: [-46, 0, 10], foreArmL: [-98, 0, 0], handL: [-10, 0, 0] } },
+];
+export const SPRINT = compileClip([
+  ...SPR_HALF,
+  ...SPR_HALF.map((k) => ({ t: k.t + 0.5, hip: k.hip, b: mirror(k.b) })),
+  { t: 1, hip: SPR_HALF[0].hip, b: SPR_HALF[0].b },
+]);

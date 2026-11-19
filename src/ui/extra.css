@@ -263,3 +263,13 @@ body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 body.grade-warm #game { filter: saturate(1.35) contrast(1.12) sepia(0.18) hue-rotate(-12deg); }
 body.grade-cold #game { filter: saturate(0.35) contrast(1.25) brightness(0.86) hue-rotate(8deg); }
 body.grade-burn #game { filter: saturate(1.6) contrast(1.18) brightness(1.08) sepia(0.25) hue-rotate(-18deg); }
+
+/* ---------------- phones: 4 mode tabs on one line, start row fits the width */
+.mode-tab { white-space: nowrap; }
+@media (max-width: 520px) {
+  .mode-tabs { width: calc(100% - 24px); justify-content: center; }
+  .mode-tab { padding: 6px 8px; font-size: 10px; letter-spacing: 0.08em; }
+  .actions { left: 12px; right: 12px; transform: none; justify-content: center; gap: 6px; }
+  .btn-start { width: auto; flex: 1 1 auto; max-width: 200px; font-size: 18px; }
+  .btn-side { width: auto; flex: 0 1 96px; padding: 0 6px; font-size: 10px; letter-spacing: 0.06em; }
+}

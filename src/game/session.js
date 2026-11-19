@@ -27,11 +27,12 @@ export class SessionController extends Emitter {
   get busy() { return this.state !== 'idle'; }
   hello() { const me = this.pm.me; return { t: 'hello', id: me.id, name: me.name, tag: me.tag, mage: me.mage }; }
 
-  // ---------------- FFA queue
-  async startQueue() {
+  // ---------------- matchmaking (FFA quickplay / Duel)
+  async startQueue(modeId = 'ffa', retry = false) {
     if (this.busy) return;
     const pm = this.pm;
-    const mode = 'ffa', M = MODES[mode];
+    const mode = modeId === 'duel' ? 'duel' : 'ffa', M = MODES[mode];
+    if (!retry) this._skip = new Set(); // queue slots that turned us away (full)
     if (pm.inParty && !pm.isLeader) { this.emit('toast', 'Only the party leader can start the queue.'); return; }
     if (pm.party.members.length > M.size) { this.emit('toast', 'Party too large.'); return; }
     if (pm.status !== 'online') { this.emit('toast', 'Matchmaking is offline — the PeerJS broker is unreachable. Try Practice.'); return; }
@@ -50,6 +51,8 @@ export class SessionController extends Emitter {
     }
     for (let s = 0; s < SLOTS; s++) {
       if (token !== this.token) return;
+      if (this._skip.has(s)) continue;
+      this._slot = s;
       const id = mmId(mode, s);
       const res = await pm.connectMatch(id, { ...this.hello(), mode, q: true }, 3500);
       if (token !== this.token) { if (res) res.conn.close(); return; }
@@ -83,10 +86,10 @@ export class SessionController extends Emitter {
       this.host.send(h.id, { t: 'start', cfg: { ...this.cfg, queue: true }, players: this.humans.map((x) => ({ ...x })), you: h.id });
       const m = this.app.match;
       if (m && m.isHost && m.cfg.queue && m.rules) m.hostAddPlayer({ ...h }); else this.pendingJoins.push(h);
-      if (!isParty) this.emit('playerFound');
+      if (!isParty && !M.quickplay) this.emit('playerFound');
       this._broadcastQueue();
     });
-    host.on('leave', (pid) => { if (this.state === 'hostQueue') { this.humans = this.humans.filter((h) => h.id !== pid); this._broadcastQueue(); } });
+    host.on('leave', (pid) => { this.humans = this.humans.filter((h) => h.id !== pid); if (this.state === 'hostQueue') this._broadcastQueue(); });
     if (pm.inParty) pm.sendGo(me.id, { queue: this.mode });
     this._broadcastQueue();
     // the queue host plays in the lobby match right away
@@ -111,6 +114,7 @@ export class SessionController extends Emitter {
 
   _broadcastQueue() {
     const M = MODES[this.mode];
+    if (M.quickplay) { this.emit('queue', { searching: false }); return; } // quickplay: you're already in the match
     const st = { t: 'qstate', found: this.humans.length, size: M.size, names: this.humans.map((h) => `${h.name}#${h.tag}`) };
     if (this.host) this.host.broadcast(st);
     this.emit('queue', { searching: true, start: this.queueStart, found: st.found, size: st.size, names: st.names });
@@ -121,17 +125,22 @@ export class SessionController extends Emitter {
     const cs = this.client = new ClientSession(conn);
     const off = cs.on('msg', (msg) => {
       if (token !== this.token) return;
-      if (msg.t === 'qstate') this.emit('queue', { searching: true, start: this.queueStart, found: msg.found, size: msg.size, names: msg.names });
+      if (msg.t === 'qstate') { if (!MODES[this.mode].quickplay) this.emit('queue', { searching: true, start: this.queueStart, found: msg.found, size: msg.size, names: msg.names }); }
       else if (msg.t === 'start') {
-        if (msg.cfg && msg.cfg.queue) { this.emit('start', { cfg: msg.cfg, net: cs, isHost: false, localId: msg.you, players: msg.players }); return; }
+        if (msg.cfg && msg.cfg.queue) {
+          this.emit('start', { cfg: msg.cfg, net: cs, isHost: false, localId: msg.you, players: msg.players });
+          if (MODES[msg.cfg.mode] && MODES[msg.cfg.mode].quickplay) this.emit('queue', { searching: false });
+          return;
+        }
         off(); offC(); this._beginClient(cs, msg);
       } else if (msg.t === 'qlive') { off(); offC(); this.state = 'match'; this.emit('queue', { searching: false }); }
       else if (this.app.match && (msg.t === 'hostLeft')) { off(); offC(); /* the running lobby match handles it */ }
       else if (msg.t === 'reject' || msg.t === 'hostLeft') {
         off(); offC(); cs.close(); this.client = null; this.state = 'idle';
-        this.emit('toast', 'Match host left — searching again');
+        const full = msg.t === 'reject' && msg.reason === 'full';
+        if (full) this._skip.add(this._slot); else this.emit('toast', 'Match host left — searching again');
         this.emit('queue', { searching: false });
-        setTimeout(() => this.startQueue(), 300);
+        setTimeout(() => this.startQueue(this.mode, full), 300);
       }
     });
     const offC = cs.on('close', () => {
@@ -218,7 +227,9 @@ export class SessionController extends Emitter {
     const n = this.humans.length;
     const m = this.app.match;
     if (!m || !m.rules || !m.cfg.queue) return; // lobby match still loading
+    if (M.quickplay) return; // quickplay never 'goes live': it is always on, players drop in and out
     if (n >= M.size) { this.emit('found'); this._goLive(); return; }
+    if (M.size <= 2) return; // duels wait for the opponent
     if (n >= M.minPlayers) {
       if (!this._readyAt) { this._readyAt = performance.now(); }
       const wait = (performance.now() - this._readyAt) / 1000;

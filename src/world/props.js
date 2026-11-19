@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { groundH, PLAZA, HILL, LAKE, PLAY_RADIUS, pathDist, terrainNoise as N } from './terrain.js';
+import { groundH, groundNormal, LAKE, PLAY_RADIUS, pathDist, riverDist, CLIFF, terrainNoise as N } from './terrain.js';
 import { mulberry32 } from './noise.js';
 import { windPatch } from './vegetation.js';
 import { stylize } from './stylize.js';
-import { VILLAGE_FOOTPRINTS } from './village.js';
 import { landmarkFootprints } from './landmarks.js';
 
 // Ruins (stone plaza, broken pillars, watchtower, arches, walls), trees, rocks and logs.
@@ -117,11 +116,11 @@ function oakGeometry(seed) {
     bg.rotateZ((r() - 0.5) * 1.6); bg.rotateY(r() * 6.28); bg.translate(0, 2.4 + r() * 0.6, 0);
     trunk.push(bg);
   }
-  const blobs = 7;
+  const blobs = 9;
   for (let i = 0; i < blobs; i++) {
     const a = (i / blobs) * 6.28 + r(), d = i === 0 ? 0 : 1.1 + r() * 0.9;
     const s = i === 0 ? 2.0 : 1.2 + r() * 0.7;
-    const lg = jitter(new THREE.IcosahedronGeometry(s, LEAF_DETAIL), 0.28, seed + i);
+    const lg = jitter(new THREE.IcosahedronGeometry(s, LEAF_DETAIL), 0.14, seed + i);
     lg.scale(1, 0.78, 1);
     lg.translate(Math.cos(a) * d, 3.9 + r() * 1.3 + (i === 0 ? 0.9 : 0), Math.sin(a) * d);
     leaves.push(lg);
@@ -157,15 +156,15 @@ function treeColors(def, kind) {
     if (def.birch) { c.setRGB(0.88, 0.86, 0.8); if (N.n2(y * 4, x * 8 + z * 8) > 0.45) c.setRGB(0.18, 0.17, 0.15); }
     else c.setRGB(0.36, 0.25, 0.16).multiplyScalar(0.85 + N.n2(y * 3, x * 5) * 0.15);
   });
-  const top = kind === 'pine' ? new THREE.Color(0.2, 0.42, 0.24) : kind === 'birch' ? new THREE.Color(0.58, 0.72, 0.22) : new THREE.Color(0.36, 0.6, 0.16);
-  const bot = kind === 'pine' ? new THREE.Color(0.06, 0.2, 0.12) : kind === 'birch' ? new THREE.Color(0.24, 0.4, 0.1) : new THREE.Color(0.1, 0.27, 0.07);
+  const top = kind === 'pine' ? new THREE.Color(0.2, 0.42, 0.24) : kind === 'birch' ? new THREE.Color(0.62, 0.78, 0.24) : new THREE.Color(0.44, 0.74, 0.2);
+  const bot = kind === 'pine' ? new THREE.Color(0.06, 0.2, 0.12) : kind === 'birch' ? new THREE.Color(0.24, 0.4, 0.1) : new THREE.Color(0.1, 0.32, 0.1);
   colorize(def.leaves, (x, y, z, c) => {
     const t = Math.min(1, Math.max(0, (y - 2.5) / (def.h - 2.5)));
     c.copy(bot).lerp(top, Math.pow(t, 0.8));
     c.multiplyScalar(0.9 + N.n2(x * 1.5 + y, z * 1.5) * 0.14);
   });
   def.trunk.computeVertexNormals(); def.leaves.computeVertexNormals();
-  canopyNormals(def.leaves, kind === 'pine' ? 0.35 : 0.72);
+  canopyNormals(def.leaves, kind === 'pine' ? 0.35 : 0.9);
   return def;
 }
 
@@ -211,15 +210,23 @@ export const treeTime = { value: 0 };
 
 // ---------------------------------------------------------------- rocks
 function rockGeometry(seed) {
-  const g = jitter(new THREE.IcosahedronGeometry(1, 1), 0.45, seed);
-  g.scale(1, 0.62, 0.85);
-  const ng = ni(g);
-  colorize(ng, (x, y, z, c) => {
-    c.setRGB(0.56, 0.52, 0.45).multiplyScalar(0.82 + N.n2(x * 2 + seed, z * 2) * 0.18);
-    if (y > 0.25 + N.n2(x * 3, z * 3) * 0.2) c.lerp(new THREE.Color(0.33, 0.47, 0.17), 0.65);
+  // smooth, rounded grey boulder (reference: soft weathered stones half sunk in the grass)
+  const g = new THREE.IcosahedronGeometry(1, 3);
+  const r = mulberry32(seed), p = g.attributes.position, v = new THREE.Vector3();
+  const o = [r() * 10, r() * 10, r() * 10];
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const k = 1 + 0.18 * N.n2(v.x * 1.4 + o[0], v.y * 1.4 + v.z * 0.9 + o[1]) + 0.07 * N.n2(v.x * 4 + o[2], v.z * 4);
+    v.multiplyScalar(k); if (v.y < -0.2) v.y = -0.2 + (v.y + 0.2) * 0.4; // flatter base
+    p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.scale(1.2, 0.66, 0.95);
+  colorize(g, (x, y, z, c) => {
+    c.setRGB(0.45, 0.46, 0.46).multiplyScalar(0.84 + N.n2(x * 2 + seed, z * 2 + y) * 0.16);
+    if (y > 0.3 + N.n2(x * 3, z * 3) * 0.15) c.lerp(new THREE.Color(0.36, 0.52, 0.2), 0.45); // moss on top
   });
-  ng.computeVertexNormals();
-  return ng;
+  g.computeVertexNormals();
+  return g.index ? g.toNonIndexed() : g;
 }
 
 // ---------------------------------------------------------------- assemble
@@ -227,80 +234,10 @@ export function buildProps(world, quality = 'high', Q = {}) {
   LEAF_DETAIL = Q.leafDetail || 2;
   const root = new THREE.Group(); root.name = 'props';
   const B = new Builder(world);
-  const plazaY = groundH(0, 0);
 
-  // stone plaza: two-step circular floor
-  const floor = jitter(new THREE.CylinderGeometry(PLAZA.r, PLAZA.r + 0.3, 0.6, 40, 1), 0.04, 9);
-  floor.translate(0, plazaY - 0.05, 0);
-  B.addStone(floor, [0.66, 0.63, 0.56]);
-  world.addCyl(0, 0, PLAZA.r + 0.1, plazaY - 2, plazaY + 0.25);
-  const inner = new THREE.CylinderGeometry(3.4, 3.6, 0.4, 24); inner.translate(0, plazaY + 0.4, 0);
-  B.addStone(inner, [0.7, 0.66, 0.6]);
-  world.addCyl(0, 0, 3.6, plazaY, plazaY + 0.6);
-  // central fire altar
-  B.box(0, plazaY + 0.6, 0, 1.6, 0.9, 1.6, 0.4, [0.46, 0.42, 0.4]);
-  // broken pillar ring
-  const pillarHeights = [4.6, 1.4, 3.2, 5.2, 2.1, 4.0, 1.0, 3.6];
-  pillarHeights.forEach((h, i) => {
-    const a = (i / pillarHeights.length) * Math.PI * 2 + 0.2;
-    B.pillar(Math.cos(a) * 8.2, Math.sin(a) * 8.2, h, 0.55, plazaY + 0.2);
-  });
-  // a toppled pillar lying across the plaza edge
-  {
-    const g = jitter(new THREE.CylinderGeometry(0.5, 0.5, 4.2, 10, 3), 0.04, 77);
-    g.rotateZ(Math.PI / 2); g.rotateY(0.6); g.translate(-6.4, plazaY + 0.7, -5.2);
-    B.addStone(g, [0.72, 0.69, 0.62]);
-    world.addBox(-6.4, -5.2, 2.1, 0.5, -0.6, plazaY + 0.2, plazaY + 1.2);
-  }
-  root.userData.altar = new THREE.Vector3(0, plazaY + 1.5, 0);
-
-  // watchtower on the hill
-  {
-    const tx = HILL.x, tz = HILL.z, ty = groundH(tx, tz) - 0.4, rot = 0.35;
-    const c = Math.cos(rot), s = Math.sin(rot);
-    const at = (lx, lz) => [tx + lx * c + lz * s, tz - lx * s + lz * c];
-    const wall = (lx, lz, len, h, along) => {
-      const [x, z] = at(lx, lz);
-      B.box(x, ty, z, along ? len : 0.7, h, along ? 0.7 : len, rot, [0.6, 0.57, 0.5]);
-    };
-    wall(0, -3, 6.7, 5.4, true); // back
-    wall(-3, 0.2, 5.0, 3.6, false); // left (taller)
-    wall(3, 0.6, 4.2, 1.5, false); // right (climbable)
-    wall(-2.1, 3, 2.4, 2.6, true); // front pieces with a doorway
-    wall(2.3, 3, 1.6, 1.1, true);
-    // rubble + floor slab inside
-    const [fx, fz] = at(0, 0);
-    B.box(fx, ty, fz, 5.2, 0.55, 5.2, rot, [0.55, 0.52, 0.46]);
-    for (let i = 0; i < 6; i++) { const [x, z] = at(R(-5, 5), R(4, 6.5)); B.box(x, groundH(x, z) - 0.2, z, R(0.5, 1.1), R(0.4, 0.8), R(0.5, 1), R(0, 3), [0.58, 0.55, 0.48]); }
-    root.userData.tower = new THREE.Vector3(fx, ty + 6, fz);
-  }
-
-  // stone arches
-  const arch = (x, z, rot) => {
-    const y = groundH(x, z) - 0.2, c = Math.cos(rot), s = Math.sin(rot);
-    for (const side of [-1, 1]) B.box(x + side * 1.9 * c, y, z - side * 1.9 * s, 0.9, 4.2, 0.9, rot, [0.66, 0.62, 0.55]);
-    const top = jitter(new THREE.BoxGeometry(5, 0.8, 1.0, 5, 1, 1), 0.06, 3); top.rotateY(rot); top.translate(x, y + 4.6, z);
-    B.addStone(top, [0.64, 0.6, 0.54]);
-    world.addBox(x, z, 2.5, 0.5, -rot, y + 4.2, y + 5.0);
-  };
-  arch(-20, -31, 0.9);
-  arch(24, 31, -0.5);
-  arch(-44, 2, 1.5);
-
-  // old walls for cover
-  const walls = [[-14, 14, 0.3, 5, 1.3], [16, -6, 1.2, 4.5, 1.1], [-34, -16, 2.0, 6, 1.6], [40, 4, 0.2, 5.5, 1.2], [6, 30, 1.7, 4, 1.0], [-6, -40, 0.4, 5, 1.4], [46, -38, 2.4, 4, 1.2], [-50, 26, 1.0, 4.5, 1.1], [22, 46, 2.6, 3.5, 0.9], [-24, 44, 0.8, 4, 1.2]];
-  for (const [x, z, rot, len, h] of walls) {
-    const y = groundH(x, z) - 0.25;
-    const segs = 3;
-    for (let i = 0; i < segs; i++) {
-      const t = (i - (segs - 1) / 2) * len / segs;
-      const hh = h * (0.6 + rnd() * 0.5) + 0.25;
-      B.box(x + Math.cos(rot) * t, y, z - Math.sin(rot) * t, len / segs + 0.02, hh, 0.65, rot, [0.6, 0.58, 0.52]);
-    }
-  }
-  const ruins = B.finish();
-  B.avoid.push(...VILLAGE_FOOTPRINTS, ...landmarkFootprints());
-  root.add(ruins);
+  // the valley has no ruins: open meadow, trees, boulders (reference board)
+  root.userData.altar = null;
+  B.avoid.push(...landmarkFootprints());
 
   // ---------------- trees
   const avoidFn = (x, z) => {
@@ -316,11 +253,12 @@ export function buildProps(world, quality = 'high', Q = {}) {
   const placements = [];
   const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 });
   const leafMat = stylize(leafMaterial(), { wrap: 0.55, translucency: 0.25, band: 0.16 });
+  const nrmT = new THREE.Vector3();
   const tryTree = (x, z, kind, scale, collide) => {
-    if (Math.hypot(x, z) < PLAZA.r + 3) return false;
-    if (Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 1.5) return false;
+    if (riverDist(x, z) < 7 || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 4) return false;
+    if (groundNormal(x, z, nrmT).y < 0.9) return false;                  // not on (or at the lip of) a cliff
+    if (groundNormal(x + 2.5, z, nrmT).y < 0.75 || groundNormal(x - 2.5, z, nrmT).y < 0.75 || groundNormal(x, z + 2.5, nrmT).y < 0.75 || groundNormal(x, z - 2.5, nrmT).y < 0.75) return false;
     if (pathDist(x, z) < 2.5) return false;
-    if (Math.hypot(x - HILL.x, z - HILL.z) < 7.5) return false;
     if (avoidFn(x, z)) return false;
     for (const p of placements) if ((p.x - x) ** 2 + (p.z - z) ** 2 < (collide ? 30 : 12)) return false;
     placements.push({ x, z, kind, scale, v: Math.floor(rnd() * kinds[kind].length), rot: rnd() * 6.28 });
@@ -328,26 +266,23 @@ export function buildProps(world, quality = 'high', Q = {}) {
     B.avoid.push({ x, z, r: 0.8 * scale });
     return true;
   };
-  // groves inside the arena (cover)
-  const groves = [[-40, -36], [42, 24], [-12, 38], [52, -10], [-52, -6], [14, -46], [-30, 46], [36, 46], [-46, 40]];
-  for (const [gx, gz] of groves) {
-    const n = 3 + Math.floor(rnd() * 3);
-    for (let i = 0, t = 0; i < n && t < 40; t++) {
-      const kind = rnd() < 0.5 ? 'oak' : rnd() < 0.6 ? 'birch' : 'pine';
-      if (tryTree(gx + R(-7, 7), gz + R(-7, 7), kind, R(0.85, 1.25), true)) i++;
-    }
+  // the meadow is open (reference): a few big lone oaks and small clumps near its edges for cover
+  const lone = [[58, 34, 1.6], [-62, 22, 1.4], [30, 62, 1.5], [-30, -38, 1.3], [44, -30, 1.35], [-10, 70, 1.3], [70, 6, 1.25], [-74, 44, 1.4]];
+  for (const [x, z, sc] of lone) tryTree(x, z, 'oak', sc, true);
+  const clumps = [[-46, 52], [62, 52], [-58, -16], [20, -44]];
+  for (const [gx, gz] of clumps) for (let i = 0, t = 0; i < 3 && t < 40; t++) if (tryTree(gx + R(-8, 8), gz + R(-8, 8), rnd() < 0.85 ? 'oak' : 'birch', R(0.85, 1.2), true)) i++;
+  for (let i = 0, t = 0; i < 10 && t < 400; t++) {
+    const a = rnd() * 6.28, r = R(40, PLAY_RADIUS - 6);
+    if (tryTree(Math.cos(a) * r, Math.sin(a) * r, rnd() < 0.8 ? 'oak' : 'birch', R(0.8, 1.15), true)) i++;
   }
-  for (let i = 0, t = 0; i < 14 && t < 300; t++) {
-    const a = rnd() * 6.28, r = R(16, PLAY_RADIUS - 4);
-    if (tryTree(Math.cos(a) * r, Math.sin(a) * r, rnd() < 0.6 ? 'oak' : 'birch', R(0.8, 1.2), true)) i++;
-  }
-  // forest on the surrounding hills (scenery)
-  const scenery = Q.scenery || 300;
-  for (let i = 0, t = 0; i < scenery && t < scenery * 8; t++) {
-    const a = rnd() * 6.28, r = R(PLAY_RADIUS + 2, 230);
+  // trees dotting the cliff tops and the plateaus beyond (dense near the edge, like the reference)
+  const scenery = (Q.scenery || 300) * 2.4;
+  for (let i = 0, t = 0; i < scenery && t < scenery * 10; t++) {
+    const a = rnd() * 6.28, r = 62 + Math.pow(rnd(), 1.7) * 240;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (N.fbm(x / 40, z / 40, 2) < -0.15) continue;
-    if (tryTree(x, z, rnd() < 0.72 ? 'pine' : rnd() < 0.6 ? 'oak' : 'birch', R(1.0, 1.7), r < PLAY_RADIUS + 12)) i++;
+    if (groundH(x, z) < CLIFF.t1 - 1.5 && r < 150) continue;               // inside the basin: handled above
+    if (N.fbm(x / 30, z / 30, 2) < -0.2) continue;
+    if (tryTree(x, z, rnd() < 0.9 ? 'oak' : 'birch', R(1.0, 1.6), false)) i++;
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   // arena trees cast shadows; the forest on the surrounding hills doesn't (it's outside the shadow
@@ -374,21 +309,34 @@ export function buildProps(world, quality = 'high', Q = {}) {
 
   // ---------------- rocks
   const rockDefs = [rockGeometry(1), rockGeometry(2), rockGeometry(3)];
-  const rockMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.3, band: 0.12 });
+  const rockMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true }), { wrap: 0.4, band: 0.1 });
   const rocks = rockDefs.map(() => []);
   const addRock = (x, z, s, collide) => {
-    if (Math.hypot(x, z) < PLAZA.r + 1.5 || avoidFn(x, z) || pathDist(x, z) < 1.5) return;
+    if (avoidFn(x, z) || pathDist(x, z) < 1.5) return;
     const y = groundH(x, z);
     rocks[Math.floor(rnd() * rocks.length)].push({ x, y: y - s * 0.18, z, s, rot: rnd() * 6.28, sy: R(0.7, 1.2) });
     if (collide) world.addSphere(x, y - s * 0.25, z, s * 0.82);
     B.avoid.push({ x, z, r: s * 1.05 });
   };
-  for (let i = 0; i < 26; i++) { const a = rnd() * 6.28, r = R(12, PLAY_RADIUS - 2); addRock(Math.cos(a) * r, Math.sin(a) * r, R(0.6, 1.6), true); }
-  // big cover boulders
-  const boulders = [[-22, 4], [12, -24], [28, 8], [-8, 22], [-36, -28], [50, 18], [8, 52], [-56, 12], [30, -48], [-18, -52]];
-  for (const [x, z] of boulders) { addRock(x, z, R(1.6, 2.3), true); addRock(x + R(-2.5, 2.5), z + R(-2.5, 2.5), R(0.5, 0.9), true); }
-  for (let i = 0; i < 18; i++) { const a = rnd() * 6.28; addRock(LAKE.x + Math.cos(a) * (LAKE.r + R(-1, 2)), LAKE.z + Math.sin(a) * (LAKE.r + R(-1, 2)), R(0.3, 0.8), true); }
-  for (let i = 0; i < 60; i++) { const a = rnd() * 6.28, r = R(PLAY_RADIUS + 4, 160); addRock(Math.cos(a) * r, Math.sin(a) * r, R(1.5, 4.5), false); }
+  const okRock = (x, z) => riverDist(x, z) > 5 && groundNormal(x, z, nrmT).y > 0.85;
+  // grey boulders scattered over the meadow (reference)
+  for (let i = 0, t = 0; i < 34 && t < 600; t++) { const a = rnd() * 6.28, r = R(10, PLAY_RADIUS - 4), x = Math.cos(a) * r, z = Math.sin(a) * r; if (okRock(x, z)) { addRock(x, z, R(0.5, 1.4), true); i++; } }
+  // big cover boulders, each with a smaller one at its foot
+  const boulders = [[-24, 6], [14, -26], [34, 10], [-10, 28], [-40, -26], [56, 20], [10, 56], [-58, 14], [36, -52], [-20, 56], [64, -40], [-66, 34]];
+  for (const [x, z] of boulders) if (okRock(x, z)) { addRock(x, z, R(1.6, 2.4), true); addRock(x + R(-2.6, 2.6), z + R(-2.6, 2.6), R(0.5, 0.9), true); }
+  // rubble at the foot of the cliffs
+  for (let i = 0, t = 0; i < 60 && t < 2000; t++) {
+    const a = rnd() * 6.28, r = R(55, 140), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const h0 = groundH(x, z);
+    if (h0 > 2 || !okRock(x, z) || groundH(x + Math.cos(a) * 3, z + Math.sin(a) * 3) < h0 + 3) continue;
+    addRock(x, z, R(0.8, 2.2), r < PLAY_RADIUS + 12); i++;
+  }
+  // river stones
+  for (let i = 0, t = 0; i < 40 && t < 1500; t++) {
+    const a = rnd() * 6.28, r = R(20, 160), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    const d = riverDist(x, z); if (d < 4.5 || d > 7.5) continue;
+    addRock(x, z, R(0.35, 0.8), false); i++;
+  }
   rockDefs.forEach((g, k) => {
     const list = rocks[k];
     if (!list.length) return;
@@ -397,22 +345,6 @@ export function buildProps(world, quality = 'high', Q = {}) {
     im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere();
     root.add(im);
   });
-
-  // ---------------- fallen logs (cover)
-  const logs = [[-26, -8, 0.4, 4.2], [20, 20, 1.9, 3.6], [36, -12, 0.9, 4], [-10, -24, 2.2, 3.8], [-42, 18, 1.2, 3.4]];
-  const logGeo = [];
-  for (const [x, z, rot, len] of logs) {
-    const y = groundH(x, z);
-    const g = jitter(new THREE.CylinderGeometry(0.42, 0.48, len, 9, 3), 0.05, Math.floor(x * 3));
-    g.rotateZ(Math.PI / 2); g.rotateY(rot); g.translate(x, y + 0.32, z);
-    logGeo.push(colorize(ni(g), (px, py, pz, c) => { c.setRGB(0.38, 0.27, 0.17).multiplyScalar(0.85 + N.n2(px * 3, pz * 3) * 0.15); if (py > y + 0.62) c.lerp(new THREE.Color(0.3, 0.44, 0.16), 0.5); }));
-    world.addBox(x, z, len / 2, 0.45, -rot, y - 0.3, y + 0.78);
-    B.avoid.push({ x, z, r: len * 0.5 });
-  }
-  const lg = mergeGeometries(logGeo); lg.computeVertexNormals();
-  const logMesh = new THREE.Mesh(lg, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 }));
-  logMesh.castShadow = true; logMesh.receiveShadow = true;
-  root.add(logMesh);
 
   root.userData.avoid = avoidFn;
   // anchors for undergrowth: trees inside/near the arena, rocks and ruin walls

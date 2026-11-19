@@ -34,6 +34,6 @@ ICONS.freeze = '<svg viewBox="0 0 24 24"><path d="M11 2h2v4l2.5-1.5 1 1.7L13 8.4
 ICONS.lance = '<svg viewBox="0 0 24 24"><path d="M2 13.2l13-1.4v.4L2 13.6zM15 10l7 2-7 2c.6-1.3.6-2.7 0-4z"/><path d="M3 11h9v2H3z" opacity=".55"/><circle cx="4" cy="12" r="2.2"/></svg>';
 ICONS.blitz = '<svg viewBox="0 0 24 24"><path d="M13 3l6 6-4 1 3 4-3 1 2 6-9-8 4-1-3-4 4-1z"/><path d="M2 20h8v1.6H2zM1 16.5h6v1.4H1z"/></svg>';
 ICONS.zero = '<svg viewBox="0 0 24 24"><path d="M12 2l2 6 6-2-4 5 5 3-6 1 1 6-4-4-4 4 1-6-6-1 5-3-4-5 6 2z"/><circle cx="12" cy="12" r="2.6" fill="#ff8a3a"/></svg>';
-Object.assign(ABILITY_ICON, { freeze: ICONS.freeze, heatwave: ICONS.freeze, shatter: ICONS.freeze, lance: ICONS.lance, blitz: ICONS.blitz, uppercut: ICONS.blitz, zero: ICONS.zero, zeroBoom: ICONS.zero, shard: ICONS.freeze });
+Object.assign(ABILITY_ICON, { freeze: ICONS.freeze, heatwave: ICONS.freeze, shatter: ICONS.freeze, lance: ICONS.lance, blitz: ICONS.blitz, uppercut: ICONS.blitz, zero: ICONS.zero, zeroBoom: ICONS.zero, shard: ICONS.freeze, sparkBig: ICONS.spark, novaFrag: ICONS.nova, novaShock: ICONS.nova, novaBurn: ICONS.nova });
 ICONS.ray = '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="3.6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="5" cy="12" r="1.4"/><path d="M8.6 10.8L23 11.4v1.2L8.6 13.2z"/><path d="M8 9.2l6 1.6-6 .4zM8 14.8l6-1.6-6-.4z" opacity=".6"/></svg>';
 Object.assign(ABILITY_ICON, { ray: ICONS.ray });

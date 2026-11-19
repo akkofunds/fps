@@ -96,14 +96,18 @@ function flowerGeometry(tint) {
   return g;
 }
 
+const _gn = new THREE.Vector3();
 export function grassAllowed(x, z, avoid) {
   const r = Math.hypot(x, z);
   if (r < PLAZA.r + 0.6) return 0;
   if (lakeWaterDepth(x, z) > 0) return 0;
   if (avoid && avoid(x, z)) return 0;
+  // no grass on the cliff faces
+  const gn = groundNormal(x, z, _gn);
+  if (gn.y < 0.82) return 0;
   const pd = pathDist(x, z);
   let d = smoothstep(0.7, 2.2, pd);
-  d *= 1 - smoothstep(PLAY_RADIUS + 14, PLAY_RADIUS + 30, r) * 0.7;
+  d *= 1 - smoothstep(PLAY_RADIUS + 40, PLAY_RADIUS + 60, r) * 0.7;
   d *= 0.55 + 0.45 * smoothstep(-0.5, 0.4, N.fbm(x / 9 + 3, z / 9 - 8, 2));
   return d;
 }
@@ -157,7 +161,8 @@ export function buildGrass(count, avoid, Q = {}) {
 export function buildFlowers(count, avoid, Q = {}) {
   const group = new THREE.Group();
   group.name = 'flowers';
-  const tints = [new THREE.Color(1, 1, 0.96), new THREE.Color(1, 0.84, 0.2), new THREE.Color(0.66, 0.46, 1), new THREE.Color(1, 0.36, 0.3), new THREE.Color(0.45, 0.65, 1)];
+  // reference palette: mostly white daisies and soft lilac, a few pale yellow
+  const tints = [new THREE.Color(1, 1, 0.97), new THREE.Color(0.96, 0.96, 1), new THREE.Color(0.78, 0.66, 1), new THREE.Color(0.86, 0.7, 0.98), new THREE.Color(1, 0.94, 0.62)];
   const rnd = mulberry32(77);
   const per = tints.map(() => []);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);

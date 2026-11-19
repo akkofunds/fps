@@ -19,7 +19,7 @@ export class Hud {
     this.tags = new Map();
     this.nums = [];
     this.sbOpen = false;
-    app.input.on('scoreboard', (on) => { this.sbOpen = on; if (this.match) this.renderBoard(); show('scoreboard', on && !!this.match && !this.match.ended); });
+    app.input.on('scoreboard', (on) => { this.sbOpen = on && !!this.board; if (this.match && this.sbOpen) this.renderBoard(); show('scoreboard', this.sbOpen && !!this.match && !this.match.ended); });
   }
 
   // ability bar for the local mage's kit: dash + 3 abilities + ultimate (last slot)
@@ -58,8 +58,11 @@ export class Hud {
     show('deathScreen', false); show('endScreen', false); show('scoreboard', false);
     show('practiceHint', m.cfg.mode === 'practice');
     $('practiceHint').innerHTML = this.app.input.mode === 'touch' ? 'PRACTICE RANGE · Training dummies regenerate · Tap ☰ to leave' : 'PRACTICE RANGE · Training dummies regenerate · Press <b>Esc</b> to leave';
-    show('topCenter', m.cfg.mode !== 'practice');
-    $('tcGoal').textContent = m.killsToWin ? `FIRST TO ${m.killsToWin}` : 'NO KILL LIMIT';
+    // the score HUD + Tab scoreboard: Duels (and Customs) only; FFA is quickplay
+    this.board = m.cfg.mode !== 'practice' && !m.mode.quickplay;
+    show('topCenter', this.board);
+    $('tcGoal').textContent = m.mode.lives ? `${m.mode.lives} LIVES EACH` : m.killsToWin ? `FIRST TO ${m.killsToWin}` : 'NO KILL LIMIT';
+    document.querySelector('#topCenter .tc-me .tc-lbl').textContent = m.mode.lives ? 'YOUR LIVES' : 'YOU';
     $('killfeed').textContent = '';
     $('tags').textContent = ''; this.tags.clear();
     $('dmgNums').textContent = ''; this.nums.length = 0;
@@ -77,7 +80,7 @@ export class Hud {
       $('hpNum').textContent = v;
       $('hpFill').style.width = `${(v / BAL.hp) * 100}%`;
       $('hpGhost').style.width = `${(v / BAL.hp) * 100}%`;
-      $('hpNum').parentElement.classList.toggle('low', v <= 50);
+      $('hpNum').parentElement.classList.toggle('low', v <= BAL.hp * 0.3);
     });
     // abilities
     const k = m.kit, b = m.body;
@@ -114,13 +117,20 @@ export class Hud {
     }
     if (this.q) this.set('qt', Math.floor((performance.now() - this.q.start) / 1000), (v) => { document.querySelector('#queueBar .qt').textContent = fmtTime(v); });
     // top center
-    if (m.cfg.mode !== 'practice' && !this.q) {
-      const t = m.phase === 'warmup' ? m.timeLeft : m.timeLeft;
+    if (this.board && !this.q) {
+      const t = m.timeLeft;
       this.set('time', fmtTime(t), (v) => { $('tcTime').textContent = v; });
-      this.set('meK', me.kills, (v) => { $('tcMe').textContent = v; });
       let lead = null;
       for (const e of m.ents.values()) if (!e.dummy && e !== me && !e.left && (!lead || e.kills > lead.kills)) lead = e;
-      this.set('lead', lead ? `${lead.name}|${lead.kills}` : '-', () => { $('tcLeadName').textContent = lead ? lead.name.toUpperCase() : 'NO RIVALS'; $('tcLead').textContent = lead ? lead.kills : '-'; });
+      if (m.mode.lives) {
+        // duel: lives left on each side
+        const L = (e) => Math.max(0, m.mode.lives - (m.phase === 'live' || m.phase === 'ended' ? e.deaths : 0));
+        this.set('meK', `L${L(me)}`, () => { $('tcMe').textContent = '♥'.repeat(L(me)) || '0'; });
+        this.set('lead', lead ? `${lead.name}|L${L(lead)}` : '-', () => { $('tcLeadName').textContent = lead ? lead.name.toUpperCase() : 'WAITING…'; $('tcLead').textContent = lead ? ('♥'.repeat(L(lead)) || '0') : '-'; });
+      } else {
+        this.set('meK', me.kills, (v) => { $('tcMe').textContent = v; });
+        this.set('lead', lead ? `${lead.name}|${lead.kills}` : '-', () => { $('tcLeadName').textContent = lead ? lead.name.toUpperCase() : 'NO RIVALS'; $('tcLead').textContent = lead ? lead.kills : '-'; });
+      }
     }
     // crosshair on enemy
     this.set('xt', !!m.aimEnt, (v) => $('xhair').classList.toggle('target', v));
@@ -268,10 +278,15 @@ export class Hud {
 
   killBanner(v, kills) { this.banner('ELIMINATED', `${v.name.toUpperCase()} · ${kills} KILL${kills === 1 ? '' : 'S'}`, 1.8, 'kill'); }
 
-  deathScreen(k, ab, rt) {
+  // livesLeft: duels only (-1 otherwise)
+  deathScreen(k, ab, rt, livesLeft = -1) {
     $('dsBy').innerHTML = '';
     if (k && k !== this.match.local) { $('dsBy').append('by '); const b = el('b', '', k.name); $('dsBy').appendChild(b); }
-    this.deathAt = performance.now() / 1000 + (rt || 3);
+    const out = livesLeft === 0;
+    this.deathAt = out ? 0 : performance.now() / 1000 + (rt || 3);
+    const t = document.querySelector('#deathScreen .ds-timer');
+    if (out) t.innerHTML = 'OUT OF LIVES';
+    else t.innerHTML = `${livesLeft > 0 ? `<span class="ds-lives">${'♥'.repeat(livesLeft)}</span> ${livesLeft} ${livesLeft === 1 ? 'LIFE' : 'LIVES'} LEFT · ` : ''}RESPAWN IN <b id="dsTimer">${Math.ceil(rt || 3)}</b>`;
     show('deathScreen', true);
   }
   respawned() { show('deathScreen', false); this.deathAt = 0; }
@@ -282,14 +297,20 @@ export class Hud {
     if (!el) { el = document.createElement('div'); el.id = 'queueBar'; el.innerHTML = '<b>FINDING PLAYERS</b><span class="qn"></span><span class="qt"></span><i>Warm up while the lobby fills · Esc to leave the queue</i>'; document.getElementById('hud').appendChild(el); }
     this.q = q && q.searching ? q : null;
     el.classList.toggle('on', !!this.q);
+    if (this.q) el.querySelector('b').textContent = (q.size || 8) <= 2 ? 'FINDING OPPONENT' : 'FINDING PLAYERS';
     if (this.q) el.querySelector('.qn').textContent = `${q.found || 1} / ${q.size || 8}`;
-    show('topCenter', !this.q && this.match && this.match.cfg.mode !== 'practice');
+    show('topCenter', !this.q && this.match && this.board);
   }
 
   phase(p, tl) {
     if (p === 'queue') { this.banner('QUEUE LOBBY', 'ROAM AND WARM UP WHILE PLAYERS JOIN', 2.4); return; }
     if (p === 'warmup') this.banner('GET READY', `MATCH STARTS IN ${Math.ceil(tl)}`, Math.max(1, tl - 0.3));
-    if (p === 'live' && this.match && this.match.cfg.mode !== 'practice') this.banner('FIGHT', this.match.killsToWin ? `FIRST TO ${this.match.killsToWin} KILLS` : '', 1.6);
+    const m = this.match;
+    if (p === 'live' && m && m.cfg.mode !== 'practice') {
+      if (m.mode.quickplay) this.banner('FREE-FOR-ALL', 'QUICKPLAY · DROP IN AND FIGHT', 1.8);
+      else if (m.mode.lives) this.banner('DUEL', `${m.mode.lives} LIVES EACH · LAST MAGE STANDING`, 1.8);
+      else this.banner('FIGHT', m.killsToWin ? `FIRST TO ${m.killsToWin} KILLS` : '', 1.6);
+    }
   }
 
   novaWarning(c, radius, mine) {
@@ -418,13 +439,13 @@ export class Hud {
     if (!m) return;
     const sb = $('scoreboard');
     const rows = [...m.ents.values()].filter((e) => !e.dummy && !e.left).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-    sb.innerHTML = `<div class="sb-title">SCOREBOARD <span>${m.mode.label} · SUNVALE</span></div><div class="sb-row head"><span>#</span><span>PLAYER</span><span>KILLS</span><span>DEATHS</span><span>DAMAGE</span></div>`;
+    sb.innerHTML = `<div class="sb-title">SCOREBOARD <span>${m.mode.label} · SUNVALE</span></div><div class="sb-row head"><span>#</span><span>PLAYER</span><span>KILLS</span><span>${m.mode.lives ? 'LIVES' : 'DEATHS'}</span><span>DAMAGE</span></div>`;
     rows.forEach((e, i) => {
       const r = el('div', 'sb-row' + (e === m.local ? ' me' : ''));
       r.appendChild(el('span', 'pl', String(i + 1)));
       const nm = el('b', '', e.name); nm.appendChild(el('span', 'muted', e.tag ? ` #${e.tag}` : ''));
       r.appendChild(nm);
-      r.appendChild(el('span', '', String(e.kills))); r.appendChild(el('span', '', String(e.deaths))); r.appendChild(el('span', '', String(e.dmg)));
+      r.appendChild(el('span', '', String(e.kills))); r.appendChild(el('span', '', String(m.mode.lives ? Math.max(0, m.mode.lives - (m.phase === 'live' ? e.deaths : 0)) : e.deaths))); r.appendChild(el('span', '', String(e.dmg)));
       sb.appendChild(r);
     });
   }
@@ -436,15 +457,15 @@ export class Hud {
     const place = idx + 1;
     const suf = place === 1 ? 'ST' : place === 2 ? 'ND' : place === 3 ? 'RD' : 'TH';
     es.innerHTML = '';
-    es.appendChild(el('div', 'end-place' + (place === 1 ? ' win' : ''), place === 1 ? 'VICTORY' : `${place}${suf} PLACE`));
+    es.appendChild(el('div', 'end-place' + (place === 1 ? ' win' : ''), place === 1 ? 'VICTORY' : m.mode.lives ? 'DEFEAT' : `${place}${suf} PLACE`));
     es.appendChild(el('div', 'end-sub', `${m.mode.label} · ${msg.l.length} PLAYERS`));
-    const head = el('div', 'sb-row head'); head.innerHTML = '<span>#</span><span>PLAYER</span><span>KILLS</span><span>DEATHS</span><span>DAMAGE</span>'; es.appendChild(head);
+    const head = el('div', 'sb-row head'); head.innerHTML = `<span>#</span><span>PLAYER</span><span>KILLS</span><span>${m.mode.lives ? 'LIVES' : 'DEATHS'}</span><span>DAMAGE</span>`; es.appendChild(head);
     msg.l.forEach((r, i) => {
       const e = m.ents.get(r[0]);
       const row = el('div', 'sb-row' + (e === m.local ? ' me' : ''));
       row.appendChild(el('span', 'pl', String(i + 1)));
       row.appendChild(el('b', '', e ? e.name : '?'));
-      row.appendChild(el('span', '', String(r[1]))); row.appendChild(el('span', '', String(r[2]))); row.appendChild(el('span', '', String(r[3])));
+      row.appendChild(el('span', '', String(r[1]))); row.appendChild(el('span', '', String(m.mode.lives ? Math.max(0, m.mode.lives - r[2]) : r[2]))); row.appendChild(el('span', '', String(r[3])));
       es.appendChild(row);
     });
     es.appendChild(el('div', 'end-foot', 'RETURNING TO LOBBY…'));

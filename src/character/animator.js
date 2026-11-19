@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { B, NB, UPPER_MASK } from './rig.js';
 import { Pose, setE, setS, addE, blend, sampleClip, legIK, getQ, putQ } from './pose.js';
 import * as C from './clips.js';
+const C_SPRINT = C.SPRINT;
 
 // Character animation: a small layered state machine on top of a canonical rig.
 //
@@ -57,6 +58,7 @@ const CASTS = {
   mRaise: { clip: C.M_RAISE, in: 0.06, out: 0.2, twoHand: [0.08, 0.62] },
   mBlink: { clip: C.M_BLINK, in: 0.04, out: 0.15 },
   mBolt2: { clip: C.M_BOLT2, in: 0.04, out: 0.16 },
+  mBoltBig: { clip: C.M_BOLT, in: 0.03, out: 0.22 },
   jabR: { clip: C.JAB_R, in: 0.02, out: 0.08 },
   freezeCast: { clip: C.FREEZE_CAST, in: 0.04, out: 0.16 },
   lance: { clip: C.LANCE_CLIP, in: 0.04, out: 0.14 },
@@ -457,6 +459,18 @@ export class Animator {
     legIK(P, rig, 'L', tgt.L, tgt.L.pitch, tgt.L.yaw);
     legIK(P, rig, 'R', tgt.R, tgt.R.pitch, tgt.R.yaw);
     for (const side of ['L', 'R']) setE(P, B['toes' + side], -Math.max(0, tgt[side].pitch) * 0.7, 0, 0);
+    // ---- sprint: the hand-keyed cycle takes over at full speed running forward (phase-locked to
+    // the gait, so footsteps / dust stay in sync); strafing, backpedalling and slopes keep the IK gait
+    const sw = wFast * Math.pow(Math.max(0, fwdness), 2) * (s.grounded ? 1 : 0);
+    if (sw > 0.001) {
+      const C = this._spr || (this._spr = new Pose());
+      sampleClip(C_SPRINT, this.phase * C_SPRINT.duration, C);
+      const hy = P.hip[1], hx = P.hip[0], hz = P.hip[2];
+      blend(P, P, C, sw);
+      // keep the gait's height (dip, slopes), add the sprint bob; the cycle's lean/twist replace ours
+      P.hip[0] = hx; P.hip[1] = hy + C.hip[1] * sw + 0.012 * sw; P.hip[2] = hz;
+      addE(P, B.hips, 0, hipYawD * sw, bank * 0.5 * sw);
+    }
   }
 
   _plantedFeet(dt, s, wRun, gait) {

@@ -14,20 +14,20 @@ export const METEORA = {
   color: '#ff2f4a',
   bio: 'An archmage who devoted her whole life to a single spell. Her staff fires crimson sparks, rains small stars on her enemies and seals the ground with explosive sigils. When the chant finishes, the sky itself catches fire.',
   abilities: [
-    { key: 'LMB', id: 'spark', name: 'Crimson Spark', desc: 'Your staff fires a bolt of crimson flame. Aim it: 20 damage on a direct hit, 30 on headshots.' },
+    { key: 'LMB', id: 'spark', name: 'Crimson Spark', desc: 'Your staff fires a bolt of crimson flame: 20 damage, 30 on headshots. Every third shot in a string is a Crimson Burst that explodes on impact (26 + splash).' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land.' },
     { key: 'E', id: 'starfall', name: 'Starfall', cd: 8, desc: 'Raise your staff and call down a barrage of 5 burning stars that rain across the target area one after another.' },
     { key: 'C', id: 'ray', name: 'Scarlet Ray', cd: 10, desc: 'Plant your feet and channel: magic circles spin up in front of your staff, then a devastating beam fires to your crosshair, piercing every enemy along its path (85 damage).' },
     { key: 'V', id: 'blink', name: 'Blink', cd: 9, desc: 'Teleport up to 10 m in the direction you are moving. You leave a crimson afterimage behind that explodes a moment later.' },
-    { key: 'X', id: 'nova', name: 'Crimson Nova', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Time stops for everyone. A full cutscene plays as you chant and seven magic circles stack up over the target, then a catastrophic explosion obliterates EVERYTHING within 24 m. Afterwards you collapse, exhausted.' },
+    { key: 'X', id: 'nova', name: 'Crimson Nova', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Time stops for everyone. A full cutscene plays as you chant and seven magic circles stack up over the target, then a catastrophic explosion devastates everything within 24 m (up to 140 damage, then falling stars and a shockwave — it never kills from full health). Afterwards you collapse, exhausted.' },
   ],
 };
 
 // the cutscene timeline (seconds after the cast): circles stack, final word, impact, wide shot
-export const NOVA = { radius: 24, channel: 7.2, cine: 10.6, maxDmg: 500, minDmg: 220, range: 85, exhausted: 3.3, frags: 14, fragDmg: 60, shockDmg: 75 };
+export const NOVA = { radius: 24, channel: 7.2, cine: 10.6, maxDmg: 140, minDmg: 75, range: 85, exhausted: 3.3, frags: 14, fragDmg: 24, shockDmg: 28 };
 export const RAY = { channel: 1.3, range: 90, width: 1.3, dmg: 85 };
 export const STARFALL = { count: 5, spread: 4.2, radius: 2.5, dmg: 26, minDmg: 10, first: 0.55, gap: 0.16 };
-const COOLDOWN = { spark: 0.45, starfall: 8, sigil: 11, ray: 10, blink: 9 };
+const COOLDOWN = { spark: 0.4, starfall: 8, sigil: 11, ray: 10, blink: 9 };
 // bolt-type fire rates are not shortened below 60% even with admin cooldown tweaks
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
@@ -96,16 +96,23 @@ export class MeteoraKit {
     if (!this._ready('spark')) return;
     const m = this.m;
     this.cd.spark = cdOf(COOLDOWN.spark);
-    m.playAnim('cast', { anim: 'mBolt' });
-    this.pending.push({ t: 0.07, fn: () => {
+    // every third shot in a string is a Crimson Burst: a bigger, slower bolt that explodes
+    const now = m.time;
+    this.chain = now - (this.lastSpark || -9) < 1.1 ? (this.chain || 0) + 1 : 1;
+    this.lastSpark = now;
+    const big = this.chain % 3 === 0;
+    if (big) this.cd.spark = cdOf(COOLDOWN.spark * 1.5);
+    m.playAnim('cast', { anim: big ? 'mBoltBig' : 'mBolt' });
+    this.pending.push({ t: big ? 0.1 : 0.07, fn: () => {
       const o = m.view.staffTip(tmp);
       const dir = tmp2.copy(m.aimPoint).sub(o);
       if (dir.length() < 2) dir.copy(m.cam.fwd); else dir.normalize();
-      const v = dir.clone().multiplyScalar(PROJ.spark.speed);
-      m.fx.arcaneBurst(o, dir, 0.6);
-      m.castAbility({ ab: 'spark', o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
-      m.sound('spark', o, 0.6, 30);
-      m.cam.kick += 0.008;
+      const v = dir.clone().multiplyScalar(PROJ[big ? 'sparkBig' : 'spark'].speed);
+      m.fx.arcaneBurst(o, dir, big ? 1.1 : 0.6);
+      m.castAbility({ ab: 'spark', o: [o.x, o.y, o.z], d: [v.x, v.y, v.z], big: big ? 1 : 0 });
+      m.sound('spark', o, big ? 0.85 : 0.6, 30);
+      m.cam.kick += big ? 0.02 : 0.008;
+      if (big) m.fx.shake(0.06);
     } });
   }
 

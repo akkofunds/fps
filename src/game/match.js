@@ -81,7 +81,7 @@ export class Match {
     } else {
       this._offs = [
         net.on('msg', (msg) => { if (this._ready) this.clientHandle(msg); else this._queue.push(['c', msg]); }),
-        net.on('close', () => { if (!this.ended && this.app.match === this) { if (this.phase === 'queue') this.app.leaveMatch('Lost the lobby host — searching again…', { requeue: true }); else this.app.leaveMatch('Disconnected from the match host.'); } }),
+        net.on('close', () => { if (!this.ended && this.app.match === this) { if (this.phase === 'queue' || this.mode.quickplay) this.app.leaveMatch('Lost the lobby host — searching again…', { requeue: true }); else this.app.leaveMatch('Disconnected from the match host.'); } }),
       ];
     }
   }
@@ -199,7 +199,7 @@ export class Match {
     this.net.send(p.id, { t: 'phase', p: this.rules.phase, tl: 0 });
     this.rules.spawn(e);
     this.rules.sendBoard();
-    this.app.chat.system(`${p.name} joined the lobby.`);
+    this.app.chat.system(`${p.name} joined the ${this.mode.quickplay ? 'match' : 'lobby'}.`);
   }
 
   _placeCamera() {
@@ -278,7 +278,14 @@ export class Match {
       case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
-      case 'spark': this.proj.spawn(e.n, 'spark', d.o, d.d, local); this.fx.tipSeal(tmpV.fromArray(d.o), tmpV2.fromArray(d.d), 0.75, 0.4); if (!local) this.sound('spark', tmpV.fromArray(d.o), 0.5, 30); break;
+      case 'spark': {
+        const big = !!d.big;
+        this.proj.spawn(e.n, big ? 'sparkBig' : 'spark', d.o, d.d, local);
+        this.fx.tipSeal(tmpV.fromArray(d.o), tmpV2.fromArray(d.d).normalize(), big ? 1.25 : 0.75, big ? 0.55 : 0.4, big ? 2 : 1);
+        if (big) this.fx.arcaneBurst(tmpV.fromArray(d.o), tmpV2.fromArray(d.d).normalize(), 1.4);
+        if (!local) this.sound('spark', tmpV.fromArray(d.o), big ? 0.8 : 0.5, 30);
+        break;
+      }
       // ---- Pyro: Fire Force kit
       case 'kick': {
         const o = new THREE.Vector3().fromArray(d.o);
@@ -528,7 +535,7 @@ export class Match {
             });
             if (local) {
               setTimeout(() => { if (this.local) this.areaDamage(c, NOVA.radius * 1.8, NOVA.shockDmg, 30, 'novaShock', { kb: 12, up: 6, noCover: true }); }, 900);
-              this.areas.push({ kind: 'crater', c: c.clone(), r: NOVA.radius * 0.5, t: 0, life: 7, tick: 0.4, owner: e.n, local, dmg: 9, ab: 'novaBurn', burn: [6, 2] });
+              this.areas.push({ kind: 'crater', c: c.clone(), r: NOVA.radius * 0.5, t: 0, life: 7, tick: 0.4, owner: e.n, local, dmg: 5, ab: 'novaBurn', burn: [4, 2] });
             }
             setTimeout(() => Audio.play('rumble', 0.8), 1500);
             // the shockwave shoves the local player even outside the kill radius
@@ -860,7 +867,12 @@ export class Match {
   onLeave(pid) {
     const e = this.byId.get(pid);
     if (!e) return;
-    if (this.rules) this.rules.bcast({ t: 'left', n: e.n });
+    if (this.rules) {
+      this.rules.bcast({ t: 'left', n: e.n });
+      e.left = true;
+      // duel: your opponent quit — you win
+      if (this.mode.lives && this.rules.phase === 'live' && ![...this.ents.values()].some((o) => o !== this.local && !o.dummy && !o.left)) this.rules.end();
+    }
   }
 
   // ---------------------------------------------------------------- client side (also runs on host)
@@ -933,7 +945,7 @@ export class Match {
         if (k && k !== v) k.kills = msg.kk ?? k.kills + 1;
         hud.killFeed(k, v, msg.ab, this.local);
         if (k === this.local && v !== this.local) { Audio.play('kill', 0.8); hud.killBanner(v, k.kills); this.kit.addUlt(v.dummy ? 3 : 15); }
-        if (v === this.local) { hud.deathScreen(k, msg.ab, msg.rt); this.kit.pending.length = 0; }
+        if (v === this.local) { hud.deathScreen(k, msg.ab, msg.out ? 0 : msg.rt, this.mode.lives && this.phase === 'live' ? this.mode.lives - v.deaths : -1); this.kit.pending.length = 0; }
         break;
       }
       case 'spawn': {
@@ -981,7 +993,7 @@ export class Match {
         break;
       }
       case 'qlive': this.app.hud.queueState(null); break;
-      case 'hostLeft': if (this.phase === 'queue') this.app.leaveMatch('Lobby host left — searching again…', { requeue: true }); else this.app.leaveMatch('The match host left.'); break;
+      case 'hostLeft': if (this.phase === 'queue' || this.mode.quickplay) this.app.leaveMatch('Lobby host left — searching again…', { requeue: true }); else this.app.leaveMatch('The match host left.'); break;
       default: break;
     }
   }
@@ -1073,7 +1085,11 @@ export class Match {
       if (e.alive) {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
         if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
-        else if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('R', tmpV), 0.7);
+        else {
+          // Shoto: fire from the left hand, frost from the right
+          if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('L', tmpV), 0.7);
+          if (Math.random() < 0.45) this.fx.frostMist(v.palmWorld('R', tmpV));
+        }
         if (e.dashFx > 0) {
           e.dashFx -= dt; this.fx.dashStreak(e.pos, e.vel, e.mage);
           e.ghostT = (e.ghostT || 0) - dt;
@@ -1094,9 +1110,11 @@ export class Match {
     this._updateAreas(dt);
     this._checkSigils();
     // altar brazier
-    this.fx.brazier(this.map.altar);
-    const dA = this.camera.position.distanceTo(this.map.altar);
-    Audio.loop('brazier', 'fireLoop', 0.35 / (1 + (dA / 10) ** 2));
+    if (this.map.altar) {
+      this.fx.brazier(this.map.altar);
+      const dA = this.camera.position.distanceTo(this.map.altar);
+      Audio.loop('brazier', 'fireLoop', 0.35 / (1 + (dA / 10) ** 2));
+    }
 
     // ---- camera + aim
     let focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);

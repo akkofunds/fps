@@ -12,7 +12,8 @@ import { MODES } from '../config.js';
 // players), invite cards, Mages and Career tabs, settings.
 
 const MODE_DESC = {
-  ffa: 'Free-For-All: every mage for themselves on Sunvale. First to 20 eliminations wins. Real players only — the match starts when the lobby fills, or 20 seconds after a second player joins.',
+  ffa: 'Free-For-All quickplay: jump straight into a match on Sunvale and fight. No scoreboard, no kill limit, no timer — drop in, drop out, up to 8 mages.',
+  duel: 'Duel: 1v1 on Sunvale. 3 lives each — lose your last one and you lose. Scoreboard on. Warm up on the map while we find your opponent.',
   custom: 'Custom: a private match for your party. Pick the kill limit and time limit, invite friends with their Name#1234 tag, then start.',
   practice: 'Practice: a solo range on Sunvale with training dummies. Learn Pyro\'s combos — dash-cancel your casts, roll out of air dashes, and land the Meteor.',
 };
@@ -141,7 +142,7 @@ export class Lobby {
   _startLabel() {
     const btn = $('btnStart');
     const leaderOnly = this.pm.inParty && !this.pm.isLeader;
-    let label = this.mode === 'ffa' ? 'START' : this.mode === 'custom' ? 'START CUSTOM' : 'ENTER RANGE';
+    let label = this.mode === 'ffa' ? 'PLAY' : this.mode === 'duel' ? 'FIND DUEL' : this.mode === 'custom' ? 'START CUSTOM' : 'ENTER RANGE';
     if (this.queue.searching) label = this.queue.follower ? 'IN QUEUE' : 'IN QUEUE';
     if (leaderOnly && !this.queue.searching && this.mode !== 'practice') label = 'WAITING FOR LEADER';
     $('btnStartLabel').textContent = label;
@@ -153,7 +154,7 @@ export class Lobby {
   start() {
     const ses = this.session;
     if (this.queue.searching) { if (!this.queue.follower) ses.cancel(); return; }
-    if (this.mode === 'ffa') ses.startQueue();
+    if (this.mode === 'ffa' || this.mode === 'duel') ses.startQueue(this.mode);
     else if (this.mode === 'custom') ses.startCustom({ killsToWin: Number($('cKills').value), timeLimit: Number($('cTime').value) });
     else ses.startPractice();
   }

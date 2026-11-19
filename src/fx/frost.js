@@ -33,6 +33,19 @@ Object.assign(Fx.prototype, {
     this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.05, 0.5, 0.3, [2.2, 3.0, 3.6, 1], ICE, 0, 0);
     for (let i = 0; i < 2; i++) this.fire.emit(p.x, p.y, p.z, v.x * 0.03 + (R() - 0.5) * 0.6, v.y * 0.03 + (R() - 0.5) * 0.6, v.z * 0.03 + (R() - 0.5) * 0.6, 0.18 + R() * 0.12, 0.2, 0.03, ICE2, CLEAR, 3, -1);
   },
+  // Shoto's right hand: cold vapour rolling off the palm, a few glittering ice motes falling
+  frostMist(p) {
+    if (R() < 0.6) this.fire.emit(p.x + (R() - 0.5) * 0.06, p.y, p.z + (R() - 0.5) * 0.06, (R() - 0.5) * 0.15, -0.25 - R() * 0.3, (R() - 0.5) * 0.15, 0.35 + R() * 0.3, 0.035, 0.012, ICE, CLEAR, 1.5, -0.6);
+    else this.smoke.emit(p.x, p.y - 0.05, p.z, (R() - 0.5) * 0.2, -0.35, (R() - 0.5) * 0.2, 0.7, 0.07, 0.28, [0.82, 0.93, 1, 0.28], [0.9, 0.96, 1, 0], 1.2, -0.3);
+  },
+  frostBurst(p, dir, k = 1) {
+    for (let i = 0; i < 12 * k; i++) {
+      const s = 2 + R() * 4;
+      this.fire.emit(p.x, p.y, p.z, dir.x * s + (R() - 0.5) * 2, dir.y * s + (R() - 0.5) * 2, dir.z * s + (R() - 0.5) * 2, 0.14 + R() * 0.18, 0.12 * k, 0.03, ICE, CLEAR, 5, -2);
+    }
+    this.smoke.emit(p.x, p.y, p.z, dir.x * 1.5, dir.y * 1.5, dir.z * 1.5, 0.45, 0.15, 0.5, [0.85, 0.94, 1, 0.35], [0.9, 0.96, 1, 0], 3, 0);
+    this.light(p, 5 * k, 5, 0.1, 0x7fd4ff);
+  },
   iceHit(p) {
     for (let i = 0; i < 14; i++) this.fire.emit(p.x, p.y, p.z, (R() - 0.5) * 7, R() * 4, (R() - 0.5) * 7, 0.3 + R() * 0.3, 0.14, 0.03, ICE, CLEAR, 2, -10);
     this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.1, 0.9, 1.2, [2, 3, 3.6, 1], ICE2, 0, 0);
