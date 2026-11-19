@@ -29,13 +29,11 @@ from strip_glb import write_glb  # noqa: E402
 
 SRC = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, '..', '..', 'public', 'models', 'sorcerer.glb')
-# body proportions matched to SHOTO (measured from public/models/shoto.glb): the source has very
-# long, slender legs. Legs are shortened so the hip joints sit at Shoto's height ratio (thighs and
-# shins only: feet and everything above the hips keep their shape), then thighs and shins are made
-# exactly as thick as Shoto's relative to his height.
+# body proportions: the model keeps its own torso-to-leg balance (shortening the legs makes the
+# torso look oversized), but its legs were slender next to Shoto: thighs and shins are made exactly
+# as thick as Shoto's relative to height (measured from public/models/shoto.glb).
 HEIGHT = 1.78           # top of the hair, metres (Shoto: 1.76)
-HIP_RATIO = 0.5         # hip joint height / height (Shoto's exact 0.4345 makes this model stubby and blocky:
-                        # it has a smaller head and a shorter torso for its shoulders, so 0.5 gives Shoto's look)
+HIP_RATIO = None        # None = keep the model's own leg length (a ratio here would shorten the legs)
 LEG_R = {'thigh': 0.0478, 'shin': 0.0376}  # median leg radius at mid-segment / height (Shoto)
 FOOT_THICK = 1.0
 
@@ -289,8 +287,7 @@ def main():
     ankY = (jpos['foot.L'][1] + jpos['foot.R'][1]) / 2
     Lg = hipY - ankY
     # solve (ank + Lg·k - floor) / (top - Lg·(1-k) - floor) = HIP_RATIO for the leg compression k
-    k_leg = (HIP_RATIO * (top0 - floor0 - Lg) - (ankY - floor0)) / (Lg * (1 - HIP_RATIO))
-    k_leg = float(np.clip(k_leg, 0.3, 1.0))
+    k_leg = 1.0 if HIP_RATIO is None else float(np.clip((HIP_RATIO * (top0 - floor0 - Lg) - (ankY - floor0)) / (Lg * (1 - HIP_RATIO)), 0.3, 1.0))
     H_final = (top0 - floor0) - Lg * (1 - k_leg)
     def ymap(y):
         y = np.asarray(y, float)
