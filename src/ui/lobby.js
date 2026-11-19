@@ -19,7 +19,7 @@ const MODE_DESC = {
 };
 const MAGES = [
   { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },
-  { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true, admin: true }, // admin-only
+  { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true },
   { id: 'tide', name: 'TIDE', icon: ICONS.water },
   { id: 'terra', name: 'TERRA', icon: ICONS.earth },
   { id: 'volt', name: 'VOLT', icon: ICONS.storm },

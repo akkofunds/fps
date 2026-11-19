@@ -19,12 +19,12 @@ export const METEORA = {
     { key: 'E', id: 'starfall', name: 'Starfall', cd: 8, desc: 'Raise your staff and call down a barrage of 5 burning stars that rain across the target area one after another.' },
     { key: 'C', id: 'ray', name: 'Scarlet Ray', cd: 10, desc: 'Plant your feet and channel: magic circles spin up in front of your staff, then a devastating beam fires to your crosshair, piercing every enemy along its path (85 damage).' },
     { key: 'V', id: 'blink', name: 'Blink', cd: 9, desc: 'Teleport up to 10 m in the direction you are moving. You leave a crimson afterimage behind that explodes a moment later.' },
-    { key: 'X', id: 'nova', name: 'Crimson Nova', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Time stops for everyone. A full cutscene plays as you chant and seven magic circles stack up over the target, then a catastrophic explosion devastates everything within 24 m (up to 140 damage, then falling stars and a shockwave — it never kills from full health). Afterwards you collapse, exhausted.' },
+    { key: 'X', id: 'nova', name: 'Crimson Nova', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Plant your staff and chant: seven magic circles stack up over the target, a beam drives down and a catastrophic explosion devastates everything within 24 m (up to 140 damage, then falling stars and a shockwave — it never kills from full health).' },
   ],
 };
 
-// the cutscene timeline (seconds after the cast): circles stack, final word, impact, wide shot
-export const NOVA = { radius: 24, channel: 7.2, cine: 10.6, maxDmg: 140, minDmg: 75, range: 85, exhausted: 3.3, frags: 14, fragDmg: 24, shockDmg: 28 };
+// real time, no cutscene: same pace as Shoto's Absolute Zero-Burn (2.35 s from cast to boom)
+export const NOVA = { radius: 24, channel: 2.35, maxDmg: 140, minDmg: 75, range: 85, frags: 14, fragDmg: 24, shockDmg: 28 };
 export const RAY = { channel: 1.3, range: 90, width: 1.3, dmg: 85 };
 export const STARFALL = { count: 5, spread: 4.2, radius: 2.5, dmg: 26, minDmg: 10, first: 0.55, gap: 0.16 };
 const COOLDOWN = { spark: 0.4, starfall: 8, sigil: 11, ray: 10, blink: 9 };
@@ -193,15 +193,10 @@ export class MeteoraKit {
     if (this.busy > 0) return;
     const target = this._groundTarget(NOVA.range);
     this.ult = 0; this.ultReadyAnnounced = false;
-    this.busy = ADMIN.ult ? NOVA.cine : NOVA.channel + NOVA.exhausted;
-    m.body.locked = NOVA.channel + 0.2;
+    this.busy = NOVA.channel + 0.6;
+    m.body.locked = NOVA.channel + 0.45; m.body.vel.x *= 0.1; m.body.vel.z *= 0.1;
     m.playAnim('nova');
     const me = m.local.pos;
     m.castAbility({ ab: 'nova', c: [target.x, target.y, target.z], o: [me.x, me.y, me.z] });
-    // the price of the spell
-    if (!ADMIN.ult) this.pending.push({ t: NOVA.channel + 0.15, fn: () => {
-      m.playAnim('exhausted');
-      m.body.locked = NOVA.exhausted;
-    } });
   }
 }
