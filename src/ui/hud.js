@@ -320,14 +320,15 @@ export class Hud {
   }
 
   // ---------------------------------------------------------------- cutscene (Crimson Nova)
-  cineStart() {
+  cineStart(tag = 'CRIMSON NOVA', theme = '') {
     if (!this.cineEl) {
       const c = document.createElement('div'); c.id = 'cine';
       c.innerHTML = '<div class="cine-dark"></div><div class="cine-bar top"></div><div class="cine-bar bot"></div><div class="cine-sub"></div><div class="cine-tag">CRIMSON NOVA</div>';
       document.body.appendChild(c);
       this.cineEl = c;
     }
-    this.cineEl.className = 'on';
+    this.cineEl.className = 'on' + (theme ? ' ' + theme : '');
+    this.cineEl.querySelector('.cine-tag').textContent = tag;
     this.cineEl.querySelector('.cine-sub').textContent = '';
     document.body.classList.add('cine-on');
   }
@@ -391,10 +392,11 @@ export class Hud {
     return e;
   }
   // title card: red brush slashes sweep in, the title snaps into place, then everything slices away
-  cineCard(title, sub) {
+  cineCard(title, sub, theme = '') {
     const e = this._cineLayer('cineCard');
+    e.className = theme;
     e.innerHTML = `<i class="sl a"></i><i class="sl b"></i><div class="ct"><b>${title}</b><span>${sub}</span></div>`;
-    e.classList.remove('go'); void e.offsetWidth; e.classList.add('go');
+    void e.offsetWidth; e.classList.add('go');
     clearTimeout(this._cardT); this._cardT = setTimeout(() => e.classList.remove('go'), 1900);
   }
   // diagonal slash wipe between shots (the cut happens under the blade)
@@ -405,7 +407,7 @@ export class Hud {
   }
   // colour grade of the whole frame: '', 'warm', 'cold', 'burn'
   cineGrade(g) {
-    document.body.classList.remove('grade-warm', 'grade-cold', 'grade-burn');
+    document.body.classList.remove('grade-warm', 'grade-cold', 'grade-burn', 'grade-void');
     if (g) document.body.classList.add('grade-' + g);
   }
   // a huge rotating magic circle drawn over the frame while she chants (0..1)
@@ -416,6 +418,26 @@ export class Hud {
       <polygon points="0,-84 72.7,42 -72.7,42" fill="none" stroke="#ffcf7a" stroke-width="0.7"/><polygon points="0,84 72.7,-42 -72.7,-42" fill="none" stroke="#ffcf7a" stroke-width="0.7"/>
       <g class="ticks">${Array.from({ length: 48 }, (_, i) => `<line x1="0" y1="-92" x2="0" y2="${i % 4 ? -88 : -80}" transform="rotate(${i * 7.5})" stroke="#ffb15a" stroke-width="0.6"/>`).join('')}</g></svg>`);
     e.style.opacity = String(Math.max(0, Math.min(1, k)) * 0.55);
+  }
+
+  // Unlimited Void: infinite information pouring into the mind — strobing white streaks, the
+  // frame bleaching out and snapping back (k 0..1, 0 hides)
+  overload(k) {
+    const e = this._cineLayer('overload');
+    e.style.opacity = String(Math.max(0, Math.min(1, k)));
+    if (k > 0 && !this._ovT) {
+      const tick = () => {
+        if (parseFloat(e.style.opacity) <= 0) { this._ovT = 0; return; }
+        let h = '';
+        for (let i = 0; i < 26; i++) {
+          const y = Math.random() * 100, w = 10 + Math.random() * 70, x = Math.random() * (100 - w);
+          h += `<i style="top:${y}%;left:${x}%;width:${w}%;opacity:${0.3 + Math.random() * 0.7}"></i>`;
+        }
+        e.innerHTML = h;
+        this._ovT = setTimeout(tick, 45);
+      };
+      tick();
+    }
   }
 
   cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); this.cineGrade(''); this.cineGlyph(0); }

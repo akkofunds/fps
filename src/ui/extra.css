@@ -273,3 +273,16 @@ body.grade-burn #game { filter: saturate(1.6) contrast(1.18) brightness(1.08) se
   .btn-start { width: auto; flex: 1 1 auto; max-width: 200px; font-size: 18px; }
   .btn-side { width: auto; flex: 0 1 96px; padding: 0 6px; font-size: 10px; letter-spacing: 0.06em; }
 }
+
+/* ---------------- Domain Expansion: Unlimited Void (cold, white-blue) */
+#cine.void .cine-dark { background: radial-gradient(ellipse at 50% 40%, rgba(0, 10, 30, 0.1) 0%, rgba(0, 4, 16, 0.75) 70%, rgba(0, 0, 6, 0.95) 100%); }
+#cine.void .cine-tag { color: #9fdcff; }
+#cine.void .cine-sub { color: #eaf6ff; text-shadow: 0 0 18px rgba(80, 180, 255, 0.85), 0 2px 4px #000; }
+#cine.void .cine-sub.big { color: #f4fbff; text-shadow: 0 0 30px #3aa8ff, 0 0 90px #1060ff, 0 4px 8px #000; }
+#cineCard.void .sl { background: linear-gradient(90deg, transparent, #0b2a5a 12%, #9fdcff 50%, #0b2a5a 88%, transparent); box-shadow: 0 0 40px rgba(90, 190, 255, 0.75); }
+#cineCard.void .ct b { color: #f4fbff; text-shadow: 0 0 24px #3aa8ff, 0 0 70px #1a5cff, 4px 4px 0 #020a1e; }
+#cineCard.void .ct span { color: #bfe6ff; }
+body.grade-void #game { filter: saturate(0.75) contrast(1.22) brightness(0.95) hue-rotate(6deg); }
+#overload { position: fixed; inset: 0; z-index: 41; pointer-events: none; opacity: 0; mix-blend-mode: screen;
+  background: radial-gradient(ellipse at 50% 50%, rgba(220, 240, 255, 0.35), rgba(120, 190, 255, 0.15) 60%, transparent 100%); }
+#overload i { position: absolute; height: 2px; background: linear-gradient(90deg, transparent, #fff, #bfe6ff, transparent); box-shadow: 0 0 8px #7cc8ff; }

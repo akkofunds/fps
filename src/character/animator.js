@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { B, NB, UPPER_MASK } from './rig.js';
-import { Pose, setE, setS, addE, blend, sampleClip, legIK, getQ, putQ } from './pose.js';
+import { Pose, setE, setS, addE, blend, sampleClip, legIK, getQ, putQ, bakeWorldClip } from './pose.js';
 import * as C from './clips.js';
 const C_SPRINT = C.SPRINT;
 
@@ -48,6 +48,11 @@ const ACTIONS = {
   zeroburn: { clip: C.ZEROBURN_CLIP, in: 0.06, out: 0.2 },
   freeze: { clip: C.FREEZE_STOMP, in: 0.05, out: 0.2 },
   purple: { clip: C.G_PURPLE, in: 0.08, out: 0.2 },
+  // M1 combo: jab, cross, hook, then the flying kick finisher
+  m1a: { clip: C.M1_A, in: 0.025, out: 0.12, aimOff: true },
+  m1b: { clip: C.M1_B, in: 0.025, out: 0.12, aimOff: true },
+  m1c: { clip: C.M1_C, in: 0.025, out: 0.12, aimOff: true },
+  m1d: { clip: C.KICK_CLIP, in: 0.03, out: 0.16, aimOff: true },
   domain: { clip: C.G_DOMAIN, in: 0.08, out: 0.25 },
   doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true, staffBody: true },
 };
@@ -81,6 +86,9 @@ const STYLES = {
   caster: { swing: 0.95, swingR: 0.45, lean: 0.9, bounce: 0.95, sway: 1, settle: 0.5, roll: 1.1, twist: 0.95, elbow: 0.95, kick: 0.95, stride: 1, fidget: 'fidgetM' },
 };
 
+const BAKED = new Map(); // retargeted clips, shared by every instance of the same model
+const FIST_ACTIONS = new Set([ACTIONS.m1a, ACTIONS.m1b, ACTIONS.m1c, ACTIONS.m1d]);
+
 // critically/under-damped spring (semi-implicit Euler); s = { x, v }
 function spring(st, target, k, zeta, dt) {
   const c = 2 * Math.sqrt(k) * zeta;
@@ -113,6 +121,23 @@ export class Animator {
     this.lastStep = 'R';
     this.dead = false;
     this.style = rig.hasProp ? STYLES.caster : STYLES.brawler;
+    // a model can ship its own retargeted animations (the Sorcerer's Hollow Purple): they replace
+    // the hand-keyed action of the same name for this character
+    let data = null;
+    rig.root.traverse((o) => { if (o.userData && o.userData.purple) data = o.userData.purple; });
+    if (data) {
+      const key = data.q.length + ':' + data.q[7] + ':' + data.q[101];
+      if (!BAKED.has(key)) BAKED.set(key, bakeWorldClip(data, rig));
+      this.baked = { purple: { clip: BAKED.get(key), in: 0.15, out: 0.35, aimOff: true } };
+      // the model's own finger bones play the source finger animation with it
+      if (data.fingers && data.fq) {
+        const by = {};
+        rig.root.traverse((o) => { if (o.isBone) by[o.name] = o; });
+        this.fingers = data.fingers.map((n) => by[n] || null);
+        this.fingerQ = data.fq instanceof Float32Array ? data.fq : Float32Array.from(data.fq);
+        this.fistQ = data.fist ? Float32Array.from(data.fist) : null;
+      }
+    }
     // follow-through springs (torso lean/bank overshoot, arm drag in turns, head settle)
     this.sLean = { x: 0, v: 0 }; this.sBank = { x: 0, v: 0 }; this.sArm = { x: 0, v: 0 }; this.sHead = { x: 0, v: 0 };
     this.hitDir = 0; this.hitAmt = 1;
@@ -169,7 +194,7 @@ export class Animator {
     }
   }
   _startAction(name, yaw) {
-    const def = ACTIONS[name];
+    const def = (this.baked && this.baked[name]) || ACTIONS[name];
     this.action = { def, t: 0, w: this.action ? this.action.w : 0, yaw };
     this.yawOffsetTarget = def.turn ? yaw : 0;
   }
@@ -326,6 +351,42 @@ export class Animator {
       if (gw > 0.001) this._gripLeft(out, gw);
     }
     rig.apply(out);
+    if (this.fingers) this._applyFingers();
+  }
+
+  // finger bones: the source finger animation while the retargeted clip plays, else at rest (curl)
+  _applyFingers() {
+    const a = this.action, pd = this.baked.purple, nf = this.fingers.length;
+    // punching: close the hands into fists
+    const fw = this.fistQ && a && FIST_ACTIONS.has(a.def) ? a.w : 0;
+    if (fw > 0.001) {
+      this._fingOn = true;
+      const q = this._fqa || (this._fqa = new THREE.Quaternion()), id = this._fqi || (this._fqi = new THREE.Quaternion());
+      for (let i = 0; i < nf; i++) {
+        const bn = this.fingers[i]; if (!bn) continue;
+        const o = i * 4; q.set(this.fistQ[o], this.fistQ[o + 1], this.fistQ[o + 2], this.fistQ[o + 3]);
+        bn.quaternion.copy(id).slerp(q, fw);
+      }
+      return;
+    }
+    const w = a && a.def === pd ? a.w : 0;
+    if (w <= 0.001) {
+      if (this._fingOn) { for (const bn of this.fingers) if (bn) bn.quaternion.identity(); this._fingOn = false; }
+      return;
+    }
+    this._fingOn = true;
+    const cl = pd.clip, F = this.fingerQ;
+    const x = Math.max(0, Math.min(cl.n - 1, Math.min(a.t, cl.duration) * cl.fps));
+    const k = Math.min(cl.n - 2, Math.floor(x)), u = x - k;
+    const qa = this._fqa || (this._fqa = new THREE.Quaternion()), qb = this._fqb || (this._fqb = new THREE.Quaternion()), id = this._fqi || (this._fqi = new THREE.Quaternion());
+    for (let i = 0; i < nf; i++) {
+      const bn = this.fingers[i];
+      if (!bn) continue;
+      const oa = (k * nf + i) * 4, ob = ((k + 1) * nf + i) * 4;
+      qa.set(F[oa], F[oa + 1], F[oa + 2], F[oa + 3]); qb.set(F[ob], F[ob + 1], F[ob + 2], F[ob + 3]);
+      qa.slerp(qb, u);
+      bn.quaternion.copy(id).slerp(qa, w);
+    }
   }
 
   // ---------------------------------------------------------------- locomotion (procedural)
@@ -565,7 +626,7 @@ export class Animator {
     // swing in opposition (no tuck, no flail)
     const R = { spine: [4, 0, 0], chest: [2, 0, 0], upperLegL: [-52, 0, 4], lowerLegL: [72, 0, 0], footL: [16, 0, 0], upperLegR: [10, 0, 4], lowerLegR: [50, 0, 0], footR: [30, 0, 0], upperArmL: [16, 0, 12], foreArmL: [-40, 0, 0], upperArmR: [-34, 0, 14], foreArmR: [-70, 0, 0], head: [-4, 0, 0] };
     // falling: both legs reach down for the landing with soft knees, the arms open a little for balance
-    const F = { spine: [3, 0, 0], chest: [1, 0, 0], upperLegL: [-24, 0, 5], lowerLegL: [34, 0, 0], footL: [-4, 0, 0], upperLegR: [-10, 0, 5], lowerLegR: [24, 0, 0], footR: [0, 0, 0], upperArmL: [-12, 0, 30], foreArmL: [-30, 0, 0], upperArmR: [-10, 0, 32], foreArmR: [-34, 0, 0], head: [3, 0, 0] };
+    const F = { spine: [3, 0, 0], chest: [1, 0, 0], upperLegL: [-24, 0, 5], lowerLegL: [34, 0, 0], footL: [-4, 0, 0], upperLegR: [-10, 0, 5], lowerLegR: [24, 0, 0], footR: [0, 0, 0], upperArmL: [-12, 0, 20], foreArmL: [-30, 0, 0], upperArmR: [-10, 0, 22], foreArmR: [-34, 0, 0], head: [3, 0, 0] };
     for (const key of Object.keys(R)) {
       const a = R[key], b = F[key];
       const side = /[a-z]R$/.test(key) ? -1 : 1;

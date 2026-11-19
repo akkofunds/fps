@@ -8,6 +8,7 @@ import '../fx/inferno.js';
 import '../fx/novaStage.js';
 import '../fx/frost.js';
 import '../fx/limitless.js';
+import '../fx/melee.js';
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
@@ -241,6 +242,7 @@ export class Match {
     if (extra.burn) msg.burn = extra.burn;
     if (extra.kb) msg.kb = extra.kb;
     if (extra.slow) msg.slow = extra.slow;
+    if (extra.stun) msg.stun = extra.stun;
     this.sendToHost(msg);
     // instant feedback (host confirms HP)
     this.app.hud.hitMarker(extra.head, dmg);
@@ -284,6 +286,20 @@ export class Match {
       case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
+      // ---------------- M1 combo (Shoto / Sorcerer)
+      case 'm1': {
+        const i = Number(d.i) || 0, fin = i === 3, dir = tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        const getP = fin ? (out) => e.view.rig.bones[20].getWorldPosition(out) : (out) => e.view.palmWorld(i === 1 ? 'R' : 'L', out);
+        this.fx.punchSwing(getP, dir.clone(), d.s, i);
+        if (!local) this.sound(fin ? 'kick' : 'swing', e.pos, 0.5, 22);
+        break;
+      }
+      case 'm1hit': {
+        const p = new THREE.Vector3().fromArray(d.p), i = Number(d.i) || 0;
+        this.fx.punchImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1), d.s, i === 3);
+        this.sound(i === 3 ? 'punchHeavy' : 'punchHit', p, i === 3 ? 1 : 0.7, 30);
+        break;
+      }
       // ---------------- Sorcerer
       case 'flick': this.proj.spawn(e.n, 'flick', d.o, d.d, local); if (!local) this.sound('flick', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'blue': {
@@ -303,12 +319,18 @@ export class Match {
       case 'redCharge': this.fx.redCharge((out) => e.view.palmWorld('R', out), RED.charge); this.sound('redCharge', e.pos, 0.8, 30); break;
       case 'red': this.proj.spawn(e.n, 'red', d.o, d.d, local); this.sound('redFire', tmpV.fromArray(d.o), 0.9, 40); break;
       case 'purpleCharge':
-        this.fx.purpleCharge((out) => e.view.palmWorld('L', out), (out) => e.view.palmWorld('R', out), PURPLE.charge * 0.92);
+        // Blue is summoned on his left, Red on his right, either side of the point where they mix
+        const at = (side) => (out) => {
+          const yw = e === this.local ? this.body.yaw : e.yaw, p = e === this.local ? this.body.pos : e.pos;
+          const fx = Math.sin(yw), fz = Math.cos(yw);
+          return out.set(p.x + fx * PURPLE.front + fz * side, p.y + PURPLE.height, p.z + fz * PURPLE.front - fx * side);
+        };
+        this.fx.purpleCharge(at(PURPLE.spread), at(-PURPLE.spread), at(0), PURPLE.charge, PURPLE.orbsAt, PURPLE.formR);
         this.sound('purpleCharge', e.pos, 1, 50);
         break;
       case 'purple': {
         const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3().fromArray(d.d).normalize();
-        this.fx.hollowPurple(o, dir, PURPLE.len, PURPLE.speed, PURPLE.radius);
+        this.fx.hollowPurple(o, dir, PURPLE.len, PURPLE.speed, PURPLE.radius, PURPLE.formR);
         this.sound('purpleFire', o, 1.3, 90);
         this.areas.push({ kind: 'purple', o, dir, t: 0, owner: e.n, local, hit: new Set() });
         break;
@@ -679,6 +701,7 @@ export class Match {
   _endCine() {
     const C = this.cine;
     if (!C) return;
+    if (C.end) { this.cine = null; C.end.call(this, C); this.app.hud.cineEnd(); this.cam.pivotY = null; return; }
     this._cineSetStage(false);
     C.stage.dispose();
     C.caster.view.anim.windBoost = 0;
@@ -989,11 +1012,20 @@ export class Match {
         break;
       }
       case 'burn': { const e = this.ents.get(msg.n); if (e) e.burnT = msg.s; break; }
+      case 'stun': {
+        // battlegrounds hitstun: the victim can't move or attack until it wears off
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        const s = Math.max(0, Math.min(1.2, Number(msg.s) || 0));
+        e.stunT = Math.max(e.stunT || 0, s);
+        if (e === this.local) { this.stunT = Math.max(this.stunT || 0, s); this.body.locked = Math.max(this.body.locked, s); this.body.dashT = 0; }
+        break;
+      }
       case 'slow': {
         const e = this.ents.get(msg.n);
         if (!e) return;
         e.slowT = msg.s;
-        if (msg.k < 0.2) { e.iceT = msg.s; this.fx.iceBlock(e.pos.clone(), msg.s); this.sound('freeze', e.pos, 0.6, 25); }
+        if (msg.k < 0.2 && !this.inEnemyDomain(e)) { e.iceT = msg.s; this.fx.iceBlock(e.pos.clone(), msg.s); this.sound('freeze', e.pos, 0.6, 25); }
         if (e === this.local) { this.body.slowT = msg.s; this.body.slowK = msg.k; hud.status && hud.status('SLOWED', msg.s); }
         break;
       }
@@ -1074,25 +1106,111 @@ export class Match {
   // ---------------------------------------------------------------- Domain Expansion: Unlimited Void
   _openDomain(e, d, local) {
     const c = new THREE.Vector3().fromArray(d.c);
-    this.domain = { owner: e.n, c, r: VOID.radius, until: this.time + VOID.dur, trapped: false };
-    this.voidFx.start(c, VOID.radius, Number(d.yaw) || e.yaw || 0);
-    this.sound('domain', c, 1.4, 120);
-    this.fx.shake(0.6);
+    const yaw = Number(d.yaw) || e.yaw || 0;
     const me = this.local, b = this.body;
     const inside = Math.hypot(b.pos.x - c.x, b.pos.z - c.z) < VOID.radius;
-    if (local) this.app.hud.banner('DOMAIN EXPANSION', 'UNLIMITED VOID', 2.2);
-    else if (inside && me.alive) {
-      this.domain.trapped = true;
-      this.app.hud.banner('DOMAIN EXPANSION', 'UNLIMITED VOID', 2.2, 'kill');
+    // the domain lasts VOID.dur once the cutscene is over
+    this.domain = { owner: e.n, c, r: VOID.radius, until: this.time + VOID.cine + VOID.dur, yaw, trapped: !local && inside && me.alive, open: false };
+    this.sound('domainCast', c, 1, 80);
+    if (this.cine) { this._domainOpen(); this._domainStrike(local); return; } // another cutscene is running: no second camera
+    // the universal cutscene: every player watches it, nobody can act until it ends
+    const f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    let victim = null, bestD = 1e9;
+    for (const t of this.ents.values()) {
+      if (t === e || !t.alive) continue;
+      const dd = Math.hypot(t.pos.x - c.x, t.pos.z - c.z);
+      if (dd < VOID.radius && dd < bestD) { bestD = dd; victim = t; }
     }
-    if (inside || local) this.app.hud.flash(0.8);
-    // the void floods every mind inside it: a moment of total paralysis
+    this.cine = { t: 0, dur: VOID.cine, caster: e, c: c.clone(), o: c.clone(), f, side: new THREE.Vector3(-f.z, 0, f.x), cue: 0, victim, local,
+      update: this._domainCineUpdate, camera: this._domainCineCamera, end: this._domainCineEnd };
+    this.app.hud.cineStart('DOMAIN EXPANSION', 'void');
+  }
+  _domainOpen() {
+    const D = this.domain;
+    if (!D || D.open) return;
+    D.open = true;
+    this.voidFx.start(D.c, VOID.radius, D.yaw);
+    this.sound('domain', D.c, 1.4, 140);
+    this.fx.shake(0.6);
+  }
+  // the void floods every mind inside it: a moment of total paralysis (sent by the caster)
+  _domainStrike(local) {
+    const D = this.domain;
+    if (!D) return;
+    const me = this.local;
     if (local) {
       for (const t of this.ents.values()) {
         if (t === me || !t.alive) continue;
-        if (Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < VOID.radius) this.reportHit(t, VOID.dmg, 'void', { slow: [0.05, VOID.stun], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.6, t.pos.z) });
+        if (Math.hypot(t.pos.x - D.c.x, t.pos.z - D.c.z) < VOID.radius) this.reportHit(t, VOID.dmg, 'void', { slow: [0.05, VOID.stun], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.6, t.pos.z) });
       }
+    } else if (D.trapped) {
+      this.app.hud.banner('UNLIMITED VOID', 'YOU ARE TRAPPED', 1.6, 'kill');
+      let k = 0.9;
+      const fade = () => { this.app.hud.overload(k); k -= 0.08; if (k > 0) setTimeout(fade, 70); else this.app.hud.overload(0); };
+      fade();
     }
+  }
+  _domainCineUpdate(dt) {
+    const C = this.cine, hud = this.app.hud;
+    C.t += dt;
+    const t = C.t;
+    const cues = [
+      [0.25, () => hud.cineSub('Domain Expansion…')],
+      [0.9, () => hud.cineGrade('cold')],
+      [1.28, () => { hud.flash(1); hud.cineWipe(false); this._domainOpen(); hud.cineSub(''); hud.cineGrade('void'); }],
+      [1.5, () => hud.cineCard('UNLIMITED VOID', '無 量 空 処', 'void')],
+      [3.2, () => { hud.cineWipe(false); hud.cineSub('Infinite information… and nothing you can do with it.'); }],
+      [4.5, () => { hud.cineWipe(false); hud.cineSub(''); if (C.victim) hud.overload(0.85); }],
+      [5.3, () => hud.overload(0)],
+    ];
+    while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
+    if (t >= 4.5 && t < 5.3 && C.victim && Math.random() < dt * 14) hud.flash(0.25);
+    hud.cineDark(t < 1.28 ? Math.min(1, t / 0.6) * 0.8 : t < 4.5 ? 0.35 : 0.6);
+    if (t >= C.dur) this._endCine();
+  }
+  _domainCineEnd(C) {
+    this.app.hud.overload(0);
+    this._domainOpen();
+    for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;
+    this._domainStrike(C.local);
+  }
+  _domainCineCamera() {
+    const C = this.cine, t = C.t, o = C.caster.pos, f = C.f, sd = C.side, cam = this.camera;
+    const P = tmpV, L = tmpV2;
+    const ease = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
+    const view = C.caster.view;
+    const head = view.head.getWorldPosition(this._cv1 || (this._cv1 = new THREE.Vector3()));
+    let fov = 45, roll = 0;
+    if (t < 0.75) { // low, in front: he raises the sign
+      const k = ease(t / 0.75), r = 2.4 - k * 0.6;
+      P.set(o.x + f.x * r - sd.x * 0.5, o.y + 1.05, o.z + f.z * r - sd.z * 0.5);
+      L.set(head.x, head.y - 0.05, head.z); fov = 42;
+    } else if (t < 1.35) { // extreme close-up: the Six Eyes behind the raised hand
+      const k = ease((t - 0.75) / 0.6);
+      const hand = view.palmWorld('R', this._cv2 || (this._cv2 = new THREE.Vector3()));
+      P.set(head.x + f.x * (0.85 - k * 0.2) + sd.x * 0.12, head.y + 0.02, head.z + f.z * (0.85 - k * 0.2) + sd.z * 0.12);
+      L.lerpVectors(head, hand, 0.35); fov = 26; roll = 0.05;
+    } else if (t < 3.2) { // the void: tiny against the black hole, the camera rising behind him
+      const k = ease((t - 1.35) / 1.85);
+      const back = 6 + k * 4;
+      P.set(o.x - f.x * back + sd.x * (1.6 + k), o.y + 0.9 + k * 2.6, o.z - f.z * back + sd.z * (1.6 + k));
+      L.set(o.x + f.x * 30, o.y + 4 + k * 3, o.z + f.z * 30); fov = 56 - k * 6; roll = -0.03;
+    } else if (t < 4.5 || !C.victim) { // a slow orbit round him; he does not move at all
+      const k = (t - 3.2) / 1.3;
+      const a = Math.atan2(f.x, f.z) + 0.5 + k * 1.8, r = 3.2;
+      P.set(o.x + Math.sin(a) * r, o.y + 1.25, o.z + Math.cos(a) * r);
+      L.set(head.x, head.y - 0.15, head.z); fov = 40;
+    } else { // the victim: frozen, eyes wide, the void pouring into them
+      const v = C.victim, vp = v.pos, vy = v.yaw || 0;
+      const k = ease((t - 4.5) / 1.1);
+      P.set(vp.x + Math.sin(vy) * (1.3 - k * 0.4), vp.y + 1.55, vp.z + Math.cos(vy) * (1.3 - k * 0.4));
+      L.set(vp.x, vp.y + 1.45, vp.z); fov = 34; roll = Math.sin(t * 40) * 0.01;
+    }
+    P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 20) + 0.3);
+    cam.position.copy(P); cam.lookAt(L);
+    if (roll) cam.rotateZ(roll);
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    return L;
   }
   // is `ent` (the caster) standing in his own open domain? (cooldowns run twice as fast)
   domainBoost(ent) {
@@ -1115,7 +1233,7 @@ export class Match {
       if (this.time > D.until || !owner || !owner.alive || owner.left) { this.domain = null; this.voidFx.end(); }
       else {
         const me = this.local, b = this.body;
-        if (me.alive && me.n !== D.owner) {
+        if (D.open && me.alive && me.n !== D.owner) {
           const dx = b.pos.x - D.c.x, dz = b.pos.z - D.c.z, dl = Math.hypot(dx, dz);
           // trapped: the barrier holds you in
           if (D.trapped && dl > D.r - 0.8) { const k = (D.r - 0.8) / dl; b.pos.x = D.c.x + dx * k; b.pos.z = D.c.z + dz * k; const vr = (b.vel.x * dx + b.vel.z * dz) / dl; if (vr > 0) { b.vel.x -= dx / dl * vr; b.vel.z -= dz / dl * vr; } }
@@ -1135,8 +1253,9 @@ export class Match {
     const [dx, dy] = input.consumeLook();
     const me = this.local;
     if (!app.paused && !app.chat.isOpen && !this.cine) this.cam.look(dx, dy, app.settings.sens, app.settings.invertY);
-    if (this.cine) this._cineUpdate(dt);
-    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup' && !this.cine;
+    if (this.cine) (this.cine.update || this._cineUpdate).call(this, dt);
+    if (this.stunT > 0) this.stunT -= dt;
+    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup' && !this.cine && !(this.stunT > 0);
 
     // ---- local player
     if (me.alive) {
@@ -1219,7 +1338,8 @@ export class Match {
         if (e.blitzT > 0) { e.blitzT -= dt; this.fx.blitzJets(e.pos, e.vel); }
         if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
         if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
-        if (e.slowT > 0) { e.slowT -= dt; if (!(e.iceT > 0)) this.fx.slowFx(e.pos); }
+        if (e.stunT > 0) { e.stunT -= dt; if (v.root.visible) this.fx.stunStars(v.head.getWorldPosition(tmpV).add(tmpV2.set(0, 0.32, 0)), this.time); }
+        if (e.slowT > 0) { e.slowT -= dt; if (!(e.iceT > 0) && !this.inEnemyDomain(e)) this.fx.slowFx(e.pos); }
         if (e.iceT > 0) e.iceT -= dt;
       }
     }
@@ -1240,7 +1360,7 @@ export class Match {
 
     // ---- camera + aim
     let focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);
-    if (this.cine) focus = this._cineCamera();
+    if (this.cine) focus = (this.cine.camera || this._cineCamera).call(this);
     else this.cam.update(dt, focus, st.aim && me.alive, this.fx.shakeAmt);
     this._computeAim();
     this.fx.update(dt, this.camera, app.height);

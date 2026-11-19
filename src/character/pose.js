@@ -91,7 +91,54 @@ const easeF = {
   in: (u) => u * u,
   outBack: (u) => { const c = 1.6; return 1 + (c + 1) * (u - 1) ** 3 + c * (u - 1) ** 2; },
 };
+// baked clip (retargeted mocap/keyframes, one canonical pose per frame): see bakeWorldClip
+function sampleBaked(clip, t, out) {
+  const x = Math.max(0, Math.min(clip.n - 1, t * clip.fps));
+  const k = Math.min(clip.n - 2, Math.floor(x)), u = x - k;
+  const A = clip.q[k], Bq = clip.q[k + 1], q = out.q;
+  for (let i = 0; i < NB * 4; i += 4) {
+    let bx = Bq[i], by = Bq[i + 1], bz = Bq[i + 2], bw = Bq[i + 3];
+    if (A[i] * bx + A[i + 1] * by + A[i + 2] * bz + A[i + 3] * bw < 0) { bx = -bx; by = -by; bz = -bz; bw = -bw; }
+    const qx = A[i] + (bx - A[i]) * u, qy = A[i + 1] + (by - A[i + 1]) * u, qz = A[i + 2] + (bz - A[i + 2]) * u, qw = A[i + 3] + (bw - A[i + 3]) * u;
+    const l = 1 / Math.hypot(qx, qy, qz, qw);
+    q[i] = qx * l; q[i + 1] = qy * l; q[i + 2] = qz * l; q[i + 3] = qw * l;
+  }
+  for (let j = 0; j < 3; j++) out.hip[j] = clip.hip[k][j] + (clip.hip[k + 1][j] - clip.hip[k][j]) * u;
+  out.ikW = 0;
+  return out;
+}
+
+// Turn source WORLD rotations (relative to the bind pose, one quaternion per game bone per frame,
+// as written by tools/characters/rig_sorcerer.py) into canonical local poses for this rig:
+// bone world = C · Wc  →  C = G · Wc⁻¹,  local A = C(parent)⁻¹ · C
+export function bakeWorldClip(data, rig) {
+  const names = data.bones, nb = names.length, n = Math.floor(data.q.length / (nb * 4));
+  const idx = names.map((nm) => B[nm.replace('_', '')]);
+  const G = new THREE.Quaternion(), C = Array.from({ length: NB }, () => new THREE.Quaternion()), WcInv = rig.Wc.map((q) => q.clone().invert());
+  const P = new THREE.Quaternion();
+  const frames = [], hip = [];
+  for (let f = 0; f < n; f++) {
+    for (const c of C) c.identity();
+    for (let k = 0; k < nb; k++) {
+      const o = (f * nb + k) * 4;
+      G.set(data.q[o], data.q[o + 1], data.q[o + 2], data.q[o + 3]);
+      C[idx[k]].copy(G).multiply(WcInv[idx[k]]);
+    }
+    const q = new Float32Array(NB * 4);
+    for (let i = 0; i < NB; i++) {
+      const pi = rig.parent[i];
+      if (idx.indexOf(i) < 0) { q[i * 4 + 3] = 1; continue; }
+      P.copy(pi >= 0 ? C[pi] : new THREE.Quaternion()).invert().multiply(C[i]);
+      q[i * 4] = P.x; q[i * 4 + 1] = P.y; q[i * 4 + 2] = P.z; q[i * 4 + 3] = P.w;
+    }
+    frames.push(q);
+    hip.push([data.hip[f * 3], data.hip[f * 3 + 1], data.hip[f * 3 + 2]]);
+  }
+  return { baked: true, q: frames, hip, n, fps: data.fps, duration: (n - 1) / data.fps, hasIK: false };
+}
+
 export function sampleClip(clip, t, out) {
+  if (clip.baked) return sampleBaked(clip, t, out);
   const f = clip.frames;
   let k = 0;
   while (k < f.length - 2 && t > f[k + 1].t) k++;

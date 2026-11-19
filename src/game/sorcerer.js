@@ -2,6 +2,7 @@ import { BAL, ADMIN } from './balance.js';
 import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ } from './projectiles.js';
+import { MeleeCombo } from './melee.js';
 
 // SORCERER — the strongest. Limitless: space itself bends around him.
 //   LMB Cursed Flick · E Lapse: Blue · C Reversal: Red · V Hollow Purple
@@ -14,11 +15,11 @@ export const SORCERER = {
   color: '#8fd8ff',
   bio: 'The strongest sorcerer alive. Limitless bends space around him: Blue drags everything into a single point, Red blows it apart, and the two together become Hollow Purple, imaginary mass that erases whatever it passes through. When he opens his domain, there is nowhere left to run.',
   abilities: [
-    { key: 'LMB', id: 'flick', name: 'Cursed Flick', desc: 'Flick a dart of compressed cursed energy off your fingertips, alternating hands. 16 damage, 24 on headshots.' },
+    { key: 'LMB', id: 'flick', name: 'Cursed Strikes', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick) charged with cursed energy. Every hit stuns so the next one connects, each swing lunges you onto the target, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Blink Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Press jump again in the air to double jump.' },
     { key: 'E', id: 'blue', name: 'Lapse: Blue', cd: 9, desc: 'Create a point of attraction where you aim. Everything nearby is dragged into it and ground down, then it collapses.' },
     { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (46 + splash).' },
-    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 16, desc: 'Open your arms to draw out Blue and Red, bring them together and release imaginary mass: a huge sphere that tears straight through everything in its path (88 damage).' },
+    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 18, desc: 'The full Hollow Purple: focus, draw out Blue and Red in each hand, bring them together into imaginary mass and release it, a huge sphere that tears straight through everything in its path (120 damage). A long, planted cast.' },
     { key: 'X', id: 'domain', name: 'Domain Expansion: Unlimited Void', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Expand your domain. Everyone caught inside is trapped in the void: frozen for a moment, then slowed and dealing 40% less damage for 9 s, while your cooldowns run twice as fast.' },
   ],
 };
@@ -26,10 +27,13 @@ export const SORCERER = {
 export const FLICK = { cd: 0.3 };
 export const BLUE = { range: 32, delay: 0.22, life: 1.9, pullR: 9, crushR: 3.4, pull: 24, tick: 0.3, tickDmg: 6, implode: 22 };
 export const RED = { charge: 0.36, radius: 3.8, splash: 32, minSplash: 12, kb: 15 };
-export const PURPLE = { charge: 1.3, speed: 24, len: 64, radius: 2.4, dmg: 88 };
-export const VOID = { cast: 0.9, radius: 30, dur: 9, enemyDmg: 0.6, enemySlow: 0.62, cdBoost: 2, stun: 1.0, dmg: 10 };
+// the model's own Hollow Purple animation at its real speed (source 6.5 s → 13.1 s): Blue and Red
+// appear at the hands at 4.5 s (source 11.0), converge, the purple mass grows, release at 6.4 s;
+// it travels at the source's speed (~16 m/s)
+export const PURPLE = { charge: 6.4, orbsAt: 4.5, front: 1.5, height: 1.35, spread: 0.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 120 };
+export const VOID = { cine: 5.6, radius: 30, dur: 9, enemyDmg: 0.6, enemySlow: 0.62, cdBoost: 2, stun: 1.2, dmg: 10 };
 
-const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 16 };
+const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 18 };
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
@@ -44,6 +48,7 @@ export class SorcererKit {
     this.pending = [];
     this.busy = 0;
     this.ultReadyAnnounced = false;
+    this.melee = new MeleeCombo(this, 'cursed');
   }
 
   reset() { for (const k in this.cd) this.cd[k] = 0; this.pending.length = 0; this.busy = 0; }
@@ -75,7 +80,7 @@ export class SorcererKit {
     go('c', () => this.red());
     go('v', () => this.purple());
     go('x', () => this.domain());
-    if (input.state.fire || pr.fire) this.flick();
+    this.melee.update(dt, input);
   }
 
   _ready(id) {
@@ -153,17 +158,16 @@ export class SorcererKit {
   purple() {
     if (!this._ready('purple')) return;
     const m = this.m, b = m.body;
-    this.cd.purple = cdOf(COOLDOWN.purple); this.busy = PURPLE.charge + 0.4;
-    b.locked = PURPLE.charge + 0.15; b.vel.x *= 0.15; b.vel.z *= 0.15;
+    this.cd.purple = cdOf(COOLDOWN.purple); this.busy = PURPLE.charge + 0.45;
+    b.locked = PURPLE.charge + 0.25; b.vel.x *= 0.15; b.vel.z *= 0.15;
     m.playAnim('purple');
     m.castAbility({ ab: 'purpleCharge' });
     this.pending.push({ t: PURPLE.charge, fn: () => {
-      // launched from in front of his chest, flat toward the crosshair
-      const p = m.local.pos;
-      const o = new THREE.Vector3(p.x, p.y + 1.35, p.z);
+      // released from where Blue and Red mixed into it, in front of his chest, toward the crosshair
+      const p = m.body.pos, yw = m.body.yaw;
+      const o = new THREE.Vector3(p.x + Math.sin(yw) * PURPLE.front, p.y + PURPLE.height, p.z + Math.cos(yw) * PURPLE.front);
       const dir = this._aimDir(o, tmp2);
       dir.y = Math.max(-0.25, Math.min(0.25, dir.y)); dir.normalize();
-      o.addScaledVector(dir, 1.6);
       m.castAbility({ ab: 'purple', o: [o.x, o.y, o.z], d: [dir.x, dir.y, dir.z] });
       m.cam.kick += 0.08; m.fx.shake(0.5);
     } });
@@ -175,13 +179,11 @@ export class SorcererKit {
     if (this.ult < ULT_COST) { m.app.hud.denied('domain'); return; }
     if (this.busy > 0) return;
     this.ult = 0; this.ultReadyAnnounced = false;
-    this.busy = VOID.cast + 0.45;
-    m.body.locked = VOID.cast + 0.3; m.body.vel.x *= 0.1; m.body.vel.z *= 0.1;
+    this.busy = VOID.cine + 0.3;
+    m.body.locked = VOID.cine; m.body.vel.x *= 0.1; m.body.vel.z *= 0.1;
     m.playAnim('domain');
-    m.castAbility({ ab: 'domainCast' });
-    this.pending.push({ t: VOID.cast, fn: () => {
-      const p = m.local.pos;
-      m.castAbility({ ab: 'domain', c: [p.x, p.y, p.z], yaw: Math.round(m.body.yaw * 100) / 100 });
-    } });
+    const p = m.local.pos;
+    // a universal cutscene plays for everyone, then the domain stays open for VOID.dur
+    m.castAbility({ ab: 'domain', c: [p.x, p.y, p.z], yaw: Math.round(m.body.yaw * 100) / 100 });
   }
 }
