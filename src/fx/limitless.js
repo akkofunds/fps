@@ -8,8 +8,9 @@ import { Fx } from './fire.js';
 
 const R = Math.random;
 const BLUE = [0.5, 1.5, 3.6, 1], BLUE2 = [0.15, 0.55, 2.4, 0.9], ICEW = [2.4, 3.0, 3.8, 1], CLEAR = [0.05, 0.1, 0.4, 0];
-const RED = [3.6, 0.3, 0.22, 1], RED2 = [2.4, 0.06, 0.05, 0.9], HOTW = [3.6, 1.3, 1.1, 1], DRED = [0.4, 0.02, 0.02, 0];
+const RED = [2.2, 0.1, 0.07, 1], RED2 = [1.5, 0.03, 0.02, 0.9], HOTW = [2.8, 0.8, 0.6, 1], DRED = [0.4, 0.02, 0.02, 0];
 const PURP = [1.9, 0.35, 3.8, 1], PURP2 = [1.0, 0.1, 2.4, 0.9], VIOW = [2.8, 1.6, 3.8, 1], DPURP = [0.15, 0.02, 0.3, 0];
+const REDD = [1.0, 0.03, 0.02, 1], REDD2 = [0.6, 0.01, 0.01, 0.9]; // deep red that stays red through the hot-core particle shader
 const DUST0 = [0.42, 0.4, 0.36, 0.5], DUST1 = [0.5, 0.48, 0.45, 0];
 
 // glowing orb: dark core, bright fresnel rim, swirling bands (inner / rim colours HDR so bloom catches them)
@@ -231,87 +232,104 @@ Object.assign(Fx.prototype, {
   },
 
   // ---------------------------------------------------------------- V: Hollow Purple
-  // Blue in the left hand, Red in the right (getL / getR(out) → world): they appear at `start`,
-  // grow with their own spinning rings, are drawn together and fuse at `dur`
-  purpleCharge(getL, getR, dur, start = 0) {
-    const mk = (inner, rim, rc) => {
+  // Blue in the left hand, Red in the right (getL / getR(out) → world): they appear at `start` and
+  // grow big, float out in front of him (getMid) spiralling round each other, collide in a flash and
+  // mix into one big purple sphere that swells there until `dur` — where Hollow Purple is released
+  purpleCharge(getL, getR, getMid, dur, start = 0, bigR = 1.3) {
+    // (Red is drawn with normal blending: red light ADDED onto green grass turns yellow)
+    const mk = (inner, rim, rc, additive = true) => {
       const g = new THREE.Group(); this.scene.add(g);
-      const m = new THREE.Mesh(SPHERE, orbMaterial(inner, rim, { additive: true, swirl: 1.8 }));
-      const r = torus(rc, 1, 0.07); g.add(m); g.add(r); g.scale.setScalar(0.001);
+      const m = new THREE.Mesh(SPHERE, orbMaterial(inner, rim, { additive, swirl: 1.8 }));
+      const r = torus(rc, 1.6, 0.06); g.add(m); g.add(r); g.scale.setScalar(0.001);
       return { g, m, r };
     };
-    const blue = mk([0.02, 0.15, 1.4], [0.4, 1.3, 4.0], new THREE.Color(0.5, 1.4, 3.8)), red = mk([1.4, 0.03, 0.02], [4.0, 0.4, 0.3], new THREE.Color(3.8, 0.4, 0.3));
-    const hb = glowSprite(new THREE.Color(0.12, 0.35, 2.6), 1.6), hr = glowSprite(new THREE.Color(2.6, 0.1, 0.06), 1.6);
+    // saturated, not white: you must SEE one blue and one red before they mix
+    const blue = mk([0.0, 0.08, 0.9], [0.15, 0.6, 2.6], new THREE.Color(0.2, 0.7, 2.6)), red = mk([0.55, 0.0, 0.0], [1.6, 0.05, 0.03], new THREE.Color(1.6, 0.06, 0.03), false);
+    red.r.material.blending = THREE.NormalBlending;
+    const hb = glowSprite(new THREE.Color(0.04, 0.18, 1.3), 2), hr = glowSprite(new THREE.Color(1.0, 0.02, 0.01), 2);
+    hr.material.blending = THREE.NormalBlending;
     this.scene.add(hb); this.scene.add(hr);
-    const lb = this.light(new THREE.Vector3(), 0, 7, dur + 0.2, 0x4f8bff), lr = this.light(new THREE.Vector3(), 0, 7, dur + 0.2, 0xff3020);
-    // the purple mass that forms between the hands before the release
+    const lb = this.light(new THREE.Vector3(), 0, 9, dur + 0.2, 0x2f6bff), lr = this.light(new THREE.Vector3(), 0, 9, dur + 0.2, 0xff2010);
+    // the purple sphere they become
     const purple = new THREE.Group(); purple.visible = false; this.scene.add(purple);
-    purple.add(new THREE.Mesh(SPHERE, orbMaterial([0.6, 0.12, 1.4], [2.0, 0.5, 3.8], { additive: true, swirl: 2.5 })));
-    purple.add(torus(new THREE.Color(2.4, 0.9, 3.8), 1.5, 0.05)); purple.add(torus(new THREE.Color(1.4, 0.3, 3.2), 1.8, 0.04));
-    const hp = glowSprite(new THREE.Color(0.9, 0.2, 2.2), 2); hp.material.opacity = 0; this.scene.add(hp);
-    const L = new THREE.Vector3(), Rr = new THREE.Vector3(), mid = new THREE.Vector3();
-    let t = 0;
+    const pc = new THREE.Mesh(SPHERE, orbMaterial([0.55, 0.1, 1.4], [1.9, 0.45, 3.8], { swirl: 2.4 }));
+    const ps = new THREE.Mesh(SPHERE, orbMaterial([0.3, 0.03, 0.8], [1.2, 0.2, 2.8], { additive: true, swirl: 3 }));
+    const pr1 = torus(new THREE.Color(2.4, 0.9, 3.8), 1.45, 0.035), pr2 = torus(new THREE.Color(1.4, 0.3, 3.2), 1.75, 0.03);
+    purple.add(ps); purple.add(pc); purple.add(pr1); purple.add(pr2);
+    const hp = glowSprite(new THREE.Color(0.8, 0.15, 2.0), 3); hp.material.opacity = 0; this.scene.add(hp);
+    const L = new THREE.Vector3(), Rr = new THREE.Vector3(), M = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), sd = new THREE.Vector3(), tmpP = new THREE.Vector3();
+    const tTravel = dur - 1.25, tHit = dur - 0.6;
+    let t = 0, hit = false;
     this.effects.push({ update: (dt) => {
       t += dt;
-      getL(L); getR(Rr);
-      const grow = Math.max(0, Math.min(1, (t - start) / 0.45));
-      // they converge (like the source: drawn together over ~0.7 s), then the purple mass grows
-      const merge = Math.max(0, Math.min(1, (t - (dur - 1.45)) / 0.7));
-      const mass = Math.max(0, Math.min(1, (t - (dur - 0.75)) / 0.75));
-      purple.position.copy(mid); purple.visible = mass > 0;
-      if (mass > 0) {
-        const ps = 0.12 + mass * 0.5;
-        purple.scale.setScalar(ps); purple.children[0].material.uniforms.uT.value = t;
-        purple.children[1].rotation.x += dt * 9; purple.children[2].rotation.y += dt * 7;
-        blue.g.visible = red.g.visible = hb.visible = hr.visible = mass < 0.15;
-        hp.position.copy(mid); hp.material.opacity = mass; hp.scale.setScalar(1.5 + mass * 3);
-        lb.color.setHex(0xa04cff); lr.color.setHex(0xa04cff);
-        for (let i = 0; i < 3; i++) {
-          const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = ps * 3;
-          this.fire.emit(mid.x + Math.cos(a) * sq * r, mid.y + u * r, mid.z + Math.sin(a) * sq * r, -Math.cos(a) * sq * 3, -u * 3, -Math.sin(a) * sq * 3, 0.25, 0.1, 0.03, R() < 0.4 ? VIOW : PURP, PURP2, 1, 0);
-        }
-        if (R() < 0.6) arc(this, mid, ps * 1.2, PURP, VIOW);
-      }
-      mid.addVectors(L, Rr).multiplyScalar(0.5);
-      const e = merge * merge;
-      blue.g.position.lerpVectors(L, mid, e); red.g.position.lerpVectors(Rr, mid, e);
-      const s = 0.2 * (1 - Math.pow(1 - grow, 3)) * (1 + merge * 0.5);
+      getL(L); getR(Rr); getMid(M);
+      const grow = Math.max(0, Math.min(1, (t - start) / 0.5));
+      const tr = Math.max(0, Math.min(1, (t - tTravel) / (tHit - tTravel)));
+      const e = tr * tr * (3 - 2 * tr);
+      // spiral: the two orbit the midpoint on opposite sides while closing in
+      sd.subVectors(Rr, L).setY(0); if (sd.lengthSq() < 1e-6) sd.set(1, 0, 0); sd.normalize();
+      const fw = tmpP.crossVectors(sd, up).normalize();
+      const ang = e * Math.PI * 3, rad = 0.55 * (1 - e);
+      const ox = Math.cos(ang) * rad, oy = Math.sin(ang) * rad * 0.6;
+      blue.g.position.lerpVectors(L, M, e).addScaledVector(sd, -ox * e).addScaledVector(up, oy * e).addScaledVector(fw, 0);
+      red.g.position.lerpVectors(Rr, M, e).addScaledVector(sd, ox * e).addScaledVector(up, -oy * e);
+      const s = 0.3 * (1 - Math.pow(1 - grow, 3)) * (1 + e * 0.4);
       blue.g.scale.setScalar(Math.max(0.001, s)); red.g.scale.setScalar(Math.max(0.001, s));
       blue.m.material.uniforms.uT.value = t; red.m.material.uniforms.uT.value = t;
       blue.r.rotation.x += dt * 8; blue.r.rotation.y += dt * 5; red.r.rotation.x -= dt * 7; red.r.rotation.z += dt * 9;
-      blue.r.scale.setScalar(1.9 + Math.sin(t * 9) * 0.15); red.r.scale.setScalar(1.9 + Math.cos(t * 11) * 0.15);
       blue.r.material.opacity = red.r.material.opacity = 0.85 * grow;
       hb.position.copy(blue.g.position); hr.position.copy(red.g.position);
-      hb.material.opacity = hr.material.opacity = grow;
-      hb.scale.setScalar(1.4 + Math.sin(t * 17) * 0.15); hr.scale.setScalar(1.4 + Math.cos(t * 19) * 0.15);
-      lb.position.copy(blue.g.position); lr.position.copy(red.g.position); lb.intensity = lr.intensity = 9 * grow;
-      if (grow > 0) for (const [o, cA, cB, inward] of [[blue.g.position, BLUE, BLUE2, true], [red.g.position, RED, RED2, false]]) {
-        for (let i = 0; i < 2; i++) {
-          const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = inward ? 0.6 : 0.12, sp = inward ? -2.2 : 2.2;
-          this.fire.emit(o.x + Math.cos(a) * sq * r, o.y + u * r, o.z + Math.sin(a) * sq * r, Math.cos(a) * sq * sp, u * sp, Math.sin(a) * sq * sp, 0.22, 0.07, 0.02, cA, cB, 1, 0);
+      hb.material.opacity = hr.material.opacity = 0.75 * grow;
+      hb.scale.setScalar(2.2 + Math.sin(t * 17) * 0.2); hr.scale.setScalar(2.2 + Math.cos(t * 19) * 0.2);
+      lb.position.copy(blue.g.position); lr.position.copy(red.g.position); lb.intensity = lr.intensity = 14 * grow;
+      if (grow > 0 && !hit) for (const [o, cA, cB, inward] of [[blue.g.position, BLUE, BLUE2, true], [red.g.position, REDD, REDD2, false]]) {
+        for (let i = 0; i < 3; i++) {
+          const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = inward ? 0.9 : 0.25, sp = inward ? -3 : 3;
+          this.fire.emit(o.x + Math.cos(a) * sq * r, o.y + u * r, o.z + Math.sin(a) * sq * r, Math.cos(a) * sq * sp, u * sp, Math.sin(a) * sq * sp, 0.24, 0.1, 0.03, cA, cB, 1, 0);
         }
+        // a trail behind each as they swirl in
+        if (tr > 0) this.fire.emit(o.x, o.y, o.z, 0, 0, 0, 0.3, 0.35, 0.05, cA, cB, 0, 0);
       }
-      if (merge > 0) {
-        // violet lightning between them as they meet
-        const k = R();
-        this.fire.emit(blue.g.position.x + (red.g.position.x - blue.g.position.x) * k, blue.g.position.y + (red.g.position.y - blue.g.position.y) * k + (R() - 0.5) * 0.2, blue.g.position.z + (red.g.position.z - blue.g.position.z) * k, 0, 0, 0, 0.1, 0.14, 0.04, PURP, PURP2, 0, 0);
-        if (R() < 0.5) arc(this, mid, 0.3 + merge * 0.4, PURP, VIOW);
+      if (tr > 0.6 && !hit && R() < 0.7) arc(this, M, 0.4 + (1 - tr) * 0.8, PURP, VIOW);
+      // the collision: blue and red mix into purple
+      if (!hit && t >= tHit) {
+        hit = true;
+        blue.g.visible = red.g.visible = hb.visible = hr.visible = false;
+        purple.visible = true;
+        for (let i = 0; i < 90; i++) { const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), sp = 5 + R() * 10; this.fire.emit(M.x, M.y, M.z, Math.cos(a) * sq * sp, u * sp, Math.sin(a) * sq * sp, 0.25 + R() * 0.2, 0.3, 0.04, R() < 0.33 ? BLUE : R() < 0.5 ? RED : VIOW, DPURP, 4, 0); }
+        this.fire.emit(M.x, M.y, M.z, 0, 0, 0, 0.22, 2.4, 5.2, VIOW, PURP, 0, 0);
+        this.ring(M, 4, 0.4, new THREE.Color(2.4, 0.8, 3.8));
+        this.light(M, 60, 24, 0.45, 0xa04cff);
+        this.shake(0.4);
+        lb.color.setHex(0xa04cff); lr.color.setHex(0xa04cff);
+      }
+      if (hit) {
+        const k = Math.min(1, (t - tHit) / (dur - tHit)), ke = 1 - Math.pow(1 - k, 3);
+        const rr = 0.35 + (bigR - 0.35) * ke + Math.sin(t * 30) * 0.03;
+        purple.position.copy(M);
+        pc.scale.setScalar(rr * 0.72); ps.scale.setScalar(rr * 1.1); pr1.scale.setScalar(rr * 0.8); pr2.scale.setScalar(rr * 0.8);
+        pr1.rotation.x += dt * 6; pr1.rotation.y += dt * 4; pr2.rotation.z += dt * 7; pr2.rotation.x -= dt * 3;
+        pc.material.uniforms.uT.value = t; ps.material.uniforms.uT.value = t;
+        hp.position.copy(M); hp.material.opacity = 0.9; hp.scale.setScalar(rr * 5);
+        lb.position.copy(M); lb.intensity = 30;
+        // everything around is drawn into the swelling mass
+        for (let i = 0; i < 8; i++) {
+          const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = rr * 2.2, lf = 0.3;
+          this.fire.emit(M.x + Math.cos(a) * sq * r, M.y + u * r, M.z + Math.sin(a) * sq * r, -Math.cos(a) * sq * r / lf, -u * r / lf, -Math.sin(a) * sq * r / lf, lf, 0.12, 0.04, R() < 0.4 ? VIOW : PURP, PURP2, 0, 0);
+        }
+        if (R() < 0.8) arc(this, M, rr * 1.05, PURP, VIOW);
       }
       if (t >= dur) {
-        for (let i = 0; i < 80; i++) { const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = 5 + R() * 10; this.fire.emit(mid.x, mid.y, mid.z, Math.cos(a) * sq * sp, u * sp, Math.sin(a) * sq * sp, 0.22 + R() * 0.2, 0.28, 0.04, R() < 0.4 ? VIOW : PURP, DPURP, 4, 0); }
-        this.fire.emit(mid.x, mid.y, mid.z, 0, 0, 0, 0.2, 2.0, 4.6, VIOW, PURP, 0, 0);
-        this.light(mid, 50, 22, 0.4, 0xa04cff);
         for (const o of [blue, red]) { this.scene.remove(o.g); o.m.material.dispose(); o.r.material.dispose(); }
+        for (const h of [hb, hr, hp]) { this.scene.remove(h); h.material.map.dispose(); h.material.dispose(); }
         this.scene.remove(purple); purple.traverse((m) => { if (m.material) m.material.dispose(); });
-        this.scene.remove(hp); hp.material.map.dispose(); hp.material.dispose();
-        for (const h of [hb, hr]) { this.scene.remove(h); h.material.map.dispose(); h.material.dispose(); }
         return false;
       }
       return true;
     } });
   },
   // the released imaginary mass: o start, dir unit, travels len metres at speed
-  hollowPurple(o, dir, len, speed, radius) {
+  hollowPurple(o, dir, len, speed, radius, startR = 0) {
     const g = new THREE.Group(); this.scene.add(g);
     const core = new THREE.Mesh(SPHERE, orbMaterial([0.55, 0.1, 1.4], [1.9, 0.45, 3.8], { swirl: 2.4 }));
     const shell = new THREE.Mesh(SPHERE, orbMaterial([0.3, 0.03, 0.8], [1.2, 0.2, 2.8], { additive: true, swirl: 3 }));
@@ -333,7 +351,7 @@ Object.assign(Fx.prototype, {
       const d = Math.min(len, t * speed);
       pos.copy(o).addScaledVector(dir, d);
       g.position.copy(pos);
-      const k = 1 - Math.pow(1 - Math.min(1, t / 0.2), 3), fade = t > life ? Math.max(0, 1 - (t - life) / 0.35) : 1;
+      const k0 = startR / radius, k = k0 + (1 - k0) * (1 - Math.pow(1 - Math.min(1, t / 0.35), 3)), fade = t > life ? Math.max(0, 1 - (t - life) / 0.35) : 1;
       core.scale.setScalar(radius * 0.7 * k * (0.5 + 0.5 * fade)); shell.scale.setScalar(radius * 1.12 * k * (0.5 + 0.5 * fade));
       r1.scale.setScalar(radius * 1.5 * k); r2.scale.setScalar(radius * 1.85 * k);
       r1.rotateZ(dt * 9); r2.rotateZ(-dt * 6);

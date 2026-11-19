@@ -29,7 +29,7 @@ export const RED = { charge: 0.36, radius: 3.8, splash: 32, minSplash: 12, kb: 1
 // the model's own Hollow Purple animation at its real speed (source 6.5 s → 13.1 s): Blue and Red
 // appear at the hands at 4.5 s (source 11.0), converge, the purple mass grows, release at 6.4 s;
 // it travels at the source's speed (~16 m/s)
-export const PURPLE = { charge: 6.4, orbsAt: 4.5, speed: 16, len: 70, radius: 3.0, dmg: 120 };
+export const PURPLE = { charge: 6.4, orbsAt: 4.5, front: 1.5, height: 1.35, spread: 0.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 120 };
 export const VOID = { cine: 5.6, radius: 30, dur: 9, enemyDmg: 0.6, enemySlow: 0.62, cdBoost: 2, stun: 1.2, dmg: 10 };
 
 const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 18 };
@@ -161,12 +161,11 @@ export class SorcererKit {
     m.playAnim('purple');
     m.castAbility({ ab: 'purpleCharge' });
     this.pending.push({ t: PURPLE.charge, fn: () => {
-      // launched from in front of his chest, flat toward the crosshair
-      const p = m.local.pos;
-      const o = new THREE.Vector3(p.x, p.y + 1.35, p.z);
+      // released from where Blue and Red mixed into it, in front of his chest, toward the crosshair
+      const p = m.body.pos, yw = m.body.yaw;
+      const o = new THREE.Vector3(p.x + Math.sin(yw) * PURPLE.front, p.y + PURPLE.height, p.z + Math.cos(yw) * PURPLE.front);
       const dir = this._aimDir(o, tmp2);
       dir.y = Math.max(-0.25, Math.min(0.25, dir.y)); dir.normalize();
-      o.addScaledVector(dir, 1.6);
       m.castAbility({ ab: 'purple', o: [o.x, o.y, o.z], d: [dir.x, dir.y, dir.z] });
       m.cam.kick += 0.08; m.fx.shake(0.5);
     } });

@@ -29,9 +29,15 @@ from strip_glb import write_glb  # noqa: E402
 
 SRC = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, '..', '..', 'public', 'models', 'sorcerer.glb')
-HEIGHT = 1.9  # top of the hair, metres (a tall character)
-# the source legs are very slender next to the other mages: thicken them around the bone axis
-LEG_THICK = {'thigh': 1.5, 'shin': 1.45, 'foot': 1.15}
+# body proportions matched to SHOTO (measured from public/models/shoto.glb): the source has very
+# long, slender legs. Legs are shortened so the hip joints sit at Shoto's height ratio (thighs and
+# shins only: feet and everything above the hips keep their shape), then thighs and shins are made
+# exactly as thick as Shoto's relative to his height.
+HEIGHT = 1.78           # top of the hair, metres (Shoto: 1.76)
+HIP_RATIO = 0.5         # hip joint height / height (Shoto's exact 0.4345 makes this model stubby and blocky:
+                        # it has a smaller head and a shorter torso for its shoulders, so 0.5 gives Shoto's look)
+LEG_R = {'thigh': 0.0478, 'shin': 0.0376}  # median leg radius at mid-segment / height (Shoto)
+FOOT_THICK = 1.0
 
 # game bone ← source joint(s)
 BONES = [  # (name, parent)
@@ -276,8 +282,36 @@ def main():
             tex = js['textures'][et['index']]['source']
         label = {'Hair': 'hair', 'Clothes': 'clothes', 'Base': 'body'}.get(mname)
         parts.append(dict(name=label if label else None, src_node=ni, mat=mname, outline=outline, P=P, N=Nn, UV=UV, I=I, W=W, tex=tex))
-    # ---- thicker legs: push every leg vertex away from the nearest point on its leg's bone chain,
-    # weighted by how much the leg drives it (so the hips / waist blend smoothly)
+    # ---- proportions like Shoto
+    floor0 = min(float(p['P'][:, 1].min()) for p in parts if not p['outline'])
+    top0 = max(float(p['P'][:, 1].max()) for p in parts if not p['outline'])
+    hipY = (jpos['upper_leg.L'][1] + jpos['upper_leg.R'][1]) / 2
+    ankY = (jpos['foot.L'][1] + jpos['foot.R'][1]) / 2
+    Lg = hipY - ankY
+    # solve (ank + Lg·k - floor) / (top - Lg·(1-k) - floor) = HIP_RATIO for the leg compression k
+    k_leg = (HIP_RATIO * (top0 - floor0 - Lg) - (ankY - floor0)) / (Lg * (1 - HIP_RATIO))
+    k_leg = float(np.clip(k_leg, 0.3, 1.0))
+    H_final = (top0 - floor0) - Lg * (1 - k_leg)
+    def ymap(y):
+        y = np.asarray(y, float)
+        return np.where(y <= ankY, y, np.where(y <= hipY, ankY + (y - ankY) * k_leg, y - Lg * (1 - k_leg)))
+    def vmap(V):
+        V = np.array(V, float, copy=True); V[..., 1] = ymap(V[..., 1]); return V
+
+    def seg_radius(P, W, side, which):
+        a0, b0 = (jpos['upper_leg.' + side], jpos['lower_leg.' + side]) if which == 'thigh' else (jpos['lower_leg.' + side], jpos['foot.' + side])
+        col = IDX[('upperLeg_' if which == 'thigh' else 'lowerLeg_') + side]
+        dom = W.argmax(1) == col
+        Q = P[dom]; d = b0 - a0; t = np.clip(((Q - a0) @ d) / (d @ d), 0, 1)
+        mid = (t > 0.3) & (t < 0.7)
+        return np.linalg.norm(Q - (a0 + t[:, None] * d), axis=1)[mid]
+    body = [p for p in parts if not p['outline']]
+    thick = {}
+    for which in ('thigh', 'shin'):
+        r = np.concatenate([seg_radius(p['P'], p['W'], sd, which) for p in body for sd in ('L', 'R')])
+        thick[which] = LEG_R[which] * H_final / float(np.median(r))
+    print('legs: compress', round(k_leg, 3), 'thigh x', round(thick['thigh'], 3), 'shin x', round(thick['shin'], 3))
+
     def thicken(P, W):
         P = P.copy()
         for side, x0 in (('L', '.L'), ('R', '.R')):
@@ -295,19 +329,16 @@ def main():
                 dist = np.linalg.norm(Q - c, axis=1)
                 best = (c, dist) if best is None else (np.where((dist < best[1])[:, None], c, best[0]), np.minimum(dist, best[1]))
             c = best[0]
-            k = (wt[sel] * LEG_THICK['thigh'] + ws[sel] * LEG_THICK['shin'] + wf[sel] * LEG_THICK['foot']) / np.maximum(wl[sel], 1e-6)
+            k = (wt[sel] * thick['thigh'] + ws[sel] * thick['shin'] + wf[sel] * FOOT_THICK) / np.maximum(wl[sel], 1e-6)
             k = 1 + (k - 1) * np.clip(wl[sel], 0, 1)
-            off = Q - c
-            off[:, 1] *= np.where(wf[sel] > 0.5, 1.0, 1.0)  # keep the soles on the ground (feet barely change)
-            newQ = c + off * k[:, None]
+            newQ = c + (Q - c) * k[:, None]
             # never let an inner thigh cross the midline into the other leg
             sg = np.sign(hip[0])
             newQ[:, 0] = np.where(sg * newQ[:, 0] < 0.012, np.where(sg * Q[:, 0] < 0.012, Q[:, 0], sg * 0.012), newQ[:, 0])
-            # feet: don't push the soles below the floor
             newQ[:, 1] = np.maximum(newQ[:, 1], np.minimum(Q[:, 1], 0.0))
             P[sel] = newQ
         return P
-    for p in parts: p['P'] = thicken(p['P'], p['W'])
+    for p in parts: p['P'] = vmap(thicken(p['P'], p['W']))
 
     # name the outline shells after the part they wrap (same vertex count, node order)
     named = [p for p in parts if not p['outline']]
@@ -323,7 +354,7 @@ def main():
     S = HEIGHT / (top - floor)
     off = np.array([0.0, -floor, 0.0])
     def T(v): return ((v + off) * S).astype(np.float32)
-    jm = T(G)
+    jm = T(vmap(G))
 
     binbuf = bytearray(); bvs = []; accs = []
     def push(data, target=None, comp=5126, typ='VEC3', minmax=False):
@@ -390,7 +421,7 @@ def main():
                 # rest differs from the bind pose by a constant offset
                 ph = jpos['hips']; pt = (G @ np.r_[ph, 1])[:3]
                 if hip0 is None: hip0 = pt.copy()
-                hips.extend(np.round((pt - hip0) * S, 4).tolist())
+                hips.extend(np.round((pt - hip0) * S * k_leg, 4).tolist())
         qs.extend(frame)
     purple = {'fps': PURPLE_FPS * PURPLE_SPEED, 'bones': NAMES, 'q': qs, 'hip': hips, 'fingers': FING, 'fq': fq}
 
@@ -403,13 +434,13 @@ def main():
     for nm, par in BONES:
         (nodes[jnode[par]]['children'] if par else nodes[0]['children']).append(jnode[nm])
     for nm, tp in tails.items():
-        t_m = T(np.array([tp]))[0]
+        t_m = T(vmap(np.array([tp])))[0]
         nodes.append({'name': nm + '_end', 'translation': (t_m - jm[IDX[nm]]).astype(float).tolist()})
         nodes[jnode[nm]]['children'].append(len(nodes) - 1)
     # finger bones at their curled positions (identity rest rotation, like every game bone)
     fpos = {}
     for src, f in FSRC.items():
-        fpos[f] = T(np.array([(DELTA[kidx[src]] @ np.r_[jpos[src], 1])[:3]]))[0]
+        fpos[f] = T(vmap(np.array([(DELTA[kidx[src]] @ np.r_[jpos[src], 1])[:3]])))[0]
     allpos = {n: jm[IDX[n]] for n in NAMES}; allpos.update(fpos)
     for f in FING:
         par = fparent(f)

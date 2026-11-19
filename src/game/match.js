@@ -303,12 +303,18 @@ export class Match {
       case 'redCharge': this.fx.redCharge((out) => e.view.palmWorld('R', out), RED.charge); this.sound('redCharge', e.pos, 0.8, 30); break;
       case 'red': this.proj.spawn(e.n, 'red', d.o, d.d, local); this.sound('redFire', tmpV.fromArray(d.o), 0.9, 40); break;
       case 'purpleCharge':
-        this.fx.purpleCharge((out) => e.view.palmWorld('L', out), (out) => e.view.palmWorld('R', out), PURPLE.charge - 0.05, PURPLE.orbsAt);
+        // Blue is summoned on his left, Red on his right, either side of the point where they mix
+        const at = (side) => (out) => {
+          const yw = e === this.local ? this.body.yaw : e.yaw, p = e === this.local ? this.body.pos : e.pos;
+          const fx = Math.sin(yw), fz = Math.cos(yw);
+          return out.set(p.x + fx * PURPLE.front + fz * side, p.y + PURPLE.height, p.z + fz * PURPLE.front - fx * side);
+        };
+        this.fx.purpleCharge(at(PURPLE.spread), at(-PURPLE.spread), at(0), PURPLE.charge, PURPLE.orbsAt, PURPLE.formR);
         this.sound('purpleCharge', e.pos, 1, 50);
         break;
       case 'purple': {
         const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3().fromArray(d.d).normalize();
-        this.fx.hollowPurple(o, dir, PURPLE.len, PURPLE.speed, PURPLE.radius);
+        this.fx.hollowPurple(o, dir, PURPLE.len, PURPLE.speed, PURPLE.radius, PURPLE.formR);
         this.sound('purpleFire', o, 1.3, 90);
         this.areas.push({ kind: 'purple', o, dir, t: 0, owner: e.n, local, hit: new Set() });
         break;
