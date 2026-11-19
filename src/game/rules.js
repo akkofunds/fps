@@ -3,7 +3,11 @@ import { BAL } from './balance.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { novaFrag: 70, novaShock: 85, novaBurn: 12, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 90, freeze: 20, heatwave: 70, lance: 100, uppercut: 45, zero: 25, zeroBoom: 150, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 30, starfall: 40, sigil: 80, blink: 45, nova: 500 };
+const MAX_HIT = { novaFrag: 30, novaShock: 32, novaBurn: 8, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 90, freeze: 20, heatwave: 70, lance: 100, uppercut: 45, zero: 25, zeroBoom: 130, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 30, sparkBig: 40, starfall: 40, sigil: 80, blink: 45, nova: 160 };
+// every piece of an ultimate (blast, fragments, shockwave, burning crater, freeze) adds up to at
+// most this share of max HP per victim: ultimates hit hard but never kill from full health
+const ULT_ABS = new Set(['nova', 'novaFrag', 'novaShock', 'novaBurn', 'zero', 'zeroBoom', 'adolla', 'adollaPath', 'meteor']);
+const ULT_CAP = 0.72, ULT_WINDOW = 14;
 
 export class Rules {
   constructor(match) {
@@ -19,6 +23,7 @@ export class Rules {
     this.respawnAt = new Map();
     this.lastDamage = new Map();
     this.lastHit = new Map(); // anti-spam per attacker
+    this.ultDmg = new Map(); // "attacker>victim" → { t0, sum } ultimate damage dealt in the window
   }
 
   bcast(msg) {
@@ -27,6 +32,13 @@ export class Rules {
   }
 
   start() {
+    if (this.mode.quickplay) {
+      // quickplay FFA: always live, no clock, no kill limit, no scoreboard
+      this.phase = 'live'; this.phaseEnd = 0; this.timeLimit = 0;
+      this.spawnAll();
+      this.bcast({ t: 'phase', p: 'live', tl: 0 });
+      return;
+    }
     if (this.m.cfg.queue) {
       // matchmaking lobby: free roam + warm-up fights until the lobby fills
       this.phase = 'queue'; this.phaseEnd = 0;
@@ -101,7 +113,13 @@ export class Rules {
     const cap = MAX_HIT[msg.ab];
     if (!cap) return;
     if (BAL.godMode && this.m.cfg.mode === 'practice' && v.isLocal) return;
-    const dmg = Math.max(0, Math.round(Math.min(cap, Number(msg.dmg) || 0) * BAL.dmg));
+    let dmg = Math.max(0, Math.round(Math.min(cap, Number(msg.dmg) || 0) * BAL.dmg));
+    if (ULT_ABS.has(msg.ab)) {
+      const key = `${from.n}>${v.n}`, u = this.ultDmg.get(key);
+      const rec = u && this.now - u.t0 < ULT_WINDOW ? u : { t0: this.now, sum: 0 };
+      dmg = Math.min(dmg, Math.max(0, Math.round(BAL.hp * ULT_CAP) - rec.sum));
+      rec.sum += dmg; this.ultDmg.set(key, rec);
+    }
     if (!dmg) return;
     this.damage(v, dmg, from, msg.ab);
     if (v.alive && Array.isArray(msg.burn)) {
@@ -136,15 +154,19 @@ export class Rules {
     const rt = v.dummy ? 2 : this.phase === 'queue' ? 1.5 : BAL.respawn;
     this.respawnAt.set(v.n, this.now + rt);
     this.burns.delete(v.n);
-    this.bcast({ t: 'kill', k: k ? k.n : -1, v: v.n, ab, kk: k ? k.kills : 0, vd: v.deaths, rt });
+    const lives = this.mode.lives && this.phase === 'live' ? this.mode.lives : 0;
+    this.bcast({ t: 'kill', k: k ? k.n : -1, v: v.n, ab, kk: k ? k.kills : 0, vd: v.deaths, rt, out: lives && v.deaths >= lives ? 1 : 0 });
     this.sendBoard();
+    if (lives && !v.dummy && v.deaths >= lives) { this.respawnAt.delete(v.n); setTimeout(() => { if (this.m.app.match === this.m) this.end(); }, 1800); return; }
     if (this.phase === 'live' && this.killsToWin && k && k.kills >= this.killsToWin) this.end();
   }
 
   end() {
     if (this.phase === 'ended') return;
     this.phase = 'ended';
-    const ranked = [...this.m.ents.values()].filter((e) => !e.dummy).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths || b.dmg - a.dmg);
+    const lives = this.mode.lives;
+    // duels: whoever has lives left wins (the one who left the duel loses)
+    const ranked = [...this.m.ents.values()].filter((e) => !e.dummy).sort((a, b) => (lives ? (+!!a.left - +!!b.left) || a.deaths - b.deaths : 0) || b.kills - a.kills || a.deaths - b.deaths || b.dmg - a.dmg);
     this.bcast({ t: 'end', l: ranked.map((e) => [e.n, e.kills, e.deaths, e.dmg]) });
   }
 

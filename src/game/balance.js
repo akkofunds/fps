@@ -3,7 +3,7 @@
 // in that lobby simulates the same numbers. Public FFA always uses the defaults.
 
 export const DEFAULT_BALANCE = {
-  hp: 150, // max health
+  hp: 220, // max health (tanky: fights last, ultimates hit hard but never one-shot)
   speed: 1, // movement speed multiplier
   gravity: 1, // gravity multiplier
   dmg: 1, // damage multiplier (all abilities)
@@ -31,7 +31,7 @@ const clamp = (v, a, b, d) => (Number.isFinite(+v) ? Math.min(b, Math.max(a, +v)
 // apply (sanitized: values can come from another player's host)
 export function applyBalance(b) {
   const s = b || DEFAULT_BALANCE;
-  BAL.hp = clamp(s.hp, 25, 2000, 150);
+  BAL.hp = clamp(s.hp, 25, 2000, DEFAULT_BALANCE.hp);
   BAL.speed = clamp(s.speed, 0.4, 2.5, 1);
   BAL.gravity = clamp(s.gravity, 0.3, 2.5, 1);
   BAL.dmg = clamp(s.dmg, 0, 5, 1);

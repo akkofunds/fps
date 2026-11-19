@@ -28,7 +28,10 @@ export const REGEN_RATE = 14;
 export const ULT_COST = 100;
 
 export const MODES = {
-  ffa: { id: 'ffa', label: 'FREE-FOR-ALL', size: 8, minPlayers: 2, killsToWin: 20, timeLimit: 480, respawn: 3 },
+  // quickplay: drop in / drop out, no score, no kill limit, no clock: just fight
+  ffa: { id: 'ffa', label: 'FREE-FOR-ALL', size: 8, minPlayers: 1, killsToWin: 0, timeLimit: 0, respawn: 3, quickplay: true },
+  // 1v1, 3 lives each, scoreboard: lose your last life and you lose the duel
+  duel: { id: 'duel', label: 'DUEL', size: 2, minPlayers: 2, killsToWin: 3, lives: 3, timeLimit: 360, respawn: 3 },
   custom: { id: 'custom', label: 'CUSTOM', size: 8, minPlayers: 1, killsToWin: 20, timeLimit: 600, respawn: 3 },
   practice: { id: 'practice', label: 'PRACTICE', size: 1, minPlayers: 1, killsToWin: 0, timeLimit: 0, respawn: 2 },
 };

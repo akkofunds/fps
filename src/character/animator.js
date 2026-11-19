@@ -58,6 +58,7 @@ const CASTS = {
   mRaise: { clip: C.M_RAISE, in: 0.06, out: 0.2, twoHand: [0.08, 0.62] },
   mBlink: { clip: C.M_BLINK, in: 0.04, out: 0.15 },
   mBolt2: { clip: C.M_BOLT2, in: 0.04, out: 0.16 },
+  mBoltBig: { clip: C.M_BOLT, in: 0.03, out: 0.22 },
   jabR: { clip: C.JAB_R, in: 0.02, out: 0.08 },
   freezeCast: { clip: C.FREEZE_CAST, in: 0.04, out: 0.16 },
   lance: { clip: C.LANCE_CLIP, in: 0.04, out: 0.14 },

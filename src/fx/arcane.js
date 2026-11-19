@@ -173,6 +173,31 @@ Object.assign(Fx.prototype, {
     }
   },
 
+  // Crimson Burst (Meteora's charged third shot): a spinning crimson core with a gold halo and a
+  // corkscrew of sparks, then a bigger explosion with a magic-circle flash
+  burstTrail(p, v, age) {
+    this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.07, 1.0, 0.7, [3.4, 1.4, 0.9, 1], CRIM, 0, 0);
+    const L = Math.hypot(v.x, v.y, v.z) || 1, fx = v.x / L, fy = v.y / L, fz = v.z / L;
+    // a frame around the flight direction for the corkscrew
+    let ux = -fz, uy = 0, uz = fx; const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    const wx = fy * uz - fz * uy, wy = fz * ux - fx * uz, wz = fx * uy - fy * ux;
+    for (let k = 0; k < 2; k++) {
+      const a = age * 26 + k * Math.PI, c = Math.cos(a) * 0.28, s = Math.sin(a) * 0.28;
+      this.fire.emit(p.x + ux * c + wx * s, p.y + uy * c + wy * s, p.z + uz * c + wz * s, v.x * 0.05, v.y * 0.05, v.z * 0.05, 0.3, 0.22, 0.05, GOLD, CRIM2, 3, 0);
+    }
+    for (let i = 0; i < 3; i++) this.fire.emit(p.x, p.y, p.z, (R() - 0.5) * 1.6, (R() - 0.5) * 1.6, (R() - 0.5) * 1.6, 0.3 + R() * 0.2, 0.4, 0.06, CRIM, DARKR, 2, 0.4);
+  },
+  crimsonBurst(p, radius = 2.8) {
+    this.sparkBurst(p, radius);
+    for (let i = 0; i < 22; i++) {
+      const a = (i / 22) * 6.283, sp = 7 + R() * 3;
+      this.fire.emit(p.x, p.y + 0.1, p.z, Math.cos(a) * sp, 0.6 + R(), Math.sin(a) * sp, 0.35, 0.36, 0.05, GOLD, CRIM, 5, 0);
+    }
+    this.ring(p, radius * 1.6, 0.4, new THREE.Color(3.2, 1.6, 0.5));
+    this.tipSeal(new THREE.Vector3(p.x, p.y + 0.05, p.z), new THREE.Vector3(0, 1, 0), radius * 0.9, 0.5, 1);
+    this.light(p, 18, radius * 5, 0.3, 0xff3040);
+  },
+
   sparkBurst(p, radius = 2.2) {
     for (let i = 0; i < 26; i++) {
       const u = R() * 2 - 1, a = R() * 6.283, s = Math.sqrt(1 - u * u), sp = 3 + R() * 5;

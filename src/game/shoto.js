@@ -16,7 +16,7 @@ export const SHOTO = {
   color: '#7fd4ff',
   bio: 'Ice from his right hand, fire from his left. Shoto locks enemies in place with jagged ice, then hits them with heat so sudden the frozen air explodes.',
   abilities: [
-    { key: 'LMB', id: 'bolt', name: 'Flame Fists', desc: 'Left-right jabs that each hurl a fire bolt off the fist. 18 damage, more on headshots.' },
+    { key: 'LMB', id: 'bolt', name: 'Frost & Flame Fists', desc: 'Alternating jabs: the right fist hurls an ice shard (16 damage, briefly chills), the left a fire bolt (18 damage, sets them burning). More on headshots.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land. Press jump again in the air to double jump.' },
     { key: 'E', id: 'freeze', name: 'Flashfreeze Heatwave', cd: 10, desc: 'Stomp: jagged ice erupts from your foot and races along the ground to the target, freezing everyone there in place. Then a fire punch rolls a massive wave of flame out over it: frozen enemies shatter in a pressure explosion for heavy bonus damage.' },
     { key: 'C', id: 'lance', name: 'Hellfire Lance', cd: 8, desc: 'Compress white-hot flame into a narrow beam from your fingertip: a long-range sniper shot to exactly where you aim (68 damage, 98 on headshots). Scorches the ground beneath it.' },
@@ -28,9 +28,9 @@ export const SHOTO = {
 export const FREEZE = { range: 26, radius: 2.8, dmg: 15, root: 1.25, delay: 0.7, waveLen: 11, waveHalf: 0.6, waveDmg: 40, shatter: 24 };
 export const LANCE = { charge: 0.36, range: 120, dmg: 68, head: 1.45 };
 export const BLITZ = { speed: 21, time: 0.62, hitR: 1.7, dmg: 38 };
-export const ZERO = { radius: 26, freezeDmg: 20, root: 2.7, freezeAt: 0.7, boomAt: 2.35, dmg: 140, minDmg: 90 };
+export const ZERO = { radius: 26, freezeDmg: 20, root: 2.7, freezeAt: 0.7, boomAt: 2.35, dmg: 120, minDmg: 70 };
 
-const COOLDOWN = { bolt: 0.28, freeze: 10, lance: 8, blitz: 11 };
+const COOLDOWN = { bolt: 0.31, freeze: 10, lance: 8, blitz: 11 };
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), tmp3 = new THREE.Vector3();
 
@@ -101,13 +101,16 @@ export class ShotoKit {
     const hand = this.side > 0 ? 'R' : 'L';
     this.side = -this.side;
     m.playAnim('cast', { anim: hand === 'R' ? 'jabR' : 'jabL' });
+    // right jab: an ice shard (chills), left jab: a fire bolt (burns) — his two halves
+    const ice = hand === 'R';
     this.pending.push({ t: 0.045, fn: () => {
       const o = m.view.palmWorld(hand, tmp);
       const dir = this._aimDir(o, tmp2);
-      m.fx.castBurst(o, dir, 0.7);
-      const v = dir.multiplyScalar(PROJ.bolt.speed);
-      m.castAbility({ ab: 'bolt', o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
-      m.sound('bolt', o, 0.5, 30);
+      if (ice) m.fx.frostBurst(o, dir, 0.8); else m.fx.castBurst(o, dir, 0.7);
+      const kind = ice ? 'shard' : 'bolt';
+      const v = dir.multiplyScalar(PROJ[kind].speed);
+      m.castAbility({ ab: kind, o: [o.x, o.y, o.z], d: [v.x, v.y, v.z] });
+      m.sound(ice ? 'iceShot' : 'bolt', o, 0.5, 30);
       m.cam.kick += 0.006;
     } });
   }
