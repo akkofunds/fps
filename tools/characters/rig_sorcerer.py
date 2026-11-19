@@ -71,6 +71,123 @@ def game_bone(src):
     return {'hips': 'hips', 'spine': 'spine', 'chest': 'chest', 'neck': 'neck', 'head': 'head'}.get(s, 'hips')
 
 
+def rot_about(axis, deg, pivot):
+    a = axis / np.linalg.norm(axis); t = np.radians(deg)
+    K = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
+    R = np.eye(3) + np.sin(t) * K + (1 - np.cos(t)) * K @ K
+    M = np.eye(4); M[:3, :3] = R; M[:3, 3] = pivot - R @ pivot
+    return M
+
+
+# relaxed hands: the source fingers are splayed flat (T-pose) and the game folds every finger into
+# the hand bone, so the hands would stay stiff and spread in every pose. Bake a natural relaxed
+# curl into the mesh (each finger bent at all three knuckles toward the palm, the thumb tucked a
+# little) using the source finger joints, before their weights are merged into the hand.
+CURL = {'index': (22, 32, 22), 'middle': (28, 38, 26), 'ring': (32, 42, 28), 'little': (36, 46, 30), 'thumb': (12, 18, 12)}
+
+
+def finger_deltas(jname, jpos):
+    D = [np.eye(4) for _ in jname]
+    at = {n: i for i, n in enumerate(jname)}
+    for sd in ('.L', '.R'):
+        hand = jpos['hand' + sd]
+        fdir = jpos['middle_proximal' + sd] - hand; fdir /= np.linalg.norm(fdir)
+        across = jpos['little_proximal' + sd] - jpos['index_proximal' + sd]
+        across -= fdir * (across @ fdir); across /= np.linalg.norm(across)
+        n = np.cross(fdir, across)
+        palm = n if n[1] < 0 else -n  # palms face down in the source A-pose
+        for f, angs in CURL.items():
+            chain = [f + '_' + k + sd for k in ('proximal', 'intermediate', 'distal')]
+            d0 = jpos[chain[1]] - jpos[chain[0]]; d0 /= np.linalg.norm(d0)
+            axis = across if f != 'thumb' else np.cross(d0, palm)
+            sign = 1.0 if np.cross(axis, d0) @ palm > 0 else -1.0
+            M = np.eye(4)
+            for jn, ang in zip(chain, angs):
+                M = M @ rot_about(axis, sign * ang, jpos[jn])
+                D[at[jn]] = M.copy()
+    return np.array(D)
+
+
+# ---------------------------------------------------------------- the model's own Hollow Purple
+# animation, retargeted: the body motion between these source times (after the hands-together
+# hold, up to the wide firing stance), played SPEED times faster in game. The camera rig above
+# `root` is removed so only the body moves.
+PURPLE_T0, PURPLE_T1, PURPLE_FPS, PURPLE_SPEED = 6.5, 11.9, 30, 1.9
+
+
+def quat_from_mat(R):
+    U, _, Vt = np.linalg.svd(R); R = U @ Vt
+    if np.linalg.det(R) < 0: R = -R
+    t = np.trace(R)
+    if t > 0:
+        s = np.sqrt(t + 1) * 2; w = 0.25 * s; x = (R[2, 1] - R[1, 2]) / s; y = (R[0, 2] - R[2, 0]) / s; z = (R[1, 0] - R[0, 1]) / s
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        s = np.sqrt(1 + R[0, 0] - R[1, 1] - R[2, 2]) * 2; w = (R[2, 1] - R[1, 2]) / s; x = 0.25 * s; y = (R[0, 1] + R[1, 0]) / s; z = (R[0, 2] + R[2, 0]) / s
+    elif R[1, 1] > R[2, 2]:
+        s = np.sqrt(1 + R[1, 1] - R[0, 0] - R[2, 2]) * 2; w = (R[0, 2] - R[2, 0]) / s; x = (R[0, 1] + R[1, 0]) / s; y = 0.25 * s; z = (R[1, 2] + R[2, 1]) / s
+    else:
+        s = np.sqrt(1 + R[2, 2] - R[0, 0] - R[1, 1]) * 2; w = (R[1, 0] - R[0, 1]) / s; x = (R[0, 2] + R[2, 0]) / s; y = (R[1, 2] + R[2, 1]) / s; z = 0.25 * s
+    q = np.array([x, y, z, w]); return q / np.linalg.norm(q)
+
+
+def trs(t, r, sc):
+    x, y, z, w = r
+    R = np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                  [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                  [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+    M = np.eye(4); M[:3, :3] = R * np.array(sc)[None, :]; M[:3, 3] = t
+    return M
+
+
+def sample_animation(js, b, times):
+    """world matrices of every node at each time (LINEAR / STEP / CUBICSPLINE value)"""
+    N = js['nodes']
+    base = []
+    for n in N:
+        if 'matrix' in n:
+            M = np.array(n['matrix']).reshape(4, 4).T
+            base.append(('m', M))
+        else:
+            base.append(('t', [np.array(n.get('translation', [0, 0, 0]), float), np.array(n.get('rotation', [0, 0, 0, 1]), float), np.array(n.get('scale', [1, 1, 1]), float)]))
+    an = js['animations'][0]
+    chans = []
+    for c in an['channels']:
+        sm = an['samplers'][c['sampler']]
+        if c['target']['path'] not in ('translation', 'rotation', 'scale'): continue
+        tin = accessor(js, b, sm['input']).ravel(); out = accessor(js, b, sm['output'])
+        if sm.get('interpolation') == 'CUBICSPLINE': out = out.reshape(len(tin), 3, -1)[:, 1]
+        chans.append((c['target']['node'], c['target']['path'], tin, out.reshape(len(tin), -1), sm.get('interpolation', 'LINEAR')))
+    par = {}
+    for i, n in enumerate(N):
+        for ch in n.get('children', []): par[ch] = i
+    order = []
+    seen = set()
+    def visit(i):
+        if i in seen: return
+        if i in par: visit(par[i])
+        seen.add(i); order.append(i)
+    for i in range(len(N)): visit(i)
+    res = []
+    for t in times:
+        loc = {i: [v.copy() for v in base[i][1]] for i in range(len(N)) if base[i][0] == 't'}
+        for ni, path, tin, out, interp in chans:
+            if ni not in loc: continue
+            k = int(np.clip(np.searchsorted(tin, t) - 1, 0, len(tin) - 2))
+            u = 0.0 if interp == 'STEP' else float(np.clip((t - tin[k]) / max(tin[k + 1] - tin[k], 1e-9), 0, 1))
+            a, c2 = out[k], out[k + 1]
+            if path == 'rotation':
+                if a @ c2 < 0: c2 = -c2
+                v = a + (c2 - a) * u; v /= np.linalg.norm(v)
+            else: v = a + (c2 - a) * u
+            loc[ni][{'translation': 0, 'rotation': 1, 'scale': 2}[path]] = v
+        W = {}
+        for i in order:
+            L = base[i][1] if base[i][0] == 'm' else trs(*loc[i])
+            W[i] = (W[par[i]] @ L) if i in par else L
+        res.append(W)
+    return res
+
+
 def smoothstep(a, b, x):
     t = np.clip((x - a) / (b - a), 0, 1)
     return t * t * (3 - 2 * t)
@@ -85,6 +202,7 @@ def main():
     IBM = accessor(js, b, sk['inverseBindMatrices']).reshape(-1, 4, 4).transpose(0, 2, 1)
     JW = np.linalg.inv(IBM)[:, :3, 3]  # joint positions at bind (scene space, Y-up, faces +Z, left = +X)
     jpos = dict(zip(jname, JW))
+    DELTA = finger_deltas(jname, jpos)
 
     # ---- game joint positions
     G = np.zeros((len(NAMES), 3))
@@ -116,6 +234,16 @@ def main():
         I = accessor(js, b, p['indices']).astype(np.uint32)
         Js = accessor(js, b, at['JOINTS_0']).astype(int)
         Ws = accessor(js, b, at['WEIGHTS_0'])
+        # pose the fingers into the relaxed curl (linear blend skinning with the source weights)
+        Ph = np.c_[P, np.ones(len(P))]
+        P2 = np.zeros_like(P); N2 = np.zeros_like(Nn) if Nn is not None else None
+        for k in range(4):
+            Mk = DELTA[Js[:, k]]
+            P2 += Ws[:, k:k + 1] * np.einsum('nij,nj->ni', Mk, Ph)[:, :3]
+            if Nn is not None: N2 += Ws[:, k:k + 1] * np.einsum('nij,nj->ni', Mk[:, :3, :3], Nn)
+        wsum = Ws.sum(1, keepdims=True)
+        P = np.where(wsum > 1e-6, P2 / np.maximum(wsum, 1e-6), P)
+        if Nn is not None: Nn = N2 / np.maximum(np.linalg.norm(N2, axis=1, keepdims=True), 1e-9)
         W = np.zeros((len(P), len(NAMES)))
         for k in range(4):
             for row in np.unique(Js[:, k]):
@@ -215,7 +343,34 @@ def main():
         materials.append({'name': p['mat'], 'doubleSided': False, 'pbrMetallicRoughness': {'baseColorTexture': {'index': img_of_src[p['tex']]}, 'metallicFactor': 0, 'roughnessFactor': 1}, 'extensions': {'KHR_materials_unlit': {}}})
         mat_of_part[id(p)] = len(materials) - 1
 
-    nodes = [{'name': 'Sorcerer', 'children': []}]
+    # ---- the retargeted Hollow Purple: per game bone, the WORLD rotation relative to the bind pose
+    # (exactly what the source skinning applies), plus the hips offset — src/character/animator.js
+    # turns these into canonical poses with the rig's own corrections
+    jnode = {nm: J[k] for k, nm in enumerate(jname)}
+    root_i = next(i for i, n in enumerate(N) if n.get('name', '').startswith('root_'))
+    times = np.arange(PURPLE_T0, PURPLE_T1 + 1e-6, 1 / PURPLE_FPS)
+    Ws_t = sample_animation(js, b, [0.0] + list(times))
+    rest_root = Ws_t[0][root_i]
+    srcOf = dict(POS_FROM); srcOf['upperChest'] = 'chest'
+    kidx = {nm: k for k, nm in enumerate(jname)}
+    qs, hips, hip0 = [], [], None
+    for W in Ws_t[1:]:
+        fix = rest_root @ np.linalg.inv(W[root_i])
+        frame = []
+        for nm in NAMES:
+            sj = srcOf[nm]
+            G = fix @ W[jnode[sj]] @ IBM[kidx[sj]]
+            frame.extend(np.round(quat_from_mat(G[:3, :3]), 4).tolist())
+            if nm == 'hips':
+                # relative to the first frame (he is standing still there): the animation's root
+                # rest differs from the bind pose by a constant offset
+                ph = jpos['hips']; pt = (G @ np.r_[ph, 1])[:3]
+                if hip0 is None: hip0 = pt.copy()
+                hips.extend(np.round((pt - hip0) * S, 4).tolist())
+        qs.extend(frame)
+    purple = {'fps': PURPLE_FPS * PURPLE_SPEED, 'bones': NAMES, 'q': qs, 'hip': hips}
+
+    nodes = [{'name': 'Sorcerer', 'children': [], 'extras': {'purple': purple}}]
     jnode = {}
     for i, (nm, par) in enumerate(BONES):
         jnode[nm] = len(nodes)

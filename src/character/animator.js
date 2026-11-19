@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { B, NB, UPPER_MASK } from './rig.js';
-import { Pose, setE, setS, addE, blend, sampleClip, legIK, getQ, putQ } from './pose.js';
+import { Pose, setE, setS, addE, blend, sampleClip, legIK, getQ, putQ, bakeWorldClip } from './pose.js';
 import * as C from './clips.js';
 const C_SPRINT = C.SPRINT;
 
@@ -81,6 +81,8 @@ const STYLES = {
   caster: { swing: 0.95, swingR: 0.45, lean: 0.9, bounce: 0.95, sway: 1, settle: 0.5, roll: 1.1, twist: 0.95, elbow: 0.95, kick: 0.95, stride: 1, fidget: 'fidgetM' },
 };
 
+const BAKED = new Map(); // retargeted clips, shared by every instance of the same model
+
 // critically/under-damped spring (semi-implicit Euler); s = { x, v }
 function spring(st, target, k, zeta, dt) {
   const c = 2 * Math.sqrt(k) * zeta;
@@ -113,6 +115,15 @@ export class Animator {
     this.lastStep = 'R';
     this.dead = false;
     this.style = rig.hasProp ? STYLES.caster : STYLES.brawler;
+    // a model can ship its own retargeted animations (the Sorcerer's Hollow Purple): they replace
+    // the hand-keyed action of the same name for this character
+    let data = null;
+    rig.root.traverse((o) => { if (o.userData && o.userData.purple) data = o.userData.purple; });
+    if (data) {
+      const key = data.q.length + ':' + data.q[7] + ':' + data.q[101];
+      if (!BAKED.has(key)) BAKED.set(key, bakeWorldClip(data, rig));
+      this.baked = { purple: { clip: BAKED.get(key), in: 0.15, out: 0.35, aimOff: true } };
+    }
     // follow-through springs (torso lean/bank overshoot, arm drag in turns, head settle)
     this.sLean = { x: 0, v: 0 }; this.sBank = { x: 0, v: 0 }; this.sArm = { x: 0, v: 0 }; this.sHead = { x: 0, v: 0 };
     this.hitDir = 0; this.hitAmt = 1;
@@ -169,7 +180,7 @@ export class Animator {
     }
   }
   _startAction(name, yaw) {
-    const def = ACTIONS[name];
+    const def = (this.baked && this.baked[name]) || ACTIONS[name];
     this.action = { def, t: 0, w: this.action ? this.action.w : 0, yaw };
     this.yawOffsetTarget = def.turn ? yaw : 0;
   }
@@ -565,7 +576,7 @@ export class Animator {
     // swing in opposition (no tuck, no flail)
     const R = { spine: [4, 0, 0], chest: [2, 0, 0], upperLegL: [-52, 0, 4], lowerLegL: [72, 0, 0], footL: [16, 0, 0], upperLegR: [10, 0, 4], lowerLegR: [50, 0, 0], footR: [30, 0, 0], upperArmL: [16, 0, 12], foreArmL: [-40, 0, 0], upperArmR: [-34, 0, 14], foreArmR: [-70, 0, 0], head: [-4, 0, 0] };
     // falling: both legs reach down for the landing with soft knees, the arms open a little for balance
-    const F = { spine: [3, 0, 0], chest: [1, 0, 0], upperLegL: [-24, 0, 5], lowerLegL: [34, 0, 0], footL: [-4, 0, 0], upperLegR: [-10, 0, 5], lowerLegR: [24, 0, 0], footR: [0, 0, 0], upperArmL: [-12, 0, 30], foreArmL: [-30, 0, 0], upperArmR: [-10, 0, 32], foreArmR: [-34, 0, 0], head: [3, 0, 0] };
+    const F = { spine: [3, 0, 0], chest: [1, 0, 0], upperLegL: [-24, 0, 5], lowerLegL: [34, 0, 0], footL: [-4, 0, 0], upperLegR: [-10, 0, 5], lowerLegR: [24, 0, 0], footR: [0, 0, 0], upperArmL: [-12, 0, 20], foreArmL: [-30, 0, 0], upperArmR: [-10, 0, 22], foreArmR: [-34, 0, 0], head: [3, 0, 0] };
     for (const key of Object.keys(R)) {
       const a = R[key], b = F[key];
       const side = /[a-z]R$/.test(key) ? -1 : 1;

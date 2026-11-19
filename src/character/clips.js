@@ -792,12 +792,12 @@ export const G_PURPLE = compileClip([
 ]);
 // X — Domain Expansion: right hand raised in front of the face (the sign), head bowed a touch,
 // perfectly still… then the domain opens
-const DE_SIGN = { spine: [-3, 0, 0], chest: [-2, 0, 0], neck: [2, 0, 0], head: [6, 0, 0], upperArmR: [-74, 0, -34], foreArmR: [-112, 0, 0], handR: [8, 0, 0], upperArmL: [-4, 0, 9], foreArmL: [-18, 0, 0] };
+const DE_SIGN = { spine: [-2, 0, 0], chest: [-2, 0, 0], neck: [2, 0, 0], head: [5, 0, 0], upperArmR: [-40, 0, -30], foreArmR: [-128, 0, 0], handR: [4, 0, 0], upperArmL: [-4, 0, 9], foreArmL: [-18, 0, 0] };
 export const G_DOMAIN = compileClip([
   { t: 0, hip: [0, -0.03, 0], ik: STAND, b: GUARD },
-  { t: 0.24, ease: 'out', hip: [0, -0.03, 0], ik: STAND, b: DE_SIGN },
-  { t: 0.88, ease: 'linear', hip: [0, -0.03, 0], ik: STAND, b: { ...DE_SIGN, head: [8, 0, 0] } },
-  { t: 1.0, ease: 'out', hip: [0, -0.02, 0], ik: STAND, b: { ...DE_SIGN, head: [-4, 0, 0], spine: [-5, 0, 0] } },
-  { t: 1.35, ease: 'linear', hip: [0, -0.02, 0], ik: STAND, b: { ...DE_SIGN, head: [-4, 0, 0], spine: [-5, 0, 0] } },
-  { t: 1.7, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: GUARD },
+  { t: 0.3, ease: 'out', hip: [0, -0.03, 0], ik: STAND, b: DE_SIGN },
+  { t: 1.2, ease: 'linear', hip: [0, -0.03, 0], ik: STAND, b: { ...DE_SIGN, head: [7, 0, 0] } },
+  { t: 1.35, ease: 'out', hip: [0, -0.02, 0], ik: STAND, b: { ...DE_SIGN, head: [-3, 0, 0], spine: [-4, 0, 0] } },
+  { t: 5.3, ease: 'linear', hip: [0, -0.02, 0], ik: STAND, b: { ...DE_SIGN, head: [-3, 0, 0], spine: [-4, 0, 0] } },
+  { t: 5.8, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: GUARD },
 ]);
