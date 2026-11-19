@@ -179,7 +179,8 @@ class App {
       this.gtao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 12 });
       this.composer.addPass(this.gtao);
     }
-    this.bloomDiv = this.settings.quality === 'medium' ? 4 : 2;
+    // bloom is a wide blur: at quarter resolution it looks the same and costs ~1/4 of the fill
+    this.bloomDiv = this.settings.quality === 'ultra' ? 2 : 4;
     this.bloom = new UnrealBloomPass(new THREE.Vector2(this.width / this.bloomDiv, this.height / this.bloomDiv), 0.55, 0.5, 0.9);
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GRADE);
@@ -260,8 +261,9 @@ class App {
     let base = scale > 0 ? scale * dpr : Math.min(dpr, Q.dpr);
     if (this.settings.quality === 'ultra' && !scale) base = Math.max(base, 2);
     base = Math.max(floor, base);
-    // dynamic resolution only trims the EXTRA sharpness above that floor (Retina/4K/supersampling)
-    return Math.min(3, Math.max(floor, base * this.dynScale));
+    // dynamic resolution trims the extra sharpness above that floor (Retina/4K/supersampling); a
+    // struggling 1× screen may go to 85% (MSAA + bloom keep that from looking pixelated)
+    return Math.min(3, Math.max(floor * 0.85, base * this.dynScale));
   }
 
   // Dynamic resolution scaling. Measures real frame rate over ~0.7 s windows; below 55 FPS the
@@ -279,7 +281,8 @@ class App {
     // lowest scale that still keeps >= 1 pixel per screen point
     const dpr = window.devicePixelRatio || 1, scale = Number(this.settings.renderScale) || 0;
     const base = Math.max(Math.min(dpr, 1), scale > 0 ? scale * dpr : Math.min(dpr, Q.dpr));
-    const minScale = Math.min(1, Math.min(dpr, 1) / base);
+    // 1× screens may dip to 85% while struggling (MSAA + bloom hide it); hi-dpi to 1 px per point
+    const minScale = Math.min(0.85, Math.min(dpr, 1) / base);
     if (fps < 55 && this.dynScale > minScale + 0.005) { next = Math.max(minScale, this.dynScale * (fps < 40 ? 0.8 : 0.9)); p.good = 0; p.cool = 6; }
     else if (fps >= 59) { p.good++; if (p.good >= 4 && p.cool === 0 && this.dynScale < 1) { next = Math.min(1, this.dynScale * 1.06); p.good = 0; } }
     else p.good = 0;
