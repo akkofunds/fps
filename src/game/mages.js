@@ -6,7 +6,7 @@ import { SORCERER, SorcererKit } from './sorcerer.js';
 export const MAGES = {
   pyro: { ...SHOTO, Kit: ShotoKit }, // Shoto (keeps the 'pyro' id for saved settings / old lobbies)
   meteora: { ...METEORA, Kit: MeteoraKit },
-  sorcerer: { ...SORCERER, Kit: SorcererKit, admin: true }, // admin-only
+  sorcerer: { ...SORCERER, Kit: SorcererKit },
 };
 export const MAGE_LIST = [MAGES.pyro, MAGES.meteora, MAGES.sorcerer];
 export const mageOf = (id) => MAGES[id] || MAGES.pyro;

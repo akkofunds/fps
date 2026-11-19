@@ -20,16 +20,16 @@ export const SHOTO = {
     { key: 'LMB', id: 'bolt', name: 'Frost & Flame Combo', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick). Frost on the left fist, fire on the right. Every hit stuns so the next one connects, each swing lunges you onto the target, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land. Press jump again in the air to double jump.' },
     { key: 'E', id: 'freeze', name: 'Flashfreeze Heatwave', cd: 10, desc: 'Stomp: jagged ice erupts from your foot and races along the ground to the target, freezing everyone there in place. Then a fire punch rolls a massive wave of flame out over it: frozen enemies shatter in a pressure explosion for heavy bonus damage.' },
-    { key: 'C', id: 'lance', name: 'Hellfire Lance', cd: 8, desc: 'Compress white-hot flame into a narrow beam from your fingertip: a long-range sniper shot to exactly where you aim (68 damage, 98 on headshots). Scorches the ground beneath it.' },
+    { key: 'C', id: 'lance', name: 'Hellfire Lance', cd: 8, desc: 'Compress white-hot flame into a narrow beam from your fingertip: a long-range sniper shot to exactly where you aim (52 damage, 70 on headshots). Scorches the ground beneath it.' },
     { key: 'V', id: 'blitz', name: 'Cryo-Jet Blitz', cd: 11, desc: 'Freeze the ground and skate forward at blinding speed, fire jets roaring behind you, then finish with a dual-element uppercut that launches, burns and slows.' },
     { key: 'X', id: 'zero', name: 'Calamity: Absolute Zero-Burn', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Flood everything around you with a massive glacier that traps every enemy, superheat the air above them, then slam your hands together to set off a catastrophic thermobaric blast.' },
   ],
 };
 
-export const FREEZE = { range: 26, radius: 2.8, dmg: 15, root: 1.25, delay: 0.7, waveLen: 11, waveHalf: 0.6, waveDmg: 40, shatter: 24 };
-export const LANCE = { charge: 0.36, range: 120, dmg: 68, head: 1.45 };
-export const BLITZ = { speed: 21, time: 0.62, hitR: 1.7, dmg: 38 };
-export const ZERO = { radius: 26, freezeDmg: 20, root: 2.7, freezeAt: 0.7, boomAt: 2.35, dmg: 120, minDmg: 70 };
+export const FREEZE = { range: 26, radius: 2.8, dmg: 15, root: 1.25, delay: 0.7, waveLen: 11, waveHalf: 0.6, waveDmg: 30, shatter: 16 };
+export const LANCE = { charge: 0.36, range: 120, dmg: 52, head: 1.35 };
+export const BLITZ = { speed: 21, time: 0.62, hitR: 1.7, dmg: 30 };
+export const ZERO = { radius: 26, freezeDmg: 14, root: 2.2, freezeAt: 0.7, boomAt: 2.35, dmg: 96, minDmg: 50 };
 
 const COOLDOWN = { bolt: 0.31, freeze: 10, lance: 8, blitz: 11 };
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
