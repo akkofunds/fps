@@ -40,12 +40,17 @@ function orbMaterial(inner, rim, opts = {}) {
 }
 const SPHERE = new THREE.SphereGeometry(1, 32, 24);
 
-function glowSprite(color, size) {
+let GLOW_TEX = null;   // one shared radial-gradient texture (was a new canvas + GPU upload per sprite)
+function glowTex() {
+  if (GLOW_TEX) return GLOW_TEX;
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const x = c.getContext('2d'); const g = x.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(255,255,255,0.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   x.fillStyle = g; x.fillRect(0, 0, 64, 64);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  return (GLOW_TEX = new THREE.CanvasTexture(c));
+}
+function glowSprite(color, size) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   s.scale.setScalar(size);
   return s;
 }
@@ -72,6 +77,15 @@ function arc(fx, c, r, cA, cB) {
 }
 
 Object.assign(Fx.prototype, {
+  // one object per runtime material variant, so the match can compile every shader up front
+  // (otherwise the first Blue / Red / Hollow Purple stalls a frame while its shader compiles)
+  limitlessWarmup() {
+    return [
+      new THREE.Mesh(SPHERE, orbMaterial([0, 0, 0], [1, 1, 1])),
+      new THREE.Mesh(SPHERE, orbMaterial([0, 0, 0], [1, 1, 1], { additive: true })),
+      glowSprite(new THREE.Color(1, 1, 1), 1), torus(new THREE.Color(1, 1, 1), 1, 0.05), flatRing(new THREE.Color(1, 1, 1)),
+    ];
+  },
   // ---------------------------------------------------------------- LMB flick
   cursedBurst(p, dir, k = 1) {
     for (let i = 0; i < 10 * k; i++) {
@@ -159,7 +173,7 @@ Object.assign(Fx.prototype, {
       }
       if (t > life + 0.35) {
         this.scene.remove(g); for (const m of gRings) { this.scene.remove(m); m.material.dispose(); }
-        for (const m of [core, shell, ringA, ringB]) m.material.dispose(); halo.material.map.dispose(); halo.material.dispose();
+        for (const m of [core, shell, ringA, ringB]) m.material.dispose(); halo.material.dispose();
         return false;
       }
       return true;
@@ -189,7 +203,7 @@ Object.assign(Fx.prototype, {
         this.fire.emit(px, py, pz, (p.x - px) / lf, (p.y - py) / lf, (p.z - pz) / lf, lf, 0.04, 0.1, R() < 0.3 ? HOTW : RED, RED2, 0, 0);
       }
       if (t < dur && R() < 0.3) arc(this, p, 0.25, RED, HOTW);
-      if (t > dur + 0.12) { this.scene.remove(halo); this.scene.remove(core); this.scene.remove(ring); halo.material.map.dispose(); halo.material.dispose(); core.material.dispose(); ring.material.dispose(); return false; }
+      if (t > dur + 0.12) { this.scene.remove(halo); this.scene.remove(core); this.scene.remove(ring); halo.material.dispose(); core.material.dispose(); ring.material.dispose(); return false; }
       return true;
     } });
     this.light(getTip(p), 10, 6, dur, 0xff3020);
@@ -321,7 +335,7 @@ Object.assign(Fx.prototype, {
       }
       if (t >= dur) {
         for (const o of [blue, red]) { this.scene.remove(o.g); o.m.material.dispose(); o.r.material.dispose(); }
-        for (const h of [hb, hr, hp]) { this.scene.remove(h); h.material.map.dispose(); h.material.dispose(); }
+        for (const h of [hb, hr, hp]) { this.scene.remove(h); h.material.dispose(); }
         this.scene.remove(purple); purple.traverse((m) => { if (m.material) m.material.dispose(); });
         return false;
       }
@@ -375,7 +389,7 @@ Object.assign(Fx.prototype, {
           if (R() < 0.4) this.smoke.emit(pos.x + (R() - 0.5) * radius, gy + 0.2, pos.z + (R() - 0.5) * radius, (R() - 0.5) * 6, 5 + R() * 5, (R() - 0.5) * 6, 0.9, 0.16, 0.12, [0.16, 0.15, 0.14, 1], [0.2, 0.2, 0.2, 0.5], 0, -14);
         }
       }
-      if (t > life + 0.4) { this.scene.remove(g); for (const m of [core, shell, r1, r2]) m.material.dispose(); halo.material.map.dispose(); halo.material.dispose(); return false; }
+      if (t > life + 0.4) { this.scene.remove(g); for (const m of [core, shell, r1, r2]) m.material.dispose(); halo.material.dispose(); return false; }
       return true;
     } });
   },

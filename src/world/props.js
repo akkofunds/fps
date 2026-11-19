@@ -211,7 +211,7 @@ export const treeTime = { value: 0 };
 // ---------------------------------------------------------------- rocks
 function rockGeometry(seed) {
   // smooth, rounded grey boulder (reference: soft weathered stones half sunk in the grass)
-  const g = new THREE.IcosahedronGeometry(1, 3);
+  const g = new THREE.IcosahedronGeometry(1, 2); // 320 tris (detail 3 = 1280): same silhouette at game range
   const r = mulberry32(seed), p = g.attributes.position, v = new THREE.Vector3();
   const o = [r() * 10, r() * 10, r() * 10];
   for (let i = 0; i < p.count; i++) {
@@ -250,6 +250,10 @@ export function buildProps(world, quality = 'high', Q = {}) {
   LEAF_DETAIL = 1;
   const kindsFar = { oak: [oakGeometry(11), oakGeometry(23)], pine: kinds.pine, birch: kinds.birch };
   kindsFar.oak.forEach((d) => treeColors(d, 'oak'));
+  // beyond ~170 m a tree is a few pixels: 20-face blobs (smoothed normals keep them round)
+  LEAF_DETAIL = 0;
+  const kindsVeryFar = { oak: [oakGeometry(11), oakGeometry(23)], pine: kinds.pine, birch: kinds.birch };
+  kindsVeryFar.oak.forEach((d) => treeColors(d, 'oak'));
   const placements = [];
   const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 });
   const leafMat = stylize(leafMaterial(), { wrap: 0.55, translucency: 0.25, band: 0.16 });
@@ -289,12 +293,16 @@ export function buildProps(world, quality = 'high', Q = {}) {
   // camera anyway, but splitting them keeps the shadow pass from even considering them)
   for (const [kind, defs] of Object.entries(kinds)) defs.forEach((defNear, v) => {
     const all = placements.filter((p) => p.kind === kind && p.v === v);
-    // near (arena) trees: one batch; far forest: 8 angular sectors so most of it frustum-culls
-    const groups = [all.filter((p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 14)];
-    for (let k = 0; k < 8; k++) groups.push(all.filter((p) => Math.hypot(p.x, p.z) >= PLAY_RADIUS + 14 && Math.floor(((Math.atan2(p.z, p.x) + Math.PI) / (Math.PI * 2)) * 8) % 8 === k));
+    // near: the trees down in the basin, where you fight (full canopy detail, cast shadows); the
+    // cliff rims and the forest beyond: 8 angular sectors x 2 rings so most of it frustum-culls,
+    // coarse canopies, no shadows (they are outside the shadow camera's area anyway)
+    const inBasin = (p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 14 && groundH(p.x, p.z) < CLIFF.t1 - 1.5;
+    const groups = [all.filter(inBasin)];
+    const sector = (p) => Math.floor(((Math.atan2(p.z, p.x) + Math.PI) / (Math.PI * 2)) * 8) % 8;
+    for (let ring = 0; ring < 2; ring++) for (let k = 0; k < 8; k++) groups.push(all.filter((p) => !inBasin(p) && (Math.hypot(p.x, p.z) < 170) === (ring === 0) && sector(p) === k));
     groups.forEach((list, gi) => {
       const near = gi === 0;
-      const def = near ? defNear : kindsFar[kind][v];
+      const def = near ? defNear : gi <= 8 ? kindsFar[kind][v] : kindsVeryFar[kind][v];
       if (!list.length) return;
       const tm = new THREE.InstancedMesh(def.trunk, trunkMat, list.length);
       const lm = new THREE.InstancedMesh(def.leaves, leafMat, list.length);
@@ -337,14 +345,15 @@ export function buildProps(world, quality = 'high', Q = {}) {
     const d = riverDist(x, z); if (d < 4.5 || d > 7.5) continue;
     addRock(x, z, R(0.35, 0.8), false); i++;
   }
-  rockDefs.forEach((g, k) => {
-    const list = rocks[k];
+  rockDefs.forEach((g, k) => [true, false].forEach((nearSet) => {
+    const list = rocks[k].filter((p) => (Math.hypot(p.x, p.z) < PLAY_RADIUS) === nearSet);
     if (!list.length) return;
     const im = new THREE.InstancedMesh(g, rockMat, list.length);
     list.forEach((p, i) => { q.setFromAxisAngle(up, p.rot); m4.compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(p.s, p.s * p.sy, p.s)); im.setMatrixAt(i, m4); });
-    im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere();
+    // only the boulders where you fight cast shadows (rubble at the cliffs / river stones don't)
+    im.castShadow = nearSet; im.receiveShadow = true; im.computeBoundingSphere();
     root.add(im);
-  });
+  }));
 
   root.userData.avoid = avoidFn;
   // anchors for undergrowth: trees inside/near the arena, rocks and ruin walls

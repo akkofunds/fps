@@ -121,6 +121,11 @@ export class MageInstance {
   }
 
   setVisible(v) { this.root.visible = v; }
+  setOutlines(on) {
+    if (this._outl === on) return;
+    this._outl = on;
+    for (const m of this.meshes) if (m.userData.outline) m.visible = on;
+  }
 
   // swap to the simplified meshes (far away, or always on Low)
   setLod(on) {
