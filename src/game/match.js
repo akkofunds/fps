@@ -1094,9 +1094,11 @@ export class Match {
     this._updateAreas(dt);
     this._checkSigils();
     // altar brazier
-    this.fx.brazier(this.map.altar);
-    const dA = this.camera.position.distanceTo(this.map.altar);
-    Audio.loop('brazier', 'fireLoop', 0.35 / (1 + (dA / 10) ** 2));
+    if (this.map.altar) {
+      this.fx.brazier(this.map.altar);
+      const dA = this.camera.position.distanceTo(this.map.altar);
+      Audio.loop('brazier', 'fireLoop', 0.35 / (1 + (dA / 10) ** 2));
+    }
 
     // ---- camera + aim
     let focus = me.alive ? me.pos : (me.hideAt ? me.pos : this.body.pos);

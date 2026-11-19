@@ -1,7 +1,7 @@
 import { BAL } from './balance.js';
 import * as THREE from 'three';
 import { MOVE } from '../config.js';
-import { PLAY_RADIUS } from '../world/terrain.js';
+import { PLAY_RADIUS, groundH, groundNormal } from '../world/terrain.js';
 
 // Character physics shared by the local player and practice dummies.
 // Ground accel/friction, air control, jump buffering + coyote time, Q dash (2 charges, air dash
@@ -34,6 +34,7 @@ export class Body {
 }
 
 const wish = new THREE.Vector3();
+const _gn = new THREE.Vector3();
 const hv = new THREE.Vector3();
 
 // cmd: { fwd, side, jump (held), jumpPressed, dashPressed, aim }
@@ -130,8 +131,17 @@ export function stepMovement(b, cmd, dt, world, ev) {
   }
 
   // ---- integrate + collide
-  const prevY = b.pos.y;
+  const prevY = b.pos.y, px = b.pos.x, pz = b.pos.z;
   b.pos.addScaledVector(b.vel, dt);
+  // cliffs: terrain rising more than a step above your feet is a wall (slide along it)
+  // (rock faces climb ≥ 3 m per metre, the steepest grassy bank ~1.2)
+  const g0 = groundH(px, pz);
+  const wall = (x, z) => { const g = groundH(x, z); return g > Math.min(prevY, b.pos.y) - 1.0 && (g - g0) / (Math.hypot(x - px, z - pz) + 1e-4) > 1.6; };
+  if (wall(b.pos.x, b.pos.z)) {
+    if (!wall(b.pos.x, pz)) { b.pos.z = pz; b.vel.z = 0; }
+    else if (!wall(px, b.pos.z)) { b.pos.x = px; b.vel.x = 0; }
+    else { b.pos.x = px; b.pos.z = pz; b.vel.x = b.vel.z = 0; }
+  }
   world.resolve(b.pos, MOVE.radius, MOVE.height, MOVE.stepUp);
   // soft arena boundary
   const r = Math.hypot(b.pos.x, b.pos.z), lim = PLAY_RADIUS + 12;
@@ -143,7 +153,8 @@ export function stepMovement(b, cmd, dt, world, ev) {
       const impact = b.vel.y;
       const hs = Math.hypot(b.vel.x, b.vel.z);
       ev('land', { vy: impact });
-      if ((b.airDashed || impact < -15) && hs > 2.5 && b.dashT <= 0) {
+      // (landing rolls removed: you land on your feet and keep running)
+      if (MOVE.landRoll && (b.airDashed || impact < -15) && hs > 2.5 && b.dashT <= 0) {
         b.rollT = MOVE.rollTime;
         b.rollDir.set(b.vel.x, 0, b.vel.z).normalize();
         const lx = b.rollDir.x * cy - b.rollDir.z * sy, lz = b.rollDir.x * sy + b.rollDir.z * cy;
@@ -157,6 +168,15 @@ export function stepMovement(b, cmd, dt, world, ev) {
   } else {
     if (wasGrounded) b.fallStart = b.pos.y;
     b.grounded = false;
+  }
+  // rock faces can't be stood on: you slide off them (no jumping up a cliff one hop at a time)
+  if (b.grounded && b.dashT <= 0 && b.lungeT <= 0 && Math.abs(b.pos.y - groundH(b.pos.x, b.pos.z)) < 0.05) {
+    const n = groundNormal(b.pos.x, b.pos.z, _gn);
+    if (n.y < 0.55) {
+      b.grounded = false; b.coyote = 0; b.jumpBuf = 0;
+      const h = Math.hypot(n.x, n.z) || 1;
+      b.vel.x = n.x / h * 7; b.vel.z = n.z / h * 7; b.vel.y = Math.min(b.vel.y, -2);
+    }
   }
   // footsteps
   if (b.grounded && b.rollT <= 0) {

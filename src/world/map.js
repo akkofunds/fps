@@ -14,10 +14,10 @@ import { STYLE } from './stylize.js';
 // no shadows/post, short grass draw distance, coarse terrain, fewer lights/particles/outlines.
 // Every preset also gets dynamic resolution (see main.js) to hold 60 FPS.
 export const QUALITY = {
-  low: { grass: 7000, blades: 3, grassDist: 24, pushers: 2, flowers: 400, bushes: 24, scenery: 60, leafDetail: 1, terrainStep: 2, shadow: 1024, shadows: false, bloom: false, msaa: 0, lights: 1, particles: 2000, outlines: false, dpr: 1.5, minScale: 0.55 },
-  medium: { grass: 20000, blades: 3, grassDist: 34, pushers: 4, flowers: 1100, bushes: 70, scenery: 130, leafDetail: 1, terrainStep: 1, shadow: 1024, shadows: true, bloom: true, msaa: 4, lights: 2, particles: 4000, outlines: true, dpr: 1.5, minScale: 0.6 },
-  high: { grass: 38000, blades: 4, grassDist: 46, pushers: 6, flowers: 2000, bushes: 150, scenery: 230, leafDetail: 2, terrainStep: 1, shadow: 2048, shadows: true, bloom: true, msaa: 4, lights: 3, particles: 6000, outlines: true, dpr: 2, minScale: 0.55 },
-  ultra: { grass: 70000, blades: 4, grassDist: 64, pushers: 8, flowers: 3500, bushes: 260, scenery: 360, leafDetail: 2, terrainStep: 1, shadow: 4096, shadows: true, bloom: true, msaa: 4, ao: true, lights: 4, particles: 8000, outlines: true, dpr: 2, minScale: 0.5 },
+  low: { grass: 12000, blades: 3, grassDist: 24, pushers: 2, flowers: 700, bushes: 24, scenery: 60, leafDetail: 1, terrainStep: 2, shadow: 1024, shadows: false, bloom: false, msaa: 0, lights: 1, particles: 2000, outlines: false, dpr: 1.5, minScale: 0.55 },
+  medium: { grass: 36000, blades: 3, grassDist: 34, pushers: 4, flowers: 2000, bushes: 70, scenery: 130, leafDetail: 1, terrainStep: 1, shadow: 1024, shadows: true, bloom: true, msaa: 4, lights: 2, particles: 4000, outlines: true, dpr: 1.5, minScale: 0.6 },
+  high: { grass: 66000, blades: 4, grassDist: 46, pushers: 6, flowers: 3600, bushes: 150, scenery: 230, leafDetail: 2, terrainStep: 1, shadow: 2048, shadows: true, bloom: true, msaa: 4, lights: 3, particles: 6000, outlines: true, dpr: 2, minScale: 0.55 },
+  ultra: { grass: 120000, blades: 4, grassDist: 64, pushers: 8, flowers: 6000, bushes: 260, scenery: 360, leafDetail: 2, terrainStep: 1, shadow: 4096, shadows: true, bloom: true, msaa: 4, ao: true, lights: 4, particles: 8000, outlines: true, dpr: 2, minScale: 0.5 },
 };
 
 export class GameMap {
@@ -25,7 +25,7 @@ export class GameMap {
     const Q = QUALITY[quality] || QUALITY.high;
     this.quality = quality;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(SKY.fog, 70, 650);
+    this.scene.fog = new THREE.Fog(SKY.fog, 140, 1100);
     this.world = new CollisionWorld();
     this.world.water = { x: LAKE.x, z: LAKE.z, r: LAKE.r + 8, y: WATER_Y };
     this.waterY = WATER_Y;
@@ -50,7 +50,8 @@ export class GameMap {
     this.Q = Q;
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
-    this.village = buildVillage(); s.add(this.village);
+    // the valley has no buildings: just the waterfall (landmarks.js builds only the falls now)
+    this.village = null;
     this.landmarks = buildLandmarks(this.world, Q); s.add(this.landmarks);
     this.props = buildProps(this.world, quality, Q); s.add(this.props);
     const avoid = this.props.userData.avoid;
@@ -73,7 +74,7 @@ export class GameMap {
         const r = 38 + (tries % 4) * 4 + (i % 2) * 6;
         const x = Math.cos(a + tries * 0.05) * r, z = Math.sin(a + tries * 0.05) * r;
         const y = groundH(x, z);
-        if (this.world.inWater(x, z) > 0) continue;
+        if (this.world.inWater(x, z) > 0 || y > 3) continue;
         const p = { x, y: this.world.groundAt(x, z, y + 3), z };
         const test = new THREE.Vector3(x, p.y, z);
         if (this.world.resolve(test, 0.6, 1.8)) continue;
@@ -120,7 +121,7 @@ export class GameMap {
   update(dt, camera, focus, pushers) {
     this.time += dt;
     WIND.uTime.value = this.time; treeTime.value = this.time; STYLE.uTime.value = this.time;
-    this.village.userData.update(this.time);
+    if (this.village) this.village.userData.update(this.time);
     this.landmarks.userData.update(this.time);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);

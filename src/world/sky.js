@@ -5,10 +5,10 @@ import { stylize } from './stylize.js';
 // Golden-hour sky dome: gradient, sun disc + glow, two layers of drifting fBm clouds.
 // Also the distant mountain ring that sits in the haze behind the meadow hills.
 
-export const SUN_DIR = new THREE.Vector3(-0.55, 0.42, -0.72).normalize();
+export const SUN_DIR = new THREE.Vector3(0.42, 0.68, 0.6).normalize(); // high, from the south-east: the falls cliff is sunlit (reference)
 export const SKY = {
-  zenith: new THREE.Color(0.06, 0.24, 0.74),
-  horizon: new THREE.Color(0.62, 0.76, 0.92),
+  zenith: new THREE.Color(0.02, 0.15, 0.72),
+  horizon: new THREE.Color(0.36, 0.62, 0.96),
   fog: new THREE.Color(0.66, 0.77, 0.9),
   sun: new THREE.Color(1.0, 0.86, 0.66),
 };
@@ -31,22 +31,22 @@ export function buildSky() {
       void main(){
         vec3 d = normalize(vDir);
         float h = max(d.y, 0.0);
-        vec3 col = mix(uHor, uZen, pow(h, 0.55));
+        vec3 col = mix(uHor, uZen, pow(h, 0.35));
         // warm band toward the sun near the horizon
         float sd = max(dot(d, uSun), 0.0);
         col = mix(col, vec3(1.0, 0.78, 0.55), pow(sd, 6.0) * (1.0 - h) * 0.55);
         // puffy cumulus on a flat layer, self-shadowed: compare density with a sample shifted
         // toward the sun → bright sunlit rims, soft blue-grey bellies
         if (d.y > 0.0) {
-          vec2 uv = d.xz / (d.y + 0.14) * 1.15;
+          vec2 uv = d.xz / (d.y + 0.14) * 0.8;
           float t = uTime * 0.01;
           vec2 o1 = vec2(t, t * 0.35), o2 = vec2(-t * 1.6, t * 0.2);
-          float dens = fbm(uv * 0.75 + o1) * 0.8 + fbm(uv * 2.4 + o2) * 0.32;
+          float dens = fbm(uv * 0.55 + o1) * 0.85 + (1.0 - abs(fbm(uv * 2.2 + o2) * 2.0 - 1.0)) * 0.2;
           vec2 sh = normalize(uSun.xz + vec2(1e-4)) * 0.09;
-          float dens2 = fbm((uv + sh) * 0.75 + o1) * 0.8 + fbm((uv + sh) * 2.4 + o2) * 0.32;
-          float cov = smoothstep(0.5, 0.7, dens);
-          float lit = clamp(0.55 + (dens - dens2) * 5.0, 0.0, 1.0);
-          vec3 cc = mix(vec3(0.58, 0.64, 0.78), vec3(1.08, 1.05, 1.0), lit);
+          float dens2 = fbm((uv + sh) * 0.55 + o1) * 0.85 + (1.0 - abs(fbm((uv + sh) * 2.2 + o2) * 2.0 - 1.0)) * 0.2;
+          float cov = smoothstep(0.6, 0.7, dens);   // distinct cumulus with blue sky between
+          float lit = clamp(0.62 + (dens - dens2) * 7.0, 0.0, 1.0);
+          vec3 cc = mix(vec3(0.62, 0.7, 0.86), vec3(1.15, 1.13, 1.1), lit);
           cc = mix(cc, vec3(1.15, 0.98, 0.82), pow(sd, 5.0) * 0.6);
           cc += vec3(0.25, 0.22, 0.18) * smoothstep(0.62, 0.52, dens) * cov; // bright thin edges
           col = mix(col, cc, cov * smoothstep(0.0, 0.16, d.y) * 0.96);
@@ -67,38 +67,32 @@ export function buildSky() {
   return mesh;
 }
 
-// The Alps: a ring of jagged, snow-capped peaks far beyond the meadow. Ridged multifractal noise
-// around the ring, rock on steep faces, snow above the treeline, dark conifer forest at the
-// foot, and aerial perspective baked into the vertex colors (they are unfogged so they stay crisp).
+// The far landscape (reference: Genshin meadow): layered stone cliffs and plateaus with grassy
+// tops, stepping up into soft, rounded blue ridges lost in the haze. Terraced fBm (flat treads,
+// near-vertical risers), grey stone with strata on the risers, green on the treads, and strong aerial
+// perspective baked into the vertex colors (they are unfogged so they stay crisp).
 export function buildMountains() {
   const n = makeNoise(2024);
   const g = new THREE.BufferGeometry();
-  const seg = 360, rings = 40;
-  const R0 = 620, R1 = 1450;
+  const seg = 420, rings = 56;
+  const R0 = 560, R1 = 1450;
   const pos = [], idx = [];
-  const ridged = (x, z) => {
-    let s = 0, a = 1, f = 1, w = 1;
-    for (let o = 0; o < 5; o++) {
-      let v = 1 - Math.min(1, Math.abs(n.n2(x * f, z * f))); // n2 is ~[-1, 1]
-      v = v * v * w; w = Math.min(1, v * 1.6);
-      s += v * a; a *= 0.5; f *= 2.05;
-    }
-    return s;
-  };
+  // flat treads with a steep riser over the last `sharp` of each step
+  const terrace = (v, step, sharp) => { const f = v / step, i = Math.floor(f), t = f - i; const k = Math.min(1, Math.max(0, (t - (1 - sharp)) / sharp)); return (i + k * k * (3 - 2 * k)) * step; };
   for (let r = 0; r <= rings; r++) {
     const u = r / rings;
-    const rad = R0 + (R1 - R0) * u;
+    const rad = R0 + (R1 - R0) * Math.pow(u, 1.3);
     for (let i = 0; i <= seg; i++) {
       const a = (i / seg) * Math.PI * 2;
       const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
-      // two ranges: a nearer, lower one and the high snowy wall behind it
-      const near = Math.exp(-((u - 0.22) ** 2) / 0.012), far = Math.exp(-((u - 0.62) ** 2) / 0.05);
-      const nx = x / 620, nz = z / 620;
-      const rf = ridged(nx * 0.9 - 3, nz * 0.9 + 11);
-      let h = near * (30 + 85 * ridged(nx + 7, nz)) + far * (110 + 300 * Math.pow(rf / 1.6, 1.4) * 1.6);
-      h *= 0.75 + 0.25 * (n.n2(Math.cos(a) * 3 + 1, Math.sin(a) * 3) * 0.5 + 0.5);
+      const nx = x / 520, nz = z / 520;
+      // near: terraced cliff plateaus; far: smooth rolling ridges
+      const plate = 70 * (0.55 + 0.6 * n.fbm(nx * 1.4 + 3, nz * 1.4 - 2, 4)) * Math.min(1, u / 0.12);
+      const near = terrace(plate, 24, 0.22) * Math.exp(-((u - 0.2) ** 2) / 0.05);
+      const far = (90 + 170 * Math.max(0, n.fbm(nx * 0.7 - 9, nz * 0.7 + 4, 4) + 0.15)) * Math.exp(-((u - 0.68) ** 2) / 0.08);
+      let h = Math.max(near, far * 0.85 + near * 0.3);
       if (r === 0 || r === rings) h = -30;
-      pos.push(x, h - 25, z);
+      pos.push(x, h - 20, z);
     }
   }
   for (let r = 0; r < rings; r++) for (let i = 0; i < seg; i++) {
@@ -107,23 +101,26 @@ export function buildMountains() {
   }
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setIndex(idx); g.computeVertexNormals();
-  // colors from height, slope and distance
   const P = g.attributes.position, Nn = g.attributes.normal, col = new Float32Array(P.count * 3), c = new THREE.Color();
-  const forest = new THREE.Color(0.1, 0.22, 0.12), meadow = new THREE.Color(0.28, 0.42, 0.16), rock = new THREE.Color(0.42, 0.42, 0.44), snow = new THREE.Color(0.97, 0.98, 1.0), haze = new THREE.Color(0.66, 0.76, 0.9);
+  const top = new THREE.Color(0.3, 0.55, 0.16), topDark = new THREE.Color(0.14, 0.34, 0.12);
+  const stone = new THREE.Color(0.58, 0.6, 0.6), stoneDark = new THREE.Color(0.36, 0.38, 0.4);
+  const haze = new THREE.Color(0.55, 0.7, 0.88), hazeFar = new THREE.Color(0.66, 0.78, 0.93);
   for (let i = 0; i < P.count; i++) {
     const x = P.getX(i), y = P.getY(i), z = P.getZ(i), ny = Nn.getY(i);
     const d = Math.hypot(x, z);
-    const jit = n.n2(x / 40, z / 40) * 30;
-    c.copy(forest).lerp(meadow, Math.min(1, Math.max(0, (y - 30 + jit) / 50)) * 0.7);
-    c.lerp(rock, Math.min(1, Math.max(0, (y - 85 + jit) / 45)));
-    c.lerp(rock, Math.min(1, Math.max(0, (0.6 - ny) / 0.3)) * 0.55);
-    const snowK = Math.min(1, Math.max(0, (y - 135 + jit * 1.5) / 30)) * Math.min(1, Math.max(0, (ny - 0.1) / 0.2));
-    c.lerp(snow, snowK);
-    c.lerp(haze, Math.min(0.6, Math.max(0, (d - 600) / 1400)));
+    c.copy(topDark).lerp(top, 0.5 + 0.5 * n.n2(x / 35, z / 35));
+    // risers: grey stone with horizontal strata
+    const strata = 0.82 + 0.18 * Math.sin(y * 0.9 + n.n2(x / 20, z / 20) * 3);
+    const rockK = Math.min(1, Math.max(0, (0.75 - ny) / 0.25));
+    c.lerp(new THREE.Color().copy(stoneDark).lerp(stone, strata), rockK);
+    // aerial perspective
+    const hz = Math.min(1, Math.max(0, (d - 520) / 900));
+    c.lerp(haze, Math.min(0.85, hz * 1.1));
+    c.lerp(hazeFar, Math.max(0, (d - 1100) / 400) * 0.6);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const m = new THREE.Mesh(g, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }), { wrap: 0.45, band: 0.08, clouds: true }));
+  const m = new THREE.Mesh(g, stylize(new THREE.MeshLambertMaterial({ vertexColors: true, fog: false }), { wrap: 0.5, band: 0.06, clouds: true }));
   m.name = 'mountains';
   m.frustumCulled = false;
   return m;
