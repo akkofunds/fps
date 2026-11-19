@@ -36,6 +36,9 @@ HEIGHT = 1.78           # top of the hair, metres (Shoto: 1.76)
 HIP_RATIO = None        # None = keep the model's own leg length (a ratio here would shorten the legs)
 LEG_R = {'thigh': 0.0478, 'shin': 0.0376}  # median leg radius at mid-segment / height (Shoto)
 FOOT_THICK = 1.0
+# the torso / jacket is a touch broad for those legs: narrow it so the jacket hem lines up with the
+# pants (x = side to side, z = front to back); arms move in with the shoulders, the head is untouched
+TORSO_X, TORSO_Z = 0.92, 0.95
 
 # game bone ← source joint(s)
 BONES = [  # (name, parent)
@@ -335,7 +338,36 @@ def main():
             newQ[:, 1] = np.maximum(newQ[:, 1], np.minimum(Q[:, 1], 0.0))
             P[sel] = newQ
         return P
-    for p in parts: p['P'] = vmap(thicken(p['P'], p['W']))
+    # ---- slimmer torso: everything above the jacket hem (found from the clothes' hip weights) is
+    # narrowed about the body's centre line, fading out just below the hem (the visible pants stay
+    # exactly as they are) and up the neck; arm vertices shift rigidly with their shoulder
+    clothes = next(p for p in parts if p['mat'] == 'Clothes')
+    hemY = float(clothes['P'][clothes['W'][:, IDX['hips']] > 0.08, 1].min())
+    neckY, chestY = jpos['neck'][1], jpos['chest'][1]
+    cz = jpos['spine'][2]
+    ARM = [IDX[n + sd] for n in ('upperArm_', 'foreArm_', 'hand_') for sd in ('L', 'R')] + [AIDX[f] for f in FING]
+    xs = {1: jpos['upper_arm.L'][0], -1: jpos['upper_arm.R'][0]}
+    def slim(P, W):
+        P = P.copy()
+        y = P[:, 1]
+        k = np.clip((y - (hemY - 0.08)) / 0.1, 0, 1) * (1 - np.clip((y - (neckY - 0.06)) / 0.12, 0, 1))
+        fx, fz = 1 - (1 - TORSO_X) * k, 1 - (1 - TORSO_Z) * k
+        armW = np.clip(W[:, ARM].sum(1), 0, 1)
+        side = np.where(P[:, 0] >= 0, 1, -1)
+        shift = (TORSO_X - 1) * np.where(side > 0, xs[1], xs[-1])
+        P[:, 0] = P[:, 0] + (1 - armW) * (fx - 1) * P[:, 0] + armW * shift
+        P[:, 2] = P[:, 2] + (1 - armW) * (fz - 1) * (P[:, 2] - cz)
+        return P
+    for p in parts: p['P'] = vmap(slim(thicken(p['P'], p['W']), p['W']))
+    # arm joints (and fingers) move in with the shoulders
+    def slim_joint(name_src, v):
+        if any(k in name_src for k in ('upper_arm', 'lower_arm', 'hand', 'thumb', 'index', 'middle', 'ring', 'little')):
+            v = v.copy(); v[0] += (TORSO_X - 1) * (xs[1] if name_src.endswith('.L') else xs[-1])
+        elif 'shoulder' in name_src:
+            v = v.copy(); v[0] *= TORSO_X
+        return v
+    for n, src in POS_FROM.items(): G[IDX[n]] = slim_joint(src, G[IDX[n]])
+    for tn in ('hand_L', 'hand_R'): tails[tn] = slim_joint('hand.' + tn[-1], tails[tn])
 
     # name the outline shells after the part they wrap (same vertex count, node order)
     named = [p for p in parts if not p['outline']]
@@ -437,7 +469,7 @@ def main():
     # finger bones at their curled positions (identity rest rotation, like every game bone)
     fpos = {}
     for src, f in FSRC.items():
-        fpos[f] = T(vmap(np.array([(DELTA[kidx[src]] @ np.r_[jpos[src], 1])[:3]])))[0]
+        fpos[f] = T(vmap(np.array([slim_joint(src, (DELTA[kidx[src]] @ np.r_[jpos[src], 1])[:3])])))[0]
     allpos = {n: jm[IDX[n]] for n in NAMES}; allpos.update(fpos)
     for f in FING:
         par = fparent(f)
