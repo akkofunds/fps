@@ -136,9 +136,16 @@ export function groundNormal(x, z, out) {
 
 // ---------------------------------------------------------------- mesh
 function axisCoords(step = HF_STEP) {
+  // full resolution across the basin and its cliffs (|x| <= 112); double spacing out to HF_HALF
+  // (distant rims and plateaus, where 1 m detail is sub-pixel), then growing steps to the horizon
   const xs = [];
-  for (let i = -HF_HALF; i <= HF_HALF; i += step) xs.push(i);
-  let s = step, x = HF_HALF;
+  const fine = Math.min(HF_HALF, 112);
+  for (let i = -fine; i <= fine; i += step) xs.push(i);
+  const coarse = [];
+  for (let x = fine + step * 2; x <= HF_HALF + 1e-6; x += step * 2) coarse.push(x);
+  if (coarse[coarse.length - 1] !== HF_HALF) coarse.push(HF_HALF);
+  xs.unshift(...coarse.map((v) => -v).reverse()); xs.push(...coarse);
+  let s = step * 2, x = HF_HALF;
   const outer = [];
   while (x < 900) { s *= 1.16; x += s; outer.push(x); }
   return [...outer.map((v) => -v).reverse(), ...xs, ...outer];

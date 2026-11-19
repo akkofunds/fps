@@ -136,6 +136,12 @@ export class UnlimitedVoid {
     this.saved = null;
   }
 
+  // objects using every void material (incl. the instanced silhouette variant) for shader warm-up
+  warmupObjects() {
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    return [new THREE.Mesh(box, this.floorMat), new THREE.Mesh(box, this.silhouette), new THREE.InstancedMesh(box, this.silhouette, 1)];
+  }
+
   start(c, radius, yaw) {
     this.c.copy(c); this.radius = radius; this.U.uR.value = radius;
     this.U.uC.value.copy(c);

@@ -105,6 +105,7 @@ export class Match {
     for (const md of MAGE_LIST) this.templates[md.id] = await loadMageModel(md.model);
     this.voidFx = new UnlimitedVoid(this.map);
     this.domain = null;
+    this._warmupShaders();
     const list = [...this.players];
     if (this.cfg.mode === 'practice') {
       for (let i = 0; i < 5; i++) list.push({ n: 100 + i, id: `dummy-${i}`, name: 'Training Dummy', tag: '', dummy: true });
@@ -1103,6 +1104,21 @@ export class Match {
   }
 
   // ---------------------------------------------------------------- per frame
+  // compile the shaders of effects that are created at runtime, while the match is loading, so the
+  // first cast of each never hitches; the objects stay (hidden) so their programs stay cached
+  _warmupShaders() {
+    const g = new THREE.Group(); g.name = 'shaderWarmup';
+    const objs = [...(this.fx.limitlessWarmup ? this.fx.limitlessWarmup() : []), ...this.voidFx.warmupObjects()];
+    for (const o of objs) { o.position.set(0, -500, 0); o.frustumCulled = false; g.add(o); }
+    this.scene.add(g);
+    const V = this.voidFx, vis = [V.sky.visible, V.dome.visible];
+    V.sky.visible = V.dome.visible = true;
+    try { this.app.renderer.compile(this.scene, this.camera); } catch (e) { console.warn('shader warm-up', e); }
+    V.sky.visible = vis[0]; V.dome.visible = vis[1];
+    g.visible = false;
+    this._warm = g;
+  }
+
   // ---------------------------------------------------------------- Domain Expansion: Unlimited Void
   _openDomain(e, d, local) {
     const c = new THREE.Vector3().fromArray(d.c);
@@ -1302,7 +1318,8 @@ export class Match {
       let every = d2 < 625 ? 1 : d2 < 2500 ? 2 : 4;
       if (!e.isLocal && !this._inView(e.pos)) every = 6;
       e.animTick = ((e.animTick || 0) + 1) % every;
-      if (Q.outlines) v.setLod(d2 > 900); // beyond 30 m use the low-poly meshes
+      // character LOD: low-poly meshes from 14 m, no ink outline beyond 32 m (a 1-2 px line there)
+      if (Q.outlines) { v.setLod(d2 > 196); v.setOutlines(d2 < 1024); }
       if (e.animTick === 0) {
         v.anim.update(e.animAcc, { pos: e.pos, yaw: e.yaw, pitch: e.pitch, vel: e.vel, grounded: e.grounded });
         v.root.rotation.y = e.yaw + v.anim.yawOffset;

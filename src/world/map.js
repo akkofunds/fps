@@ -16,7 +16,7 @@ import { STYLE } from './stylize.js';
 export const QUALITY = {
   low: { grass: 12000, blades: 3, grassDist: 24, pushers: 2, flowers: 700, bushes: 24, scenery: 60, leafDetail: 1, terrainStep: 2, shadow: 1024, shadows: false, bloom: false, msaa: 0, lights: 1, particles: 2000, outlines: false, dpr: 1.5, minScale: 0.55 },
   medium: { grass: 36000, blades: 3, grassDist: 34, pushers: 4, flowers: 2000, bushes: 70, scenery: 130, leafDetail: 1, terrainStep: 1, shadow: 1024, shadows: true, bloom: true, msaa: 4, lights: 2, particles: 4000, outlines: true, dpr: 1.5, minScale: 0.6 },
-  high: { grass: 66000, blades: 4, grassDist: 46, pushers: 6, flowers: 3600, bushes: 150, scenery: 230, leafDetail: 2, terrainStep: 1, shadow: 2048, shadows: true, bloom: true, msaa: 4, lights: 3, particles: 6000, outlines: true, dpr: 2, minScale: 0.55 },
+  high: { grass: 66000, blades: 4, grassDist: 46, pushers: 6, flowers: 3600, bushes: 150, scenery: 230, leafDetail: 2, terrainStep: 1, shadow: 2048, shadows: true, bloom: true, msaa: 4, lights: 3, particles: 6000, outlines: true, dpr: 1.5, minScale: 0.55 },
   ultra: { grass: 120000, blades: 4, grassDist: 64, pushers: 8, flowers: 6000, bushes: 260, scenery: 360, leafDetail: 2, terrainStep: 1, shadow: 4096, shadows: true, bloom: true, msaa: 4, ao: true, lights: 4, particles: 8000, outlines: true, dpr: 2, minScale: 0.5 },
 };
 
@@ -59,7 +59,7 @@ export class GameMap {
     this.flowers = buildFlowers(Q.flowers, avoid, Q); s.add(this.flowers);
     this.bushes = buildBushes(Q.bushes, this.props.userData.anchors, avoid); s.add(this.bushes);
     // undergrowth chunks culled by distance every frame
-    this.lod = [...this.grass.children.map((m) => [m, Q.grassDist]), ...this.flowers.children.map((m) => [m, Q.grassDist * 0.9]), ...this.bushes.children.map((m) => [m, Q.grassDist * 2.2])];
+    this.lod = [...this.grass.children.map((m) => [m, Q.grassDist]), ...this.flowers.children.map((m) => [m, Q.grassDist * 0.9]), ...this.bushes.children.map((m) => [m, Q.grassDist * 1.6])];
     this.lodScale = 1; // lowered by the runtime auto-tuner
     this.altar = this.props.userData.altar;
     this.spawns = this._spawns();
