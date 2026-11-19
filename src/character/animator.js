@@ -71,10 +71,10 @@ const CASTS = {
 //  brawler (Pyro): heavier, forward-driving run, big fist pump, more bounce
 //  caster (Meteora): lighter, graceful, hip sway, the staff arm stays steady, softer landings
 const STYLES = {
-  brawler: { swing: 1.15, swingR: 1, lean: 1.2, bounce: 1.15, sway: 0.5, settle: 0.5, roll: 1, twist: 1, elbow: 1, kick: 1, stride: 1, fidget: 'fidgetP' },
-  // Meteora: anime run — leans into it, hips roll and sway, chest twists against the hips, the free
-  // arm pumps with a bent elbow, the staff arm rides the stride, a springy bounce
-  caster: { swing: 1.2, swingR: 0.55, lean: 1.55, bounce: 1.3, sway: 1.7, settle: 0.4, roll: 2.0, twist: 1.8, elbow: 1.3, kick: 1.55, stride: 1.14, fidget: 'fidgetM' },
+  // grounded, athletic: real running mechanics, a touch more arm drive
+  brawler: { swing: 1.05, swingR: 1, lean: 1, bounce: 1, sway: 0.8, settle: 0.55, roll: 1, twist: 1, elbow: 1, kick: 1, stride: 1, fidget: 'fidgetP' },
+  // lighter on her feet; the staff arm stays steadier, the free arm swings naturally
+  caster: { swing: 0.95, swingR: 0.45, lean: 0.9, bounce: 0.95, sway: 1, settle: 0.5, roll: 1.1, twist: 0.95, elbow: 0.95, kick: 0.95, stride: 1, fidget: 'fidgetM' },
 };
 
 // critically/under-damped spring (semi-implicit Euler); s = { x, v }
@@ -285,8 +285,8 @@ export class Animator {
     // ---- landing recovery: arms flare and the torso folds with the dip spring
     if (this.dip < -0.01 && !this.dead) {
       const d = Math.min(1, -this.dip / 0.2);
-      addE(out, B.upperArmL, -8 * d, 0, 14 * d); addE(out, B.upperArmR, -8 * d, 0, -14 * d);
-      addE(out, B.spine, 10 * d, 0, 0); addE(out, B.head, -8 * d, 0, 0);
+      addE(out, B.upperArmL, -6 * d, 0, 8 * d); addE(out, B.upperArmR, -6 * d, 0, -8 * d);
+      addE(out, B.spine, 8 * d, 0, 0); addE(out, B.head, -6 * d, 0, 0);
     }
     // ---- 5. additive
     const aimW = this.dead ? 0 : 1 - (this.action && this.action.def.aimOff ? this.action.w : 0);
@@ -331,12 +331,24 @@ export class Animator {
     const speed = this.speed;
     const wRun = sstep(0.15, 1.8, speed);
     this.wRunNow = wRun;
-    const wFast = sstep(2.5, RUN_SPEED, speed);
-    // gait timing: cadence rises with speed; stance length is exactly speed*stanceTime
-    // cadence: longer, bounding strides for styles with stride > 1 (fewer, bigger steps at the same speed)
-    const T = lerp(0.95, 0.56 * (this.style.stride || 1), clamp((speed - 1) / (RUN_SPEED - 1), 0, 1)) * (this.lobby ? 1.05 : 1);
-    let beta = clamp(0.62 / Math.max(speed * T, 1e-3), 0.17, 0.66);
+    // walk → run transition (people switch gaits around 2-2.5 m/s)
+    const wFast = sstep(1.7, 3.3, speed);
+    const st = this.style;
+    // ---- gait timing from real locomotion data, scaled to the character's leg length:
+    //  walk ~1.05 s per stride, foot down 60% of it (double support);
+    //  run ~170-185 steps/min, foot down ~25-30% of the stride (a flight phase between steps),
+    //  ground contact length ~1.3 leg lengths
+    const Lg = rig.legLen || 0.85, legK = Math.sqrt(Lg / 0.88);
+    const Twalk = lerp(1.18, 0.98, clamp((speed - 0.4) / 1.6, 0, 1));
+    const Trun = lerp(0.76, 0.64, clamp((speed - 3) / (RUN_SPEED - 3), 0, 1));
+    // sideways: shorter, quicker steps (a side-shuffle rhythm) instead of the legs splitting wide
+    const sideK = this.speed > 0.3 ? Math.abs(this.vx) / this.speed : 0;
+    const T = lerp(Twalk, Trun, wFast) * legK * (st.stride || 1) * (this.lobby ? 1.05 : 1) * (1 - 0.28 * sideK * wFast);
+    const betaRun = clamp(1.3 * Lg * (1 - 0.35 * sideK) / Math.max(speed * T, 1e-3), 0.24, 0.45);
+    const beta = lerp(0.6, betaRun, wFast);
     const Ls = speed * beta * T;
+    // running: the foot lands a little ahead of the hips and pushes off well behind them
+    const touch = lerp(0.5, 0.42, wFast);
     if (speed > 0.05) this.phase = (this.phase + dt / T) % 1;
     else this.phase = damp(this.phase, Math.round(this.phase * 2) / 2, 3, dt) % 1;
 
@@ -349,15 +361,16 @@ export class Animator {
     this.hipYaw = damp(this.hipYaw, hy * wRun, 10, dt);
     const fwdness = mz; // 1 forward, -1 back
 
-    // hips
-    const st = this.style;
-    const bob = st.bounce * 0.034 * wFast * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) + 0.012 * (wRun - wFast) * Math.cos(4 * Math.PI * (this.phase - 0.15));
+    // ---- pelvis height: walking vaults over a straight leg (highest at mid-stance); running
+    // compresses into the stance leg (lowest at mid-stance, highest in flight), ~6 cm travel
+    const walkBob = 0.016 * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) * (1 - wFast);
+    const runBob = -0.03 * legK * st.bounce * Math.cos(4 * Math.PI * (this.phase - beta * 0.5)) * wFast;
     const idleSink = this.lobby ? -0.012 : -0.03;
-    P.hip[1] = lerp(idleSink, -0.012, wFast) - bob + this.dip;
-    // pelvis sways over the stance foot (more for the graceful caster)
-    P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * 0.016 * st.sway * wRun * (1 - 0.4 * wFast);
+    P.hip[1] = lerp(idleSink, lerp(-0.008, -0.03, wFast), wRun) + (walkBob + runBob) * wRun + this.dip;
+    // the pelvis shifts over the stance foot: clearly when walking, barely when running
+    P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * lerp(0.022, 0.008, wFast) * st.sway * wRun;
     const hipYawD = this.hipYaw * R2D;
-    // feet paths
+    // ---- feet paths
     const feet = {};
     const ankleH = rig.ankleHeight;
     for (const side of ['L', 'R']) {
@@ -365,19 +378,25 @@ export class Animator {
       const u = (this.phase + (side === 'R' ? 0.5 : 0)) % 1;
       let along, lift = 0, pitch = 0;
       if (u < beta) {
+        // stance: heel strike (walk) / midfoot (run) → flat → heel rises → toe-off
         const k2 = u / beta;
-        along = Ls * (0.5 - k2);
-        if (k2 > 0.65) { pitch = 34 * sstep(0.65, 1, k2) * wRun; lift = 0.09 * Math.sin(pitch / 57.3); }
-        pitch -= 10 * (1 - sstep(0, 0.3, k2)) * wRun;
+        along = Ls * (touch - k2);
+        const hr = sstep(lerp(0.55, 0.45, wFast), 1, k2);
+        pitch = lerp(28, 32, wFast) * hr * wRun;
+        lift = 0.1 * Math.sin(pitch / R2D);
+        pitch -= lerp(14, 5, wFast) * (1 - sstep(0, 0.25, k2)) * wRun;
       } else {
+        // swing: the heel folds up behind (to about knee height at a fast run, a few cm when
+        // walking), the knee drives through, the shin unfolds and the foot reaches for the ground
         const k2 = (u - beta) / (1 - beta);
         const e = k2 * k2 * k2 * (k2 * (k2 * 6 - 15) + 10);
         const kick = st.kick || 1;
-        // early swing: the heel kicks up behind toward the seat; late swing: the knee drives forward
-        along = Ls * (-0.5 + e) - 0.34 * wFast * kick * Math.sin(Math.PI * k2) * (1 - k2) * 1.6 + 0.08 * wFast * (kick - 1) * Math.sin(Math.PI * Math.min(1, k2 * 1.25));
-        const H = lerp(0.08, 0.38 * kick, wFast);
-        lift = H * Math.pow(Math.sin(Math.PI * Math.pow(k2, 0.7)), 1.2) * wRun;
-        pitch = lerp(40, -14, sstep(0, 0.9, k2)) * wRun;
+        along = Ls * (touch - 1 + e) - 0.12 * Lg * wFast * kick * Math.sin(Math.PI * k2) * (1 - k2) * 2;
+        const H = lerp(0.075, 0.34 * Lg / 0.88 * kick, wFast);
+        const pk = lerp(0.5, 0.36, wFast); // the run's heel peak comes early in the swing
+        const kk = k2 < pk ? 0.5 * k2 / pk : 0.5 + 0.5 * (k2 - pk) / (1 - pk);
+        lift = H * Math.pow(Math.sin(Math.PI * kk), 1.15) * wRun;
+        pitch = lerp(lerp(30, 45, wFast), lerp(-14, -4, wFast), sstep(0.1, 0.92, k2)) * wRun;
       }
       feet[side] = { along, lift, pitch, sg };
       const inStance = u < beta;
@@ -387,8 +406,9 @@ export class Animator {
     }
     // pelvis/torso motion from the stride
     const stride = Ls > 1e-3 ? (feet.L.along - feet.R.along) / Ls : 0; // + when L foot ahead
-    const leanT = ((4 + 13 * wFast) * Math.max(0, fwdness) - 5 * wFast * Math.max(0, -fwdness)) * st.lean + clamp(this.az * 1.4, -8, 10) * wRun;
-    const bankT = clamp(-this.ax * 1.2 + this.yawRate * 3.2 * Math.min(1, speed / 3), -14, 14) * wRun;
+    // trunk: ~3° forward walking, ~7° running, a little more while accelerating
+    const leanT = ((2.5 + 4.5 * wFast) * Math.max(0, fwdness) - 3 * wFast * Math.max(0, -fwdness)) * st.lean + clamp(this.az * 0.9, -5, 7) * wRun;
+    const bankT = clamp(-this.ax * 0.8 + this.yawRate * 2.2 * Math.min(1, speed / 3), -8, 8) * wRun;
     // under-damped springs: the torso overshoots a little when you stop or cut, then settles
     const lean = spring(this.sLean, leanT, 70, st.settle, dt);
     const bank = spring(this.sBank, bankT, 60, st.settle + 0.1, dt);
@@ -397,32 +417,41 @@ export class Animator {
     const shift = Math.sin(this.t * 0.55) * idleW;
     P.hip[0] += shift * 0.018;
     const glance = (Math.sin(this.t * 0.31) * 0.6 + Math.sin(this.t * 0.83 + 1) * 0.4) * idleW;
-    setE(P, B.hips, lean * 0.25, hipYawD - 9 * st.twist * stride * wRun * Math.max(0.3, Math.abs(fwdness)), bank * 0.5 + 3 * st.roll * Math.sin(2 * Math.PI * this.phase) * wRun - shift * 2.5);
-    const counter = -hipYawD + 9 * st.twist * stride * wRun;
+    // pelvis: turns with the swinging leg (±4° walk, ±6° run) and drops on the swing side (±4°)
+    const pelvisYaw = lerp(4, 6, wFast) * st.twist * stride * wRun * Math.max(0.3, Math.abs(fwdness));
+    const pelvisRoll = lerp(4, 4.5, wFast) * st.roll * Math.sin(2 * Math.PI * this.phase) * wRun;
+    setE(P, B.hips, lean * 0.25, hipYawD - pelvisYaw, bank * 0.5 + pelvisRoll - shift * 2.5);
+    // the thorax counter-rotates against the pelvis so the shoulders swing opposite the hips
+    const counter = -hipYawD + pelvisYaw;
+    const thorax = lerp(3, 7, wFast) * st.twist * stride * wRun;
     // the spine undoes the pelvis roll so the shoulders stay level
-    setE(P, B.spine, 2 + lean * 0.45, counter * 0.35, bank * 0.3 - 2.4 * (st.roll - 1) * Math.sin(2 * Math.PI * this.phase) * wRun);
-    setE(P, B.chest, lean * 0.25, counter * 0.35 + 6 * st.twist * stride * wRun, 0);
-    setE(P, B.upperChest, 0, counter * 0.2, 0);
-    setE(P, B.neck, -lean * 0.4, counter * 0.06, -bank * 0.3);
-    setE(P, B.head, -lean * 0.35, counter * 0.04 + glance * 14 + this.yawRate * 4 * wRun, -bank * 0.4 + shift * 2);
+    setE(P, B.spine, 1.5 + lean * 0.45, counter * 0.4, bank * 0.3 - pelvisRoll * 0.85);
+    setE(P, B.chest, lean * 0.25, counter * 0.35 + thorax, -pelvisRoll * 0.15);
+    setE(P, B.upperChest, 0, counter * 0.2 + thorax * 0.3, 0);
+    // the head stays level and looking ahead (the eyes lead the run)
+    setE(P, B.neck, -lean * 0.45, -thorax * 0.4 + counter * 0.05, -bank * 0.3);
+    setE(P, B.head, -lean * 0.4, -thorax * 0.45 + counter * 0.04 + glance * 14 + this.yawRate * 3 * wRun, -bank * 0.4 + shift * 2);
 
-    // arms: counter-swing to the legs; idle = guard stance with the casting hand raised
-    const swingAmt = (44 + 22 * wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness)) * st.swing;
+    // arms: counter-swing to the legs from the shoulder. Walking: relaxed, ±12°, elbows soft.
+    // Running: elbows ~80-90°, ±30° swing, carried a touch forward, hands crossing toward the
+    // midline on the forward swing
+    const swingAmt = lerp(24, 62, wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness)) * st.swing;
     // arms drag behind sharp turns / strafes, then swing back through
-    const drag = spring(this.sArm, this.yawRate * 5 - this.ax * 0.8, 45, 0.38, dt);
+    const drag = spring(this.sArm, this.yawRate * 3.5 - this.ax * 0.6, 45, 0.45, dt);
     for (const side of ['L', 'R']) {
       const sg = side === 'L' ? 1 : -1;
-      const sw = (Ls > 1e-3 ? feet[side].along / (Ls * 0.5) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
+      const sw = (Ls > 1e-3 ? (feet[side].along - Ls * (touch - 0.5)) / (Ls * 0.5) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
+      const fwdSw = Math.max(0, -sw) / Math.max(1, swingAmt * 0.5); // 0..1 while the arm swings forward
       // relaxed ready stance: arms close to the body, casting hand slightly raised
       const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
-      const ax = lerp(idleX, 2 + sw, wRun);
-      const az = lerp(idleZ, 7 + 3 * wFast, wRun);
-      const ex = lerp(idleE, (-(46 + 34 * wFast) - Math.max(0, -sw) * 0.45) * st.elbow, wRun);
-      setS(P, B['upperArm' + side], sg, ax, 0, az);
-      setS(P, B['foreArm' + side], sg, ex, -10 * wRun, 0);
+      const ax = lerp(idleX, sw - 5 * wFast, wRun);
+      const az = lerp(idleZ, lerp(6, 9, wFast) - 4 * fwdSw * wFast, wRun);
+      const ex = lerp(idleE, lerp(-24, -(78 + 10 * sstep(4.5, RUN_SPEED, speed)), wFast) * st.elbow - Math.max(0, -sw) * lerp(0.2, 0.35, wFast), wRun);
+      setS(P, B['upperArm' + side], sg, ax, 8 * fwdSw * wFast, az);
+      setS(P, B['foreArm' + side], sg, ex, -lerp(6, 14, wFast) * wRun, 0);
       setS(P, B['hand' + side], sg, -6, 0, -4);
-      setS(P, B['shoulder' + side], sg, 0, 0, -2 * wFast);
-      addE(P, B['upperArm' + side], 0, 0, -clamp(drag, -16, 16));
+      setS(P, B['shoulder' + side], sg, -2 * sw / Math.max(1, swingAmt * 0.5) * wFast, 0, -1.5 * wFast);
+      addE(P, B['upperArm' + side], 0, 0, -clamp(drag, -10, 10));
     }
 
     // ---- feet targets (root space)
@@ -459,18 +488,6 @@ export class Animator {
     legIK(P, rig, 'L', tgt.L, tgt.L.pitch, tgt.L.yaw);
     legIK(P, rig, 'R', tgt.R, tgt.R.pitch, tgt.R.yaw);
     for (const side of ['L', 'R']) setE(P, B['toes' + side], -Math.max(0, tgt[side].pitch) * 0.7, 0, 0);
-    // ---- sprint: the hand-keyed cycle takes over at full speed running forward (phase-locked to
-    // the gait, so footsteps / dust stay in sync); strafing, backpedalling and slopes keep the IK gait
-    const sw = wFast * Math.pow(Math.max(0, fwdness), 2) * (s.grounded ? 1 : 0);
-    if (sw > 0.001) {
-      const C = this._spr || (this._spr = new Pose());
-      sampleClip(C_SPRINT, this.phase * C_SPRINT.duration, C);
-      const hy = P.hip[1], hx = P.hip[0], hz = P.hip[2];
-      blend(P, P, C, sw);
-      // keep the gait's height (dip, slopes), add the sprint bob; the cycle's lean/twist replace ours
-      P.hip[0] = hx; P.hip[1] = hy + C.hip[1] * sw + 0.012 * sw; P.hip[2] = hz;
-      addE(P, B.hips, 0, hipYawD * sw, bank * 0.5 * sw);
-    }
   }
 
   _plantedFeet(dt, s, wRun, gait) {
@@ -540,22 +557,24 @@ export class Animator {
     const vy = s.vel.y;
     const fall = sstep(2.5, -5, vy);
     const fwd = clamp(this.vz / RUN_SPEED, -1, 1);
-    const R = { spine: [10, 0, 0], chest: [4, 0, 0], upperLegL: [-84, 0, 6], lowerLegL: [104, 0, 0], footL: [28, 0, 0], upperLegR: [20, 0, 6], lowerLegR: [62, 0, 0], footR: [36, 0, 0], upperArmL: [-62, 0, 26], foreArmL: [-52, 0, 0], upperArmR: [32, 0, 34], foreArmR: [-42, 0, 0], head: [-10, 0, 0] };
-    const F = { spine: [-3, 0, 0], chest: [-2, 0, 0], upperLegL: [-30, 0, 10], lowerLegL: [40, 0, 0], footL: [6, 0, 0], upperLegR: [-4, 0, 10], lowerLegR: [24, 0, 0], footR: [14, 0, 0], upperArmL: [-24, 0, 66], foreArmL: [-32, 0, 0], upperArmR: [-16, 0, 70], foreArmR: [-30, 0, 0], head: [5, 0, 0] };
+    // rising: a natural take-off — the lead knee drives up, the push-off leg trails, the arms
+    // swing in opposition (no tuck, no flail)
+    const R = { spine: [4, 0, 0], chest: [2, 0, 0], upperLegL: [-52, 0, 4], lowerLegL: [72, 0, 0], footL: [16, 0, 0], upperLegR: [10, 0, 4], lowerLegR: [50, 0, 0], footR: [30, 0, 0], upperArmL: [16, 0, 12], foreArmL: [-40, 0, 0], upperArmR: [-34, 0, 14], foreArmR: [-70, 0, 0], head: [-4, 0, 0] };
+    // falling: both legs reach down for the landing with soft knees, the arms open a little for balance
+    const F = { spine: [3, 0, 0], chest: [1, 0, 0], upperLegL: [-24, 0, 5], lowerLegL: [34, 0, 0], footL: [-4, 0, 0], upperLegR: [-10, 0, 5], lowerLegR: [24, 0, 0], footR: [0, 0, 0], upperArmL: [-12, 0, 30], foreArmL: [-30, 0, 0], upperArmR: [-10, 0, 32], foreArmR: [-34, 0, 0], head: [3, 0, 0] };
     for (const key of Object.keys(R)) {
       const a = R[key], b = F[key];
       const side = /[a-z]R$/.test(key) ? -1 : 1;
       setE(P, B[key], lerp(a[0], b[0], fall), lerp(a[1], b[1], fall) * side, lerp(a[2], b[2], fall) * side);
     }
-    const flail = Math.sin(this.t * 5) * 4 * fall;
-    addE(P, B.upperArmL, flail, 0, 0); addE(P, B.upperArmR, -flail, 0, 0);
-    setE(P, B.hips, 8 * fwd, this.hipYaw * R2D * 0.5, 0);
-    P.hip[1] = 0.02;
+    setE(P, B.hips, 5 * fwd, this.hipYaw * R2D * 0.5, 0);
+    P.hip[1] = 0.01;
+    // the arms drive up with the jump, then settle
     const kk = this.jumpKick || 0;
-    if (kk > 0) { addE(P, B.upperArmL, -40 * kk, 0, 10 * kk); addE(P, B.upperArmR, -40 * kk, 0, -10 * kk); addE(P, B.spine, -6 * kk, 0, 0); }
-    // tuck at the apex (|vy| small) for a floatier read
+    if (kk > 0) { addE(P, B.upperArmL, -22 * kk, 0, 6 * kk); addE(P, B.upperArmR, -22 * kk, 0, -6 * kk); addE(P, B.spine, -3 * kk, 0, 0); }
+    // a slight gather of the legs at the top of the arc
     const apex = Math.max(0, 1 - Math.abs(vy) / 3);
-    addE(P, B.upperLegL, -16 * apex, 0, 0); addE(P, B.lowerLegL, 22 * apex, 0, 0); addE(P, B.upperLegR, -14 * apex, 0, 0); addE(P, B.lowerLegR, 26 * apex, 0, 0); addE(P, B.spine, 6 * apex, 0, 0);
+    addE(P, B.upperLegL, -8 * apex, 0, 0); addE(P, B.lowerLegL, 12 * apex, 0, 0); addE(P, B.upperLegR, -8 * apex, 0, 0); addE(P, B.lowerLegR, 14 * apex, 0, 0);
   }
 
   // canonical forward kinematics of the whole pose (root space): rotations + joint positions
