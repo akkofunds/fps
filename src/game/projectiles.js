@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RED } from './sorcerer.js';
 
 // Simulated fire projectiles. Every client simulates every projectile for visuals; only the
 // owner's client turns collisions into damage reports (shooter-side hit detection, host validates).
@@ -32,6 +33,8 @@ export const PROJ = {
   bolt: { speed: 58, grav: 0, radius: 0.07, life: 1.3, dmg: 18, head: 1.5 },
   orb: { speed: 33, grav: 7, radius: 0.38, life: 3, dmg: 20, head: 1 },
   spark: { speed: 46, grav: 0, radius: 0.08, life: 1.6, dmg: 20, head: 1.5 },
+  flick: { speed: 72, grav: 0, radius: 0.07, life: 1.1, dmg: 16, head: 1.5 },
+  red: { speed: 52, grav: 0, radius: 0.22, life: 1.1, dmg: 46, head: 1.2 },
   sparkBig: { speed: 40, grav: 0, radius: 0.16, life: 1.7, dmg: 26, head: 1.3 },
   ember: { speed: 50, grav: 2, radius: 0.1, life: 0.62, dmg: 9, head: 1 },
   shard: { speed: 62, grav: 0, radius: 0.07, life: 1.2, dmg: 16, head: 1.5 },
@@ -94,7 +97,7 @@ export class Projectiles {
       }
       p.pos.copy(end);
       if (p.age > p.def.life) {
-        if (p.kind === 'orb' || p.kind === 'spark' || p.kind === 'sparkBig' || p.kind === 'blast') this._impact(p, p.pos, null, false); else if (p.kind === 'ember') m.fx.emberHit(p.pos); else if (p.kind === 'shard') m.fx.iceHit(p.pos); else m.fx.hitSpark(p.pos);
+        if (p.kind === 'orb' || p.kind === 'spark' || p.kind === 'sparkBig' || p.kind === 'blast' || p.kind === 'red') this._impact(p, p.pos, null, false); else if (p.kind === 'ember') m.fx.emberHit(p.pos); else if (p.kind === 'shard') m.fx.iceHit(p.pos); else m.fx.hitSpark(p.pos);
         this.list.splice(i, 1); continue;
       }
       // trail
@@ -103,6 +106,8 @@ export class Projectiles {
       else if (p.kind === 'blast') m.fx.boltTrail(p.pos, p.vel, 2);
       else if (p.kind === 'spark') m.fx.sparkTrail(p.pos, p.vel);
       else if (p.kind === 'sparkBig') m.fx.burstTrail(p.pos, p.vel, p.age);
+      else if (p.kind === 'flick') m.fx.flickTrail(p.pos, p.vel);
+      else if (p.kind === 'red') m.fx.redTrail(p.pos, p.vel, p.age);
       else if (p.kind === 'ember') m.fx.emberTrail(p.pos, p.vel);
       else m.fx.orbTrail(p.pos, p.vel, p.age);
     }
@@ -129,6 +134,19 @@ export class Projectiles {
       m.fx.emberHit(pos);
       if (target) m.sound('boltHit', pos, 0.5, 20);
       if (p.local && target && m.kit.onEmberHit) m.kit.onEmberHit(target, pos.clone());
+    } else if (p.kind === 'flick') {
+      m.fx.flickHit(pos);
+      m.sound('flickHit', pos, 0.6, 22);
+      if (p.local && target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'flick', { head, at: pos });
+    } else if (p.kind === 'red') {
+      // Reversal: Red — repulsion: everything around the impact is thrown outward
+      m.fx.redBlast(pos, RED.radius);
+      m.fx.shake(0.35);
+      m.sound('redBoom', pos, 1.1, 50);
+      if (p.local) {
+        if (target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'red', { head, at: pos, kb: [p.vel.x / p.vel.length() * RED.kb, 7, p.vel.z / p.vel.length() * RED.kb] });
+        m.areaDamage(pos, RED.radius, RED.splash, RED.minSplash, 'redSplash', { skip: target, kb: RED.kb, up: 7 });
+      }
     } else if (p.kind === 'sparkBig') {
       m.fx.crimsonBurst(pos, 2.8);
       m.fx.shake(0.12);

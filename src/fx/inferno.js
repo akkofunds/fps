@@ -111,17 +111,18 @@ Object.assign(Fx.prototype, {
   },
   // dash (exactly as in PR 4): an afterimage streak of flame/arcane wisps along the path (per frame while dashing)
   dashStreak(p, v, mage) {
-    const arc = mage === 'meteora';
+    const arc = mage === 'meteora', lim = mage === 'sorcerer';
     for (let i = 0; i < 5; i++) {
       const h = 0.15 + R() * 1.5;
-      this.fire.emit(p.x + (R() - 0.5) * 0.35, p.y + h, p.z + (R() - 0.5) * 0.35, -v.x * 0.12 + (R() - 0.5) * 0.4, 0.3 + R() * 0.5, -v.z * 0.12 + (R() - 0.5) * 0.4, 0.22 + R() * 0.18, 0.42 - h * 0.12, 0.04, arc ? (R() < 0.4 ? [3.2, 1.9, 0.6, 1] : [3.0, 0.5, 0.35, 1]) : (R() < 0.35 ? WHITE : FLAME), DARK, 3, 0.5);
+      const c0 = lim ? (R() < 0.4 ? [2.4, 3.0, 3.8, 1] : [0.5, 1.5, 3.6, 1]) : arc ? (R() < 0.4 ? [3.2, 1.9, 0.6, 1] : [3.0, 0.5, 0.35, 1]) : (R() < 0.35 ? WHITE : FLAME);
+      this.fire.emit(p.x + (R() - 0.5) * 0.35, p.y + h, p.z + (R() - 0.5) * 0.35, -v.x * 0.12 + (R() - 0.5) * 0.4, 0.3 + R() * 0.5, -v.z * 0.12 + (R() - 0.5) * 0.4, 0.22 + R() * 0.18, 0.42 - h * 0.12, 0.04, c0, lim ? [0.05, 0.1, 0.4, 0] : DARK, 3, 0.5);
     }
   },
   dashBurst(p, dir, mage) {
-    const arc = mage === 'meteora';
+    const arc = mage === 'meteora', lim = mage === 'sorcerer';
     for (let i = 0; i < 26; i++) {
       const a = Math.atan2(-dir.z, -dir.x) + (R() - 0.5) * 1.8, sp = 3 + R() * 6;
-      this.fire.emit(p.x, p.y + 0.3 + R() * 1.2, p.z, Math.cos(a) * sp, R() * 2, Math.sin(a) * sp, 0.2 + R() * 0.2, 0.35, 0.04, arc ? [3.0, 0.5, 0.35, 1] : HOT, DARK, 4, 0);
+      this.fire.emit(p.x, p.y + 0.3 + R() * 1.2, p.z, Math.cos(a) * sp, R() * 2, Math.sin(a) * sp, 0.2 + R() * 0.2, 0.35, 0.04, lim ? [0.6, 1.6, 3.8, 1] : arc ? [3.0, 0.5, 0.35, 1] : HOT, lim ? [0.05, 0.1, 0.4, 0] : DARK, 4, 0);
     }
     this.ring(p, 1.6, 0.22, arc ? new THREE.Color(3, 0.6, 0.4) : new THREE.Color(4, 1.8, 0.5));
     for (let i = 0; i < 6; i++) this.smoke.emit(p.x, p.y + 0.1, p.z, (R() - 0.5) * 2 - dir.x * 2, 0.4, (R() - 0.5) * 2 - dir.z * 2, 0.6, 0.3, 1.0, [0.55, 0.5, 0.42, 0.3], [0.6, 0.56, 0.48, 0], 3, 0.2);
