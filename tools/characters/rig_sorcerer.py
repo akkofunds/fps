@@ -30,6 +30,8 @@ from strip_glb import write_glb  # noqa: E402
 SRC = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, '..', '..', 'public', 'models', 'sorcerer.glb')
 HEIGHT = 1.9  # top of the hair, metres (a tall character)
+# the source legs are very slender next to the other mages: thicken them around the bone axis
+LEG_THICK = {'thigh': 1.5, 'shin': 1.45, 'foot': 1.15}
 
 # game bone ← source joint(s)
 BONES = [  # (name, parent)
@@ -133,6 +135,39 @@ def main():
             tex = js['textures'][et['index']]['source']
         label = {'Hair': 'hair', 'Clothes': 'clothes', 'Base': 'body'}.get(mname)
         parts.append(dict(name=label if label else None, src_node=ni, mat=mname, outline=outline, P=P, N=Nn, UV=UV, I=I, W=W, tex=tex))
+    # ---- thicker legs: push every leg vertex away from the nearest point on its leg's bone chain,
+    # weighted by how much the leg drives it (so the hips / waist blend smoothly)
+    def thicken(P, W):
+        P = P.copy()
+        for side, x0 in (('L', '.L'), ('R', '.R')):
+            hip, knee, ank = jpos['upper_leg' + x0], jpos['lower_leg' + x0], jpos['foot' + x0]
+            wt = W[:, IDX['upperLeg_' + side]]; ws = W[:, IDX['lowerLeg_' + side]]; wf = W[:, IDX['foot_' + side]]
+            wl = wt + ws + wf
+            sel = wl > 1e-3
+            if not sel.any(): continue
+            Q = P[sel]
+            best = None
+            for a, b2 in ((hip, knee), (knee, ank)):
+                d = b2 - a
+                t = np.clip(((Q - a) @ d) / (d @ d), 0, 1)
+                c = a + t[:, None] * d
+                dist = np.linalg.norm(Q - c, axis=1)
+                best = (c, dist) if best is None else (np.where((dist < best[1])[:, None], c, best[0]), np.minimum(dist, best[1]))
+            c = best[0]
+            k = (wt[sel] * LEG_THICK['thigh'] + ws[sel] * LEG_THICK['shin'] + wf[sel] * LEG_THICK['foot']) / np.maximum(wl[sel], 1e-6)
+            k = 1 + (k - 1) * np.clip(wl[sel], 0, 1)
+            off = Q - c
+            off[:, 1] *= np.where(wf[sel] > 0.5, 1.0, 1.0)  # keep the soles on the ground (feet barely change)
+            newQ = c + off * k[:, None]
+            # never let an inner thigh cross the midline into the other leg
+            sg = np.sign(hip[0])
+            newQ[:, 0] = np.where(sg * newQ[:, 0] < 0.012, np.where(sg * Q[:, 0] < 0.012, Q[:, 0], sg * 0.012), newQ[:, 0])
+            # feet: don't push the soles below the floor
+            newQ[:, 1] = np.maximum(newQ[:, 1], np.minimum(Q[:, 1], 0.0))
+            P[sel] = newQ
+        return P
+    for p in parts: p['P'] = thicken(p['P'], p['W'])
+
     # name the outline shells after the part they wrap (same vertex count, node order)
     named = [p for p in parts if not p['outline']]
     for p in parts:
