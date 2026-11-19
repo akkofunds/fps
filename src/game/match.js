@@ -299,6 +299,15 @@ export class Match {
         const p = new THREE.Vector3().fromArray(d.p), i = Number(d.i) || 0;
         this.fx.punchImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1), d.s, i === 3);
         this.sound(i === 3 ? 'punchHeavy' : 'punchHit', p, i === 3 ? 1 : 0.7, 30);
+        // hit-stop on both fighters, and the victim reels (alternating sides) or is launched
+        const fin = i === 3;
+        if (e.view) e.view.anim.hitStop(fin ? 0.1 : 0.055);
+        const v = this.ents.get(d.v);
+        if (v && v.alive && v.view && v !== e) {
+          v.view.anim.play(fin ? 'launched' : 'stagger');
+          v.view.anim.hitStop(fin ? 0.12 : 0.07);
+          if (v === this.local) this.fx.shake(fin ? 0.35 : 0.12);
+        }
         break;
       }
       // ---------------- Sorcerer

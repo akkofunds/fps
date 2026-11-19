@@ -86,7 +86,7 @@ export class MeleeCombo {
         if (d > 0.4 && (dx * fwd.x + dz * fwd.z) / d < M1.cone) continue;
         const at = tmp.set(e.pos.x - fwd.x * 0.3, e.pos.y + (h.fin ? 1.0 : 1.35), e.pos.z - fwd.z * 0.3);
         m.reportHit(e, h.dmg, h.fin ? 'm1f' : 'm1', { stun: h.stun, kb: [fwd.x * h.kb, h.up, fwd.z * h.kb], at: at.clone() });
-        m.castAbility({ ab: 'm1hit', s: this.style, i: idx, p: [at.x, at.y, at.z], d: [fwd.x, fwd.z] });
+        m.castAbility({ ab: 'm1hit', s: this.style, i: idx, v: e.n, p: [at.x, at.y, at.z], d: [fwd.x, fwd.z] });
         hits++;
       }
       if (hits) {

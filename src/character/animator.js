@@ -52,7 +52,11 @@ const ACTIONS = {
   m1a: { clip: C.M1_A, in: 0.025, out: 0.12, aimOff: true },
   m1b: { clip: C.M1_B, in: 0.025, out: 0.12, aimOff: true },
   m1c: { clip: C.M1_C, in: 0.025, out: 0.12, aimOff: true },
-  m1d: { clip: C.KICK_CLIP, in: 0.03, out: 0.16, aimOff: true },
+  m1d: { clip: C.M1_D, in: 0.03, out: 0.18, aimOff: true },
+  // getting comboed: alternating staggers, and the finisher's launch
+  staggerA: { clip: C.STAGGER_A, in: 0.02, out: 0.14, aimOff: true },
+  staggerB: { clip: C.STAGGER_B, in: 0.02, out: 0.14, aimOff: true },
+  launched: { clip: C.LAUNCHED, in: 0.03, out: 0.3, aimOff: true },
   domain: { clip: C.G_DOMAIN, in: 0.08, out: 0.25 },
   doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true, staffBody: true },
 };
@@ -167,6 +171,8 @@ export class Animator {
       this.flinchSide = Math.sin(this.hitDir) >= 0 ? 1 : -1;
       return;
     }
+    if (kind === 'stagger') { this.stagAlt = !this.stagAlt; this._startAction(this.stagAlt ? 'staggerA' : 'staggerB', 0); this.castA = null; return; }
+    if (kind === 'launched') { this._startAction('launched', 0); this.castA = null; return; }
     if (kind === 'jumpStart') { this.dipV -= 0.9; this.jumpKick = 1; return; }
     if (kind === 'dash' || kind === 'roll') {
       // data.dir = local angle (rad, 0 = forward, + = toward the character's left)
@@ -198,12 +204,16 @@ export class Animator {
     this.action = { def, t: 0, w: this.action ? this.action.w : 0, yaw };
     this.yawOffsetTarget = def.turn ? yaw : 0;
   }
+  // hit-stop: on a connecting blow attacker and victim freeze for a few frames (the "crunch" of a
+  // fighting-game hit), then snap back to full speed
+  hitStop(t) { this.stopT = Math.max(this.stopT || 0, t); }
   get busy() { return !!(this.action && this.action.t < this.action.def.clip.duration); }
 
   // ---------------------------------------------------------------- per-frame
   // s: { pos: Vector3 (feet, world), yaw, pitch (rad, + up), vel: Vector3 world, grounded }
   update(dt, s) {
     dt = Math.min(dt, 0.05);
+    if (this.stopT > 0) { this.stopT -= dt; dt *= 0.05; }
     this.t += dt;
     const rig = this.rig;
     const cy = Math.cos(s.yaw), sy = Math.sin(s.yaw);

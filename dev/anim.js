@@ -50,7 +50,7 @@ function sim(inst) {
   if (['kick', 'stomp', 'adolla', 'skate', 'uppercut', 'zeroburn', 'ray', 'freeze'].includes(st)) a.play(st);
   if (['lance', 'freezeCast', 'jabR', 'jabL'].includes(st)) a.play('cast', { anim: st });
   if (['gBlue', 'gRed', 'boltL'].includes(st)) a.play('cast', { anim: st });
-  if (['purple', 'domain', 'm1a', 'm1b', 'm1c', 'm1d'].includes(st)) a.play(st);
+  if (['purple', 'domain', 'm1a', 'm1b', 'm1c', 'm1d', 'stagger', 'launched'].includes(st)) a.play(st);
   if (st === 'mbolt2') { a.play('cast', { anim: 'mBolt' }); for (let k = 0; k < 20; k++) a.update(dtt, s); a.play('cast', { anim: 'mBolt' }); }
   if (st === 'hitf') a.play('hit', { dir: 0, dmg: 30 });
   if (st === 'hitl') a.play('hit', { dir: 1.57, dmg: 30 });
