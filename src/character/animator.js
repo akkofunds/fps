@@ -47,6 +47,8 @@ const ACTIONS = {
   uppercut: { clip: C.UPPERCUT_CLIP, in: 0.04, out: 0.16 },
   zeroburn: { clip: C.ZEROBURN_CLIP, in: 0.06, out: 0.2 },
   freeze: { clip: C.FREEZE_STOMP, in: 0.05, out: 0.2 },
+  purple: { clip: C.G_PURPLE, in: 0.08, out: 0.2 },
+  domain: { clip: C.G_DOMAIN, in: 0.08, out: 0.25 },
   doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true, staffBody: true },
 };
 const CASTS = {
@@ -63,6 +65,8 @@ const CASTS = {
   freezeCast: { clip: C.FREEZE_CAST, in: 0.04, out: 0.16 },
   lance: { clip: C.LANCE_CLIP, in: 0.04, out: 0.14 },
   jabL: { clip: C.JAB_L, in: 0.02, out: 0.08 },
+  gBlue: { clip: C.G_BLUE, in: 0.04, out: 0.14 },
+  gRed: { clip: C.G_RED, in: 0.04, out: 0.16 },
   fidgetP: { clip: C.FIDGET_P, in: 0.3, out: 0.4, fidget: true },
   fidgetM: { clip: C.FIDGET_M, in: 0.3, out: 0.4, fidget: true },
 };

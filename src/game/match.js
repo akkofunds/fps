@@ -7,13 +7,16 @@ import { Fx } from '../fx/arcane.js';
 import '../fx/inferno.js';
 import '../fx/novaStage.js';
 import '../fx/frost.js';
+import '../fx/limitless.js';
+import { UnlimitedVoid } from '../world/void.js';
+import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
 import { KICK, STEP, ADOLLA, IGNITE } from './pyro.js';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
 import { Body, stepMovement } from './movement.js';
 import { ShoulderCamera } from './camera.js';
 import { Projectiles, hitCharacter } from './projectiles.js';
-import { mageOf } from './mages.js';
+import { mageOf, MAGE_LIST } from './mages.js';
 import { NOVA, STARFALL } from './meteora.js';
 import { BAL, applyBalance } from './balance.js';
 import { Rules } from './rules.js';
@@ -97,7 +100,10 @@ export class Match {
     if (!app.composer || app.noPost) this.fx.fire.mat.uniforms.uGain.value = 0.55;
     this.proj = new Projectiles(this);
     this.templates = {};
-    for (const md of [mageOf('pyro'), mageOf('meteora')]) this.templates[md.id] = await loadMageModel(md.model);
+    // every mage's model (players can drop in mid-match with any of them)
+    for (const md of MAGE_LIST) this.templates[md.id] = await loadMageModel(md.model);
+    this.voidFx = new UnlimitedVoid(this.map);
+    this.domain = null;
     const list = [...this.players];
     if (this.cfg.mode === 'practice') {
       for (let i = 0; i < 5; i++) list.push({ n: 100 + i, id: `dummy-${i}`, name: 'Training Dummy', tag: '', dummy: true });
@@ -136,7 +142,7 @@ export class Match {
     if (!g) {
       if (this.ghosts.length >= 10) return;
       const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
-      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : e.mage === 'sorcerer' ? new THREE.Color(0.6, 1.4, 3.0) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
       for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
       inst.setLod(true);
       this.scene.add(inst.root);
@@ -278,6 +284,40 @@ export class Match {
       case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
+      // ---------------- Sorcerer
+      case 'flick': this.proj.spawn(e.n, 'flick', d.o, d.d, local); if (!local) this.sound('flick', tmpV.fromArray(d.o), 0.5, 30); break;
+      case 'blue': {
+        const c = new THREE.Vector3().fromArray(d.c), from = Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : null;
+        this.sound('blueOn', c, 1, 45);
+        const ar = { kind: 'blue', c, t: -BLUE.delay, life: BLUE.life, owner: e.n, local, tick: 0 };
+        setTimeout(() => {
+          if (this.app.match !== this) return;
+          this.fx.blueOrb(c, from, BLUE.life, BLUE.pullR, () => {
+            this.sound('blueImplode', c, 1, 40);
+            if (local) this.areaDamage(c, BLUE.crushR, BLUE.implode, BLUE.implode * 0.6, 'blue', { kb: 3, up: 3 });
+          });
+        }, BLUE.delay * 1000);
+        this.areas.push(ar);
+        break;
+      }
+      case 'redCharge': this.fx.redCharge((out) => e.view.palmWorld('R', out), RED.charge); this.sound('redCharge', e.pos, 0.8, 30); break;
+      case 'red': this.proj.spawn(e.n, 'red', d.o, d.d, local); this.sound('redFire', tmpV.fromArray(d.o), 0.9, 40); break;
+      case 'purpleCharge':
+        this.fx.purpleCharge((out) => e.view.palmWorld('L', out), (out) => e.view.palmWorld('R', out), PURPLE.charge * 0.92);
+        this.sound('purpleCharge', e.pos, 1, 50);
+        break;
+      case 'purple': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3().fromArray(d.d).normalize();
+        this.fx.hollowPurple(o, dir, PURPLE.len, PURPLE.speed, PURPLE.radius);
+        this.sound('purpleFire', o, 1.3, 90);
+        this.areas.push({ kind: 'purple', o, dir, t: 0, owner: e.n, local, hit: new Set() });
+        break;
+      }
+      case 'domainCast':
+        this.sound('domainCast', e.pos, 1, 60);
+        if (e !== this.local && e.alive && Math.hypot(this.body.pos.x - e.pos.x, this.body.pos.z - e.pos.z) < VOID.radius + 6) this.app.hud.banner('DOMAIN EXPANSION', 'GET AWAY FROM HIM!', 1.2, 'kill');
+        break;
+      case 'domain': this._openDomain(e, d, local); break;
       case 'spark': {
         const big = !!d.big;
         this.proj.spawn(e.n, big ? 'sparkBig' : 'spark', d.o, d.d, local);
@@ -761,6 +801,51 @@ export class Match {
           }
         }
         if (ar.t >= ar.life) this.areas.splice(i, 1);
+      } else if (ar.kind === 'blue') {
+        // Lapse: Blue — drags everyone around it into the point, grinding those at the centre
+        if (ar.t >= 0 && ar.t < ar.life) {
+          const b = this.body, me = this.local;
+          if (me.alive && me.n !== ar.owner) {
+            const dx = ar.c.x - b.pos.x, dy = ar.c.y - (b.pos.y + 0.9), dz = ar.c.z - b.pos.z, dl = Math.hypot(dx, dy, dz);
+            if (dl < BLUE.pullR && dl > 0.3) {
+              const k = BLUE.pull * (1 - 0.55 * dl / BLUE.pullR) * dt;
+              b.vel.x += dx / dl * k; b.vel.z += dz / dl * k; b.vel.y += Math.max(0, dy / dl) * k * 0.6;
+              // in the crush zone you are held in place
+              if (dl < BLUE.crushR) { b.vel.x *= 1 - Math.min(1, 6 * dt); b.vel.z *= 1 - Math.min(1, 6 * dt); }
+            }
+          }
+          if (ar.local) {
+            ar.tick -= dt;
+            if (ar.tick <= 0) {
+              ar.tick = BLUE.tick;
+              for (const e of this.ents.values()) {
+                if (e === this.local || !e.alive) continue;
+                if (Math.hypot(e.pos.x - ar.c.x, e.pos.y + 0.9 - ar.c.y, e.pos.z - ar.c.z) < BLUE.crushR) this.reportHit(e, BLUE.tickDmg, 'blue', { at: new THREE.Vector3(e.pos.x, e.pos.y + 1.1, e.pos.z) });
+              }
+            }
+          }
+        }
+        if (ar.t >= ar.life + 0.3) this.areas.splice(i, 1);
+      } else if (ar.kind === 'purple') {
+        // Hollow Purple — everything the sphere passes through takes the hit once
+        const d = Math.min(PURPLE.len, ar.t * PURPLE.speed);
+        const cx = ar.o.x + ar.dir.x * d, cy = ar.o.y + ar.dir.y * d, cz = ar.o.z + ar.dir.z * d;
+        if (ar.local) {
+          for (const e of this.ents.values()) {
+            if (e === this.local || !e.alive || ar.hit.has(e.n)) continue;
+            if (Math.hypot(e.pos.x - cx, e.pos.y + 0.9 - cy, e.pos.z - cz) < PURPLE.radius + 0.55) {
+              ar.hit.add(e.n);
+              this.reportHit(e, PURPLE.dmg, 'purple', { kb: [ar.dir.x * 12, 6, ar.dir.z * 12], at: new THREE.Vector3(e.pos.x, e.pos.y + 1.1, e.pos.z) });
+            }
+          }
+        }
+        // the shockwave of its passing shoves the local player even when it misses
+        const me = this.local;
+        if (me.alive && me.n !== ar.owner) {
+          const b = this.body, dx = b.pos.x - cx, dz = b.pos.z - cz, dl = Math.hypot(dx, dz);
+          if (dl < PURPLE.radius * 2.6 && dl > 0.1) { const k = (1 - dl / (PURPLE.radius * 2.6)) * 30 * dt; b.vel.x += dx / dl * k; b.vel.z += dz / dl * k; }
+        }
+        if (d >= PURPLE.len) this.areas.splice(i, 1);
       } else if (ar.kind === 'crater') {
         // the Nova's crater keeps burning anyone who walks in
         ar.tick -= dt;
@@ -986,6 +1071,62 @@ export class Match {
   }
 
   // ---------------------------------------------------------------- per frame
+  // ---------------------------------------------------------------- Domain Expansion: Unlimited Void
+  _openDomain(e, d, local) {
+    const c = new THREE.Vector3().fromArray(d.c);
+    this.domain = { owner: e.n, c, r: VOID.radius, until: this.time + VOID.dur, trapped: false };
+    this.voidFx.start(c, VOID.radius, Number(d.yaw) || e.yaw || 0);
+    this.sound('domain', c, 1.4, 120);
+    this.fx.shake(0.6);
+    const me = this.local, b = this.body;
+    const inside = Math.hypot(b.pos.x - c.x, b.pos.z - c.z) < VOID.radius;
+    if (local) this.app.hud.banner('DOMAIN EXPANSION', 'UNLIMITED VOID', 2.2);
+    else if (inside && me.alive) {
+      this.domain.trapped = true;
+      this.app.hud.banner('DOMAIN EXPANSION', 'UNLIMITED VOID', 2.2, 'kill');
+    }
+    if (inside || local) this.app.hud.flash(0.8);
+    // the void floods every mind inside it: a moment of total paralysis
+    if (local) {
+      for (const t of this.ents.values()) {
+        if (t === me || !t.alive) continue;
+        if (Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < VOID.radius) this.reportHit(t, VOID.dmg, 'void', { slow: [0.05, VOID.stun], at: new THREE.Vector3(t.pos.x, t.pos.y + 1.6, t.pos.z) });
+      }
+    }
+  }
+  // is `ent` (the caster) standing in his own open domain? (cooldowns run twice as fast)
+  domainBoost(ent) {
+    const D = this.domain;
+    if (!D || ent.n !== D.owner) return false;
+    const p = ent === this.local ? this.body.pos : ent.pos;
+    return Math.hypot(p.x - D.c.x, p.z - D.c.z) < D.r;
+  }
+  // is `ent` an enemy caught inside an open domain? (deals less damage)
+  inEnemyDomain(ent) {
+    const D = this.domain;
+    if (!D || !ent || ent.n === D.owner) return false;
+    const p = ent === this.local ? this.body.pos : ent.pos;
+    return Math.hypot(p.x - D.c.x, p.z - D.c.z) < D.r;
+  }
+  _updateDomain(dt) {
+    const D = this.domain;
+    if (D) {
+      const owner = this.ents.get(D.owner);
+      if (this.time > D.until || !owner || !owner.alive || owner.left) { this.domain = null; this.voidFx.end(); }
+      else {
+        const me = this.local, b = this.body;
+        if (me.alive && me.n !== D.owner) {
+          const dx = b.pos.x - D.c.x, dz = b.pos.z - D.c.z, dl = Math.hypot(dx, dz);
+          // trapped: the barrier holds you in
+          if (D.trapped && dl > D.r - 0.8) { const k = (D.r - 0.8) / dl; b.pos.x = D.c.x + dx * k; b.pos.z = D.c.z + dz * k; const vr = (b.vel.x * dx + b.vel.z * dz) / dl; if (vr > 0) { b.vel.x -= dx / dl * vr; b.vel.z -= dz / dl * vr; } }
+          // slowed for as long as you are inside
+          if (dl < D.r && b.slowT <= 0.15) { b.slowK = VOID.enemySlow; b.slowT = 0.15; }
+        }
+      }
+    }
+    this.voidFx.update(dt, this.camera);
+  }
+
   update(dt) {
     const app = this.app, input = app.input;
     this.time += dt;
@@ -1064,6 +1205,7 @@ export class Match {
       if (e.alive) {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
         if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
+        else if (e.mage === 'sorcerer') { if (v.root.visible) this.fx.sixEyes(v.head.getWorldPosition(tmpV).add(tmpV2.set(Math.sin(e.yaw) * 0.09, 0.08, Math.cos(e.yaw) * 0.09))); }
         else {
           // Shoto: fire from the left hand, frost from the right
           if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('L', tmpV), 0.7);
@@ -1087,6 +1229,7 @@ export class Match {
     this.proj.update(dt);
     this._updateGhosts(dt);
     this._updateAreas(dt);
+    this._updateDomain(dt);
     this._checkSigils();
     // altar brazier
     if (this.map.altar) {
@@ -1181,6 +1324,7 @@ export class Match {
     for (const list of this.sigils.values()) for (const h of list) h.remove();
     applyBalance(null);
     this.fx.dispose();
+    if (this.voidFx) this.voidFx.dispose();
     this.proj.clear();
     // the map is shared with the lobby: only remove what the match added
     for (const e of this.ents.values()) {

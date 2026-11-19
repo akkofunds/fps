@@ -1,12 +1,13 @@
 import { REGEN_DELAY, REGEN_RATE, MODES } from '../config.js';
 import { BAL } from './balance.js';
+import { VOID } from './sorcerer.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { novaFrag: 30, novaShock: 32, novaBurn: 8, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 90, freeze: 20, heatwave: 70, lance: 100, uppercut: 45, zero: 25, zeroBoom: 130, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 30, sparkBig: 40, starfall: 40, sigil: 80, blink: 45, nova: 160 };
+const MAX_HIT = { novaFrag: 30, novaShock: 32, novaBurn: 8, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 90, freeze: 20, heatwave: 70, lance: 100, uppercut: 45, zero: 25, zeroBoom: 130, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 30, sparkBig: 40, starfall: 40, sigil: 80, blink: 45, nova: 160, flick: 26, blue: 24, red: 58, redSplash: 34, purple: 90, void: 12 };
 // every piece of an ultimate (blast, fragments, shockwave, burning crater, freeze) adds up to at
 // most this share of max HP per victim: ultimates hit hard but never kill from full health
-const ULT_ABS = new Set(['nova', 'novaFrag', 'novaShock', 'novaBurn', 'zero', 'zeroBoom', 'adolla', 'adollaPath', 'meteor']);
+const ULT_ABS = new Set(['nova', 'novaFrag', 'novaShock', 'novaBurn', 'zero', 'zeroBoom', 'adolla', 'adollaPath', 'meteor', 'void']);
 const ULT_CAP = 0.72, ULT_WINDOW = 14;
 
 export class Rules {
@@ -114,6 +115,8 @@ export class Rules {
     if (!cap) return;
     if (BAL.godMode && this.m.cfg.mode === 'practice' && v.isLocal) return;
     let dmg = Math.max(0, Math.round(Math.min(cap, Number(msg.dmg) || 0) * BAL.dmg));
+    // Unlimited Void: enemies trapped in the Sorcerer's domain hit 40% softer
+    if (this.m.inEnemyDomain && this.m.inEnemyDomain(from)) dmg = Math.round(dmg * VOID.enemyDmg);
     if (ULT_ABS.has(msg.ab)) {
       const key = `${from.n}>${v.n}`, u = this.ultDmg.get(key);
       const rec = u && this.now - u.t0 < ULT_WINDOW ? u : { t0: this.now, sum: 0 };

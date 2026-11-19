@@ -16,7 +16,7 @@ def read_glb(path):
 
 def accessor(js, b, i):
     a = js['accessors'][i]; bv = js['bufferViews'][a['bufferView']]
-    n = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4}[a['type']]
+    n = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}[a['type']]
     dt = {5126: np.float32, 5125: np.uint32, 5123: np.uint16, 5121: np.uint8}[a['componentType']]
     o = bv.get('byteOffset', 0) + a.get('byteOffset', 0)
     stride = bv.get('byteStride')

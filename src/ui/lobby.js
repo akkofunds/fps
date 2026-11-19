@@ -20,7 +20,7 @@ const MODE_DESC = {
 const MAGES = [
   { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },
   { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true },
-  { id: 'tide', name: 'TIDE', icon: ICONS.water },
+  { id: 'sorcerer', name: 'SORCERER', icon: ICONS.purple, open: true, admin: true }, // admin-only
   { id: 'terra', name: 'TERRA', icon: ICONS.earth },
   { id: 'volt', name: 'VOLT', icon: ICONS.storm },
   { id: 'gale', name: 'GALE', icon: ICONS.wind },
@@ -275,7 +275,7 @@ export class Lobby {
 
   selectMage(id) {
     if (!MAGE_DEFS[id] || id === this.mage) return;
-    if (!this.canUse(id)) { toast('Meteora is admin-only.'); return; }
+    if (!this.canUse(id)) { toast('That mage is admin-only.'); return; }
     if (this.queue.searching) { toast('Cancel the queue to switch mages.'); return; }
     this.mage = id;
     this.app.settings.mage = id; this.app.saveSettings();
@@ -305,7 +305,7 @@ export class Lobby {
       t.innerHTML = m.icon;
       t.appendChild(document.createTextNode(m.name));
       if (!m.open) t.appendChild(el('span', 'soon', 'SOON'));
-      else if (!usable) { t.appendChild(el('span', 'soon', 'ADMIN')); t.onclick = () => toast('Meteora is admin-only.'); }
+      else if (!usable) { t.appendChild(el('span', 'soon', 'ADMIN')); t.onclick = () => toast(`${m.name} is admin-only.`); }
       else t.onclick = () => this.selectMage(m.id);
       ro.appendChild(t);
     }

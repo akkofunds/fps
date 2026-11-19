@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadMageModel, MageInstance } from '../character/characterModel.js';
 import { Fx } from '../fx/arcane.js';
+import '../fx/limitless.js';
 import { mageOf } from '../game/mages.js';
 
 // Lobby showcase: Pyro stands on the lake shore of Sunvale at golden hour, framed so he
@@ -99,6 +100,13 @@ export class LobbyScene {
     a.update(dt, { pos: this.inst.root.position, yaw: this.yaw, pitch: 0.05, vel: new THREE.Vector3(), grounded: true });
     this.inst.root.rotation.y = this.yaw;
     if (this.mageId === 'meteora') { if (Math.random() < 0.6) this.fx.staffGlow(this.inst.staffTip(new THREE.Vector3())); }
+    else if (this.mageId === 'sorcerer') {
+      // a small Blue turning slowly over his left palm, a cold glint at the Six Eyes
+      const p = this.inst.palmWorld('L', new THREE.Vector3()).add(new THREE.Vector3(0, 0.12, 0));
+      const a = Math.random() * 6.283, r = 0.22;
+      this.fx.fire.emit(p.x + Math.cos(a) * r, p.y + (Math.random() - 0.5) * r, p.z + Math.sin(a) * r, -Math.cos(a) * 1.1, 0, -Math.sin(a) * 1.1, 0.2, 0.05, 0.1, [0.5, 1.5, 3.6, 1], [0.15, 0.55, 2.4, 0.9], 0, 0);
+      if (Math.random() < 0.5) this.fx.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.12, 0.12, 0.16, [1.6, 2.4, 3.8, 1], [0.15, 0.55, 2.4, 0.9], 0, 0);
+    }
     else {
       // Shoto: fire flickers in the left hand, frost mist curls off the right
       this.fx.palmFlame(this.inst.palmWorld('L', new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0)), 1.2);

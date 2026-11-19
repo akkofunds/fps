@@ -290,6 +290,49 @@ async function buildAll() {
 }
 
 const loops = new Map();
+// Sorcerer (Limitless): glassy, clean, cold — and very heavy where it counts
+Object.assign(SFX, {
+  flick: [0.35, (oc, o) => { click(oc, o, 0, 0.5, 5000); tone(oc, o, { dur: 0.18, f: [2600, 1400], type: 'sine', env: [[0.002, 0.35], [0.18, 0]] }); whoosh(oc, o, 0, 0.2, 2500, 8000, 0.4, 601); }, { reverb: 0.15, tau: 0.25, level: 0.55 }],
+  flickHit: [0.35, (oc, o) => { click(oc, o, 0, 0.8, 6000); tone(oc, o, { dur: 0.22, f: [3400, 2600], env: [[0.002, 0.25], [0.22, 0]] }); thump(oc, o, 0, 220, 120, 0.06, 0.4); }, { reverb: 0.2, tau: 0.3, level: 0.5 }],
+  blueOn: [2.4, (oc, o) => {
+    // space folding inward: a falling whoosh into a low, pulling hum
+    noise(oc, o, { dur: 2.2, f: [6000, 300], Q: 3, env: [[0.05, 0.7], [1.9, 0.9], [2.2, 0]], seed: 603 });
+    tone(oc, o, { dur: 2.2, f: [220, 55], type: 'sawtooth', env: [[0.08, 0.12], [1.9, 0.18], [2.2, 0]] });
+    tone(oc, o, { dur: 2.2, f: [880, 440], env: [[0.05, 0.1], [2.2, 0]] });
+    thump(oc, o, 0, 90, 40, 0.4, 0.6);
+  }, { reverb: 0.55, tau: 0.8, level: 0.75 }],
+  blueImplode: [1.4, (oc, o) => { thump(oc, o, 0, 70, 24, 0.7, 1); click(oc, o, 0, 1, 1500); noise(oc, o, { dur: 1.0, type: 'lowpass', f: [3000, 200], env: [[0.003, 0.9], [1.0, 0]], seed: 605 }); }, { reverb: 0.5, tau: 0.7, drive: 2, level: 0.9 }],
+  redCharge: [0.5, (oc, o) => { tone(oc, o, { dur: 0.42, f: [300, 1600], type: 'sawtooth', env: [[0.02, 0.1], [0.4, 0.22], [0.42, 0]] }); noise(oc, o, { dur: 0.42, f: [400, 5000], Q: 3, env: [[0.02, 0.2], [0.4, 0.6], [0.42, 0]], seed: 607 }); }, { reverb: 0.25, tau: 0.3, drive: 1.6, level: 0.65 }],
+  redFire: [0.6, (oc, o) => { click(oc, o, 0, 1, 2500); thump(oc, o, 0, 160, 60, 0.2, 0.9); whoosh(oc, o, 0, 0.45, 600, 6000, 0.9, 609); }, { reverb: 0.25, tau: 0.35, drive: 2.4, level: 0.85 }],
+  redBoom: [2.0, (oc, o) => {
+    click(oc, o, 0, 1, 1800); thump(oc, o, 0, 150, 30, 0.6, 1);
+    noise(oc, o, { dur: 1.2, type: 'lowpass', f: [8000, 1200, 160], env: [[0.002, 1], [0.12, 0.6], [1.2, 0]], seed: 611 });
+    whoosh(oc, o, 0.02, 0.8, 3000, 300, 0.7, 613); crackle(oc, o, 0.04, 1.0, 80, 0.4, 615);
+  }, { reverb: 0.45, tau: 0.7, drive: 3, level: 1 }],
+  purpleCharge: [1.5, (oc, o) => {
+    // two tones (Blue low, Red high) drifting together and locking into one
+    tone(oc, o, { dur: 1.4, f: [110, 164.8], type: 'sawtooth', env: [[0.1, 0.12], [1.2, 0.2], [1.4, 0]] });
+    tone(oc, o, { dur: 1.4, f: [440, 329.6], type: 'sawtooth', env: [[0.1, 0.1], [1.2, 0.18], [1.4, 0]] });
+    noise(oc, o, { dur: 1.4, f: [200, 3000], Q: 4, env: [[0.1, 0.2], [1.3, 0.7], [1.4, 0]], seed: 617 });
+    crackle(oc, o, 0.8, 0.6, 120, 0.4, 619);
+  }, { reverb: 0.6, tau: 0.9, drive: 1.6, level: 0.8 }],
+  purpleFire: [3.2, (oc, o) => {
+    click(oc, o, 0, 1, 1200); thump(oc, o, 0, 80, 20, 1.6, 1);
+    noise(oc, o, { dur: 2.6, f: [300, 1200, 400], Q: 0.6, env: [[0.01, 1], [2.0, 0.7], [2.6, 0]], seed: 621 });
+    noise(oc, o, { dur: 3.0, type: 'lowpass', f: [6000, 900, 120], env: [[0.004, 1], [1.2, 0.6], [3.0, 0]], seed: 623 });
+    tone(oc, o, { dur: 2.4, f: [82.4, 61.7], type: 'sawtooth', env: [[0.02, 0.3], [2.0, 0.25], [2.4, 0]] });
+    crackle(oc, o, 0, 2.6, 150, 0.6, 625);
+  }, { reverb: 0.6, tau: 1.1, drive: 3.4, level: 1 }],
+  domainCast: [1.2, (oc, o) => { [523.3, 659.3, 784, 1046.5].forEach((f, i) => tone(oc, o, { t0: i * 0.05, dur: 1.1, f: [f, f * 0.5], env: [[0.02, 0.18], [1.1, 0]] })); noise(oc, o, { dur: 1.1, f: [8000, 400], Q: 2, env: [[0.05, 0.3], [1.1, 0]], seed: 627 }); }, { reverb: 0.8, tau: 1.2, level: 0.7 }],
+  domain: [5.0, (oc, o) => {
+    // the world drops away: a sub-bass hit, a vast reverse swell, a cold shimmering chord
+    thump(oc, o, 0, 60, 18, 2.2, 1); click(oc, o, 0, 1, 900);
+    noise(oc, o, { dur: 4.5, type: 'lowpass', f: [200, 900, 120], env: [[0.02, 0.8], [3.5, 0.6], [4.5, 0]], seed: 629 });
+    [130.8, 196, 261.6, 392, 523.3, 784].forEach((f, i) => tone(oc, o, { t0: 0.1 + i * 0.08, dur: 4.4 - i * 0.2, f: [f, f * 1.003], type: i < 2 ? 'sawtooth' : 'sine', env: [[0.4, 0.14 - i * 0.012], [3.6, 0.1], [4.4 - i * 0.2, 0]] }));
+    noise(oc, o, { t0: 0.2, dur: 4.2, type: 'highpass', f: [6000, 9000], env: [[0.6, 0.15], [4.2, 0]], seed: 631 });
+  }, { reverb: 0.9, tau: 2.2, drive: 1.8, level: 1 }],
+});
+
 export const Audio = {
   init() {
     if (ctx) return;

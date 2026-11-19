@@ -730,3 +730,74 @@ export const SPRINT = compileClip([
   ...SPR_HALF.map((k) => ({ t: k.t + 0.5, hip: k.hip, b: mirror(k.b) })),
   { t: 1, hip: SPR_HALF[0].hip, b: SPR_HALF[0].b },
 ]);
+
+// ================================================================== Sorcerer (Limitless)
+// E — Lapse: Blue: the left hand reaches out, palm open toward the point where Blue appears
+export const G_BLUE = compileClip([
+  { t: 0, b: GUARD },
+  { t: 0.1, ease: 'out', b: {
+    spine: [2, -10, 0], chest: [0, -12, 0], upperChest: [0, -4, 0], neck: [0, 12, 0], head: [-2, 14, 0],
+    upperArmL: [-82, 0, 4], foreArmL: [-12, 0, 0], handL: [-34, 0, 0],
+    upperArmR: [6, 0, 14], foreArmR: [-38, 0, 0],
+  } },
+  { t: 0.34, ease: 'linear', b: {
+    spine: [2, -9, 0], chest: [0, -11, 0], upperChest: [0, -4, 0], neck: [0, 11, 0], head: [-2, 13, 0],
+    upperArmL: [-80, 0, 4], foreArmL: [-14, 0, 0], handL: [-36, 0, 0],
+    upperArmR: [6, 0, 14], foreArmR: [-38, 0, 0],
+  } },
+  { t: 0.55, ease: 'smooth', b: GUARD },
+]);
+// C — Reversal: Red: the right hand draws back while Red condenses at the fingertip, then thrusts
+export const G_RED = compileClip([
+  { t: 0, b: GUARD },
+  { t: 0.16, ease: 'out', b: {
+    spine: [0, -12, 0], chest: [-2, -16, 0], upperChest: [0, -6, 0], neck: [0, 14, 0], head: [0, 18, 0],
+    upperArmR: [-46, 0, 46], foreArmR: [-104, 0, 0], handR: [10, 0, 0],
+    upperArmL: [-30, 0, 10], foreArmL: [-80, 0, 0],
+  } },
+  { t: 0.32, ease: 'linear', b: {
+    spine: [0, -13, 0], chest: [-2, -17, 0], upperChest: [0, -6, 0], neck: [0, 15, 0], head: [0, 19, 0],
+    upperArmR: [-48, 0, 46], foreArmR: [-108, 0, 0], handR: [12, 0, 0],
+    upperArmL: [-30, 0, 10], foreArmL: [-80, 0, 0],
+  } },
+  { t: 0.4, ease: 'out', b: {
+    spine: [4, 10, 0], chest: [2, 16, 0], upperChest: [0, 8, 0], neck: [0, -14, 0], head: [0, -16, 0],
+    upperArmR: [-88, 0, -6], foreArmR: [-4, 0, 0], handR: [-6, 0, 0],
+    upperArmL: [12, 0, 14], foreArmL: [-100, 0, 0],
+  } },
+  { t: 0.56, ease: 'linear', b: {
+    spine: [4, 9, 0], chest: [2, 14, 0], upperChest: [0, 7, 0], neck: [0, -12, 0], head: [0, -14, 0],
+    upperArmR: [-86, 0, -6], foreArmR: [-6, 0, 0], handR: [-6, 0, 0],
+    upperArmL: [12, 0, 14], foreArmL: [-100, 0, 0],
+  } },
+  { t: 0.78, ease: 'smooth', b: GUARD },
+]);
+// V — Hollow Purple (after the reference animation): arms open wide — Blue in the left hand, Red in
+// the right — the hands sweep together in front of the chest to merge them, then a planted stance
+// and the right hand drives forward to release the imaginary mass
+const HP_WIDE = { L: [0.22, 0, 0.1, 0], R: [-0.22, 0, -0.1, 0] };
+const HP_LUNGE = { L: [0.21, 0, 0.32, -6], R: [-0.21, 0, -0.22, 16] };
+const HP_OPEN = { spine: [-2, 0, 0], chest: [-2, 0, 0], neck: [-4, 0, 0], head: [-6, 0, 0], upperArmL: [-24, 0, 78], foreArmL: [-26, 0, 0], handL: [-30, 0, 0], upperArmR: [-24, 0, 78], foreArmR: [-26, 0, 0], handR: [-30, 0, 0] };
+const HP_MERGE = { spine: [4, 0, 0], chest: [2, 0, 0], neck: [-2, 0, 0], head: [2, 0, 0], upperArmL: [-58, 0, -12], foreArmL: [-74, 0, 0], handL: [0, 0, 0], upperArmR: [-58, 0, -12], foreArmR: [-74, 0, 0], handR: [0, 0, 0] };
+const HP_FIRE = { hips: [6, 0, 0], spine: [6, 8, 0], chest: [3, 12, 0], neck: [-4, -10, 0], head: [-6, -12, 0], upperArmR: [-90, 0, -4], foreArmR: [-2, 0, 0], handR: [-4, 0, 0], upperArmL: [-36, 0, 16], foreArmL: [-96, 0, 0] };
+export const G_PURPLE = compileClip([
+  { t: 0, hip: [0, -0.03, 0], ik: STAND, b: GUARD },
+  { t: 0.22, ease: 'out', hip: [0, -0.06, 0], ik: HP_WIDE, b: HP_OPEN },
+  { t: 0.6, ease: 'linear', hip: [0, -0.07, 0], ik: HP_WIDE, b: { ...HP_OPEN, upperArmL: [-30, 0, 76], upperArmR: [-30, 0, 76], head: [-8, 0, 0] } },
+  { t: 0.95, ease: 'in', hip: [0, -0.08, 0], ik: HP_WIDE, b: HP_MERGE },
+  { t: 1.18, ease: 'linear', hip: [0, -0.09, 0], ik: HP_WIDE, b: { ...HP_MERGE, spine: [5, 0, 0] } },
+  { t: 1.3, ease: 'out', hip: [0, -0.15, 0.05], ik: HP_LUNGE, b: HP_FIRE },
+  { t: 1.6, ease: 'linear', hip: [0, -0.15, 0.05], ik: HP_LUNGE, b: { ...HP_FIRE, spine: [7, 7, 0] } },
+  { t: 1.95, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: GUARD },
+]);
+// X — Domain Expansion: right hand raised in front of the face (the sign), head bowed a touch,
+// perfectly still… then the domain opens
+const DE_SIGN = { spine: [-3, 0, 0], chest: [-2, 0, 0], neck: [2, 0, 0], head: [6, 0, 0], upperArmR: [-74, 0, -34], foreArmR: [-112, 0, 0], handR: [8, 0, 0], upperArmL: [-4, 0, 9], foreArmL: [-18, 0, 0] };
+export const G_DOMAIN = compileClip([
+  { t: 0, hip: [0, -0.03, 0], ik: STAND, b: GUARD },
+  { t: 0.24, ease: 'out', hip: [0, -0.03, 0], ik: STAND, b: DE_SIGN },
+  { t: 0.88, ease: 'linear', hip: [0, -0.03, 0], ik: STAND, b: { ...DE_SIGN, head: [8, 0, 0] } },
+  { t: 1.0, ease: 'out', hip: [0, -0.02, 0], ik: STAND, b: { ...DE_SIGN, head: [-4, 0, 0], spine: [-5, 0, 0] } },
+  { t: 1.35, ease: 'linear', hip: [0, -0.02, 0], ik: STAND, b: { ...DE_SIGN, head: [-4, 0, 0], spine: [-5, 0, 0] } },
+  { t: 1.7, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: GUARD },
+]);
