@@ -452,7 +452,23 @@ def main():
                 if hip0 is None: hip0 = pt.copy()
                 hips.extend(np.round((pt - hip0) * S * k_leg, 4).tolist())
         qs.extend(frame)
-    purple = {'fps': PURPLE_FPS * PURPLE_SPEED, 'bones': NAMES, 'q': qs, 'hip': hips, 'fingers': FING, 'fq': fq}
+    # a closed fist (for punching): every finger folds further about its knuckle axis, the thumb
+    # wraps across; local rotations on top of the relaxed curl
+    FIST = {'index': (62, 70, 40), 'middle': (60, 72, 42), 'ring': (58, 72, 42), 'little': (56, 70, 40), 'thumb': (18, 30, 25)}
+    fist = []
+    for f in FING:
+        base, sd = f.rsplit('_', 1); fin, kk = base.split('_')
+        hand = jpos['hand.' + sd]
+        fdir = jpos['middle_proximal.' + sd] - hand; fdir /= np.linalg.norm(fdir)
+        across = jpos['little_proximal.' + sd] - jpos['index_proximal.' + sd]; across -= fdir * (across @ fdir); across /= np.linalg.norm(across)
+        nrm = np.cross(fdir, across); palm = nrm if nrm[1] < 0 else -nrm
+        chain = [fin + '_' + k + '.' + sd for k in ('proximal', 'intermediate', 'distal')]
+        d0 = jpos[chain[1]] - jpos[chain[0]]; d0 /= np.linalg.norm(d0)
+        axis = across if fin != 'thumb' else np.cross(d0, palm)
+        sign = 1.0 if np.cross(axis, d0) @ palm > 0 else -1.0
+        ang = FIST[fin][('proximal', 'intermediate', 'distal').index(kk)]
+        fist.extend(np.round(quat_from_mat(rot_about(axis, sign * ang, np.zeros(3))[:3, :3]), 4).tolist())
+    purple = {'fps': PURPLE_FPS * PURPLE_SPEED, 'bones': NAMES, 'q': qs, 'hip': hips, 'fingers': FING, 'fq': fq, 'fist': fist}
 
     nodes = [{'name': 'Sorcerer', 'children': [], 'extras': {'purple': purple}}]
     jnode = {}

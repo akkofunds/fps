@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ, hitCharacter } from './projectiles.js';
 import { B } from '../character/rig.js';
+import { MeleeCombo } from './melee.js';
 
 // SHOTO — half-cold, half-hot. Ice from his stomping foot, fire from his fists.
 //   LMB Flame Fists · E Flashfreeze Heatwave · C Hellfire Lance · V Cryo-Jet Blitz
@@ -16,7 +17,7 @@ export const SHOTO = {
   color: '#7fd4ff',
   bio: 'Ice from his right hand, fire from his left. Shoto locks enemies in place with jagged ice, then hits them with heat so sudden the frozen air explodes.',
   abilities: [
-    { key: 'LMB', id: 'bolt', name: 'Frost & Flame Fists', desc: 'Alternating jabs: the right fist hurls an ice shard (16 damage, briefly chills), the left a fire bolt (18 damage, sets them burning). More on headshots.' },
+    { key: 'LMB', id: 'bolt', name: 'Frost & Flame Combo', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick). Frost on the left fist, fire on the right. Every hit stuns so the next one connects, each swing lunges you onto the target, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land. Press jump again in the air to double jump.' },
     { key: 'E', id: 'freeze', name: 'Flashfreeze Heatwave', cd: 10, desc: 'Stomp: jagged ice erupts from your foot and races along the ground to the target, freezing everyone there in place. Then a fire punch rolls a massive wave of flame out over it: frozen enemies shatter in a pressure explosion for heavy bonus damage.' },
     { key: 'C', id: 'lance', name: 'Hellfire Lance', cd: 8, desc: 'Compress white-hot flame into a narrow beam from your fingertip: a long-range sniper shot to exactly where you aim (68 damage, 98 on headshots). Scorches the ground beneath it.' },
@@ -47,6 +48,7 @@ export class ShotoKit {
     this.ultReadyAnnounced = false;
     this.frozen = new Map(); // enemy n → time frozen by Flashfreeze (for the shatter bonus)
     this.blitzT = 0; this.blitzDir = new THREE.Vector3(); this.blitzDone = true;
+    this.melee = new MeleeCombo(this, 'frostflame');
   }
 
   reset() { for (const k in this.cd) this.cd[k] = 0; this.pending.length = 0; this.busy = 0; this.blitzT = 0; this.blitzDone = true; this.frozen.clear(); }
@@ -77,7 +79,7 @@ export class ShotoKit {
     go('c', () => this.lance());
     go('v', () => this.blitz());
     go('x', () => this.zero());
-    if (input.state.fire || pr.fire) this.bolt();
+    this.melee.update(dt, input);
   }
 
   _ready(id) {

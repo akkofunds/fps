@@ -8,6 +8,7 @@ import '../fx/inferno.js';
 import '../fx/novaStage.js';
 import '../fx/frost.js';
 import '../fx/limitless.js';
+import '../fx/melee.js';
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
@@ -241,6 +242,7 @@ export class Match {
     if (extra.burn) msg.burn = extra.burn;
     if (extra.kb) msg.kb = extra.kb;
     if (extra.slow) msg.slow = extra.slow;
+    if (extra.stun) msg.stun = extra.stun;
     this.sendToHost(msg);
     // instant feedback (host confirms HP)
     this.app.hud.hitMarker(extra.head, dmg);
@@ -284,6 +286,20 @@ export class Match {
       case 'bolt': this.proj.spawn(e.n, 'bolt', d.o, d.d, local); if (!local) this.sound('bolt', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'orb': this.proj.spawn(e.n, 'orb', d.o, d.d, local); if (!local) this.sound('orb', tmpV.fromArray(d.o), 0.7, 35); break;
       case 'wall': this._wall(e, d, local); break;
+      // ---------------- M1 combo (Shoto / Sorcerer)
+      case 'm1': {
+        const i = Number(d.i) || 0, fin = i === 3, dir = tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        const getP = fin ? (out) => e.view.rig.bones[20].getWorldPosition(out) : (out) => e.view.palmWorld(i === 1 ? 'R' : 'L', out);
+        this.fx.punchSwing(getP, dir.clone(), d.s, i);
+        if (!local) this.sound(fin ? 'kick' : 'swing', e.pos, 0.5, 22);
+        break;
+      }
+      case 'm1hit': {
+        const p = new THREE.Vector3().fromArray(d.p), i = Number(d.i) || 0;
+        this.fx.punchImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1), d.s, i === 3);
+        this.sound(i === 3 ? 'punchHeavy' : 'punchHit', p, i === 3 ? 1 : 0.7, 30);
+        break;
+      }
       // ---------------- Sorcerer
       case 'flick': this.proj.spawn(e.n, 'flick', d.o, d.d, local); if (!local) this.sound('flick', tmpV.fromArray(d.o), 0.5, 30); break;
       case 'blue': {
@@ -996,11 +1012,20 @@ export class Match {
         break;
       }
       case 'burn': { const e = this.ents.get(msg.n); if (e) e.burnT = msg.s; break; }
+      case 'stun': {
+        // battlegrounds hitstun: the victim can't move or attack until it wears off
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        const s = Math.max(0, Math.min(1.2, Number(msg.s) || 0));
+        e.stunT = Math.max(e.stunT || 0, s);
+        if (e === this.local) { this.stunT = Math.max(this.stunT || 0, s); this.body.locked = Math.max(this.body.locked, s); this.body.dashT = 0; }
+        break;
+      }
       case 'slow': {
         const e = this.ents.get(msg.n);
         if (!e) return;
         e.slowT = msg.s;
-        if (msg.k < 0.2) { e.iceT = msg.s; this.fx.iceBlock(e.pos.clone(), msg.s); this.sound('freeze', e.pos, 0.6, 25); }
+        if (msg.k < 0.2 && !this.inEnemyDomain(e)) { e.iceT = msg.s; this.fx.iceBlock(e.pos.clone(), msg.s); this.sound('freeze', e.pos, 0.6, 25); }
         if (e === this.local) { this.body.slowT = msg.s; this.body.slowK = msg.k; hud.status && hud.status('SLOWED', msg.s); }
         break;
       }
@@ -1229,7 +1254,8 @@ export class Match {
     const me = this.local;
     if (!app.paused && !app.chat.isOpen && !this.cine) this.cam.look(dx, dy, app.settings.sens, app.settings.invertY);
     if (this.cine) (this.cine.update || this._cineUpdate).call(this, dt);
-    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup' && !this.cine;
+    if (this.stunT > 0) this.stunT -= dt;
+    const canMove = me.alive && this.controlsActive && this.phase !== 'warmup' && !this.cine && !(this.stunT > 0);
 
     // ---- local player
     if (me.alive) {
@@ -1312,6 +1338,7 @@ export class Match {
         if (e.blitzT > 0) { e.blitzT -= dt; this.fx.blitzJets(e.pos, e.vel); }
         if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
         if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
+        if (e.stunT > 0) { e.stunT -= dt; if (v.root.visible) this.fx.stunStars(v.head.getWorldPosition(tmpV).add(tmpV2.set(0, 0.32, 0)), this.time); }
         if (e.slowT > 0) { e.slowT -= dt; if (!(e.iceT > 0) && !this.inEnemyDomain(e)) this.fx.slowFx(e.pos); }
         if (e.iceT > 0) e.iceT -= dt;
       }

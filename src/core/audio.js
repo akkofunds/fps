@@ -290,6 +290,13 @@ async function buildAll() {
 }
 
 const loops = new Map();
+// M1 combo: a quick cloth-and-air swish; meaty impacts
+Object.assign(SFX, {
+  swing: [0.3, (oc, o) => { whoosh(oc, o, 0, 0.18, 700, 3200, 0.8, 641); click(oc, o, 0, 0.25, 1800); }, { level: 0.5 }],
+  punchHit: [0.45, (oc, o) => { click(oc, o, 0, 1, 2600); thump(oc, o, 0, 180, 60, 0.16, 1); noise(oc, o, { dur: 0.18, type: 'lowpass', f: [3000, 400], env: [[0.002, 0.8], [0.18, 0]], seed: 643 }); }, { reverb: 0.1, tau: 0.2, drive: 2.2, level: 0.75 }],
+  punchHeavy: [1.0, (oc, o) => { click(oc, o, 0, 1, 1600); thump(oc, o, 0, 140, 34, 0.45, 1); noise(oc, o, { dur: 0.6, type: 'lowpass', f: [6000, 900, 150], env: [[0.002, 1], [0.1, 0.5], [0.6, 0]], seed: 645 }); whoosh(oc, o, 0.02, 0.4, 2400, 400, 0.6, 647); }, { reverb: 0.3, tau: 0.45, drive: 3, level: 0.95 }],
+});
+
 // Sorcerer (Limitless): glassy, clean, cold — and very heavy where it counts
 Object.assign(SFX, {
   flick: [0.35, (oc, o) => { click(oc, o, 0, 0.5, 5000); tone(oc, o, { dur: 0.18, f: [2600, 1400], type: 'sine', env: [[0.002, 0.35], [0.18, 0]] }); whoosh(oc, o, 0, 0.2, 2500, 8000, 0.4, 601); }, { reverb: 0.15, tau: 0.25, level: 0.55 }],

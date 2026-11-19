@@ -2,6 +2,7 @@ import { BAL, ADMIN } from './balance.js';
 import * as THREE from 'three';
 import { ULT_COST } from '../config.js';
 import { PROJ } from './projectiles.js';
+import { MeleeCombo } from './melee.js';
 
 // SORCERER — the strongest. Limitless: space itself bends around him.
 //   LMB Cursed Flick · E Lapse: Blue · C Reversal: Red · V Hollow Purple
@@ -14,7 +15,7 @@ export const SORCERER = {
   color: '#8fd8ff',
   bio: 'The strongest sorcerer alive. Limitless bends space around him: Blue drags everything into a single point, Red blows it apart, and the two together become Hollow Purple, imaginary mass that erases whatever it passes through. When he opens his domain, there is nowhere left to run.',
   abilities: [
-    { key: 'LMB', id: 'flick', name: 'Cursed Flick', desc: 'Flick a dart of compressed cursed energy off your fingertips, alternating hands. 16 damage, 24 on headshots.' },
+    { key: 'LMB', id: 'flick', name: 'Cursed Strikes', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick) charged with cursed energy. Every hit stuns so the next one connects, each swing lunges you onto the target, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Blink Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Press jump again in the air to double jump.' },
     { key: 'E', id: 'blue', name: 'Lapse: Blue', cd: 9, desc: 'Create a point of attraction where you aim. Everything nearby is dragged into it and ground down, then it collapses.' },
     { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (46 + splash).' },
@@ -47,6 +48,7 @@ export class SorcererKit {
     this.pending = [];
     this.busy = 0;
     this.ultReadyAnnounced = false;
+    this.melee = new MeleeCombo(this, 'cursed');
   }
 
   reset() { for (const k in this.cd) this.cd[k] = 0; this.pending.length = 0; this.busy = 0; }
@@ -78,7 +80,7 @@ export class SorcererKit {
     go('c', () => this.red());
     go('v', () => this.purple());
     go('x', () => this.domain());
-    if (input.state.fire || pr.fire) this.flick();
+    this.melee.update(dt, input);
   }
 
   _ready(id) {

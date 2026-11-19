@@ -48,6 +48,11 @@ const ACTIONS = {
   zeroburn: { clip: C.ZEROBURN_CLIP, in: 0.06, out: 0.2 },
   freeze: { clip: C.FREEZE_STOMP, in: 0.05, out: 0.2 },
   purple: { clip: C.G_PURPLE, in: 0.08, out: 0.2 },
+  // M1 combo: jab, cross, hook, then the flying kick finisher
+  m1a: { clip: C.M1_A, in: 0.025, out: 0.12, aimOff: true },
+  m1b: { clip: C.M1_B, in: 0.025, out: 0.12, aimOff: true },
+  m1c: { clip: C.M1_C, in: 0.025, out: 0.12, aimOff: true },
+  m1d: { clip: C.KICK_CLIP, in: 0.03, out: 0.16, aimOff: true },
   domain: { clip: C.G_DOMAIN, in: 0.08, out: 0.25 },
   doubleJump: { clip: C.DOUBLE_JUMP, in: 0.03, out: 0.15, aimOff: true, airBlendOut: false, turn: true, staffBody: true },
 };
@@ -82,6 +87,7 @@ const STYLES = {
 };
 
 const BAKED = new Map(); // retargeted clips, shared by every instance of the same model
+const FIST_ACTIONS = new Set([ACTIONS.m1a, ACTIONS.m1b, ACTIONS.m1c, ACTIONS.m1d]);
 
 // critically/under-damped spring (semi-implicit Euler); s = { x, v }
 function spring(st, target, k, zeta, dt) {
@@ -129,6 +135,7 @@ export class Animator {
         rig.root.traverse((o) => { if (o.isBone) by[o.name] = o; });
         this.fingers = data.fingers.map((n) => by[n] || null);
         this.fingerQ = data.fq instanceof Float32Array ? data.fq : Float32Array.from(data.fq);
+        this.fistQ = data.fist ? Float32Array.from(data.fist) : null;
       }
     }
     // follow-through springs (torso lean/bank overshoot, arm drag in turns, head settle)
@@ -350,6 +357,18 @@ export class Animator {
   // finger bones: the source finger animation while the retargeted clip plays, else at rest (curl)
   _applyFingers() {
     const a = this.action, pd = this.baked.purple, nf = this.fingers.length;
+    // punching: close the hands into fists
+    const fw = this.fistQ && a && FIST_ACTIONS.has(a.def) ? a.w : 0;
+    if (fw > 0.001) {
+      this._fingOn = true;
+      const q = this._fqa || (this._fqa = new THREE.Quaternion()), id = this._fqi || (this._fqi = new THREE.Quaternion());
+      for (let i = 0; i < nf; i++) {
+        const bn = this.fingers[i]; if (!bn) continue;
+        const o = i * 4; q.set(this.fistQ[o], this.fistQ[o + 1], this.fistQ[o + 2], this.fistQ[o + 3]);
+        bn.quaternion.copy(id).slerp(q, fw);
+      }
+      return;
+    }
     const w = a && a.def === pd ? a.w : 0;
     if (w <= 0.001) {
       if (this._fingOn) { for (const bn of this.fingers) if (bn) bn.quaternion.identity(); this._fingOn = false; }
