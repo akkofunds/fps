@@ -590,25 +590,23 @@ export const JAB_L = jabKeys('L');
 // double jump: an air-step, no spin — gather the knees, then kick down hard off the air (one leg
 // driving straight down, the other knee up), arms swinging up to pull the body after it, then settle
 export const DOUBLE_JUMP = compileClip([
-  { t: 0, hip: [0, 0.02, 0], b: { spine: [4, 0, 0], upperLegL: [-40, 0, 6], lowerLegL: [60, 0, 0], upperLegR: [-20, 0, 6], lowerLegR: [50, 0, 0], upperArmL: [-20, 0, 30], upperArmR: [-20, 0, 30] } },
-  { t: 0.07, ease: 'out', hip: [0, 0.08, 0], b: {
-    spine: [14, 0, 0], chest: [6, 0, 0], neck: [-8, 0, 0], head: [-10, 0, 0],
-    upperLegL: [-86, 0, 8], lowerLegL: [118, 0, 0], footL: [28, 0, 0], upperLegR: [-74, 0, 8], lowerLegR: [112, 0, 0], footR: [26, 0, 0],
-    upperArmL: [24, 0, 26], foreArmL: [-40, 0, 0], upperArmR: [24, 0, 26], foreArmR: [-40, 0, 0],
+  { t: 0, hip: [0, 0.01, 0], b: { spine: [4, 0, 0], upperLegL: [-30, 0, 5], lowerLegL: [44, 0, 0], upperLegR: [-14, 0, 5], lowerLegR: [34, 0, 0], upperArmL: [-14, 0, 24], foreArmL: [-30, 0, 0], upperArmR: [-14, 0, 24], foreArmR: [-30, 0, 0] } },
+  // gather: knees come up, arms swing down and back (loading the second jump)
+  { t: 0.08, ease: 'out', hip: [0, 0.05, 0], b: {
+    spine: [10, 0, 0], chest: [4, 0, 0], neck: [-5, 0, 0], head: [-6, 0, 0],
+    upperLegL: [-62, 0, 6], lowerLegL: [88, 0, 0], footL: [20, 0, 0], upperLegR: [-50, 0, 6], lowerLegR: [82, 0, 0], footR: [20, 0, 0],
+    upperArmL: [22, 0, 14], foreArmL: [-28, 0, 0], upperArmR: [22, 0, 14], foreArmR: [-28, 0, 0],
   } },
-  { t: 0.17, ease: 'out', hip: [0, 0.1, 0], b: {
-    spine: [-8, 0, 0], chest: [-4, 0, 0], neck: [-6, 0, 0], head: [-12, 0, 0],
-    upperLegL: [-62, 0, 6], lowerLegL: [84, 0, 0], footL: [20, 0, 0], upperLegR: [16, 0, 4], lowerLegR: [12, 0, 0], footR: [38, 0, 0],
-    upperArmL: [-104, 0, 26], foreArmL: [-24, 0, 0], upperArmR: [-98, 0, 28], foreArmR: [-28, 0, 0],
+  // drive: one leg pushes down hard, the other knee stays up; arms swing forward to shoulder height
+  { t: 0.2, ease: 'out', hip: [0, 0.06, 0], b: {
+    spine: [-2, 0, 0], chest: [-2, 0, 0], neck: [-3, 0, 0], head: [-5, 0, 0],
+    upperLegL: [-54, 0, 5], lowerLegL: [76, 0, 0], footL: [16, 0, 0], upperLegR: [8, 0, 4], lowerLegR: [16, 0, 0], footR: [30, 0, 0],
+    upperArmL: [-62, 0, 16], foreArmL: [-34, 0, 0], upperArmR: [-58, 0, 16], foreArmR: [-38, 0, 0],
   } },
-  { t: 0.32, ease: 'smooth', hip: [0, 0.06, 0], b: {
-    spine: [-4, 0, 0], neck: [-4, 0, 0], head: [-8, 0, 0],
-    upperLegL: [-48, 0, 6], lowerLegL: [66, 0, 0], footL: [16, 0, 0], upperLegR: [6, 0, 6], lowerLegR: [30, 0, 0], footR: [30, 0, 0],
-    upperArmL: [-70, 0, 46], foreArmL: [-30, 0, 0], upperArmR: [-66, 0, 46], foreArmR: [-30, 0, 0],
-  } },
-  { t: 0.52, ease: 'smooth', hip: [0, 0.02, 0], b: {
-    spine: [2, 0, 0], upperLegL: [-36, 0, 8], lowerLegL: [52, 0, 0], footL: [14, 0, 0], upperLegR: [-14, 0, 8], lowerLegR: [40, 0, 0], footR: [18, 0, 0],
-    upperArmL: [-26, 0, 40], foreArmL: [-36, 0, 0], upperArmR: [-24, 0, 42], foreArmR: [-36, 0, 0],
+  // settle into the airborne pose
+  { t: 0.42, ease: 'smooth', hip: [0, 0.02, 0], b: {
+    spine: [2, 0, 0], upperLegL: [-34, 0, 6], lowerLegL: [48, 0, 0], footL: [12, 0, 0], upperLegR: [-12, 0, 6], lowerLegR: [34, 0, 0], footR: [14, 0, 0],
+    upperArmL: [-20, 0, 26], foreArmL: [-34, 0, 0], upperArmR: [-18, 0, 28], foreArmR: [-36, 0, 0],
   } },
 ]);
 
