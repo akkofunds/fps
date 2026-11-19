@@ -506,15 +506,18 @@ export class Match {
       }
       case 'nova': {
         const c = new THREE.Vector3().fromArray(d.c), o = new THREE.Vector3().fromArray(d.o);
-        this._startCine(e, c, o);
-        const novaFx = this.fx.nova(c, o, {
-          radius: NOVA.radius, channel: NOVA.channel, beam: 0.6,
-          stagger: [3.62, 3.84, 4.06, 4.28, 4.5, 4.72, 4.94],
+        // real time (no cutscene): seals stack over the target, the beam drives down, boom at 2.35 s
+        this.app.hud.novaWarning(c, NOVA.radius, local);
+        const near = () => local || this.camera.position.distanceTo(c) < NOVA.radius * 3;
+        this.fx.nova(c, o, {
+          radius: NOVA.radius, channel: NOVA.channel, beam: 0.4,
+          stagger: [0.15, 0.36, 0.57, 0.78, 0.99, 1.2, 1.41],
           onLayer: (i) => Audio.play('circleOn', 0.45 + i * 0.06, 0, 0.9 + i * 0.05),
           onFlash: () => {
             // anime impact frames, then the light
-            this.app.hud.impactFrames(() => this.app.hud.flash(1));
-            Audio.play('novaBoom', 1.4);
+            if (near()) this.app.hud.flash(0.85);
+            this.fx.shake(near() ? 0.9 : 0.3);
+            Audio.play('novaBoom', near() ? 1.4 : 0.8);
             setTimeout(() => Audio.play('rumble', 1), 400);
             this.fx.shockwave(c, NOVA.radius * 3.2, 1.6);
             this.fx.debris(c, 110, 34);
@@ -546,13 +549,12 @@ export class Match {
             }
           },
         });
-        if (this.cine && this.cine.caster === e) this.cine.novaFx = novaFx;
         // "EXPLOSION!": as she levels the staff, three seals stack open at its tip, aimed at the target
         setTimeout(() => {
           if (!e.view.root.visible) return;
           const tip = e.view.staffTip(new THREE.Vector3());
           this.fx.tipSeal(tip, new THREE.Vector3().subVectors(c, tip), 1.25, 1.1, 3);
-        }, 6250);
+        }, 1700);
         break;
       }
       case 'leap': {
@@ -581,32 +583,9 @@ export class Match {
     }
   }
 
-  // ---------------------------------------------------------------- Crimson Nova cutscene
-  // Universal: every client plays the same shots and all controls are locked until it ends.
-  //  0.0–3.6  casting stage (the world vanishes: violet cosmos, golden molten circle, light pillars)
-  //  3.6–5.4  the battlefield: seven seals stack in the sky over the target
-  //  5.4–6.6  back on stage: spinning shot, "EXPLOSION!" with a whip zoom
-  //  6.6–7.2  the beam drives down from the seals into the target
-  //  7.2      impact frames → the explosion; wide shot of the catastrophe until 10.6
-  _startCine(caster, c, o) {
-    if (this.cine) return; // a second nova during one keeps its own effect, not a second camera
-    const f = new THREE.Vector3(c.x - o.x, 0, c.z - o.z);
-    if (f.lengthSq() < 0.01) f.set(Math.sin(caster.yaw), 0, Math.cos(caster.yaw));
-    f.normalize();
-    const stage = this.fx.novaStage(o);
-    stage.group.rotation.y = Math.atan2(f.x, f.z);
-    const m = this.map;
-    const world = [m.terrain, m.grass, m.flowers, m.bushes, m.props, m.water, m.village, m.landmarks, m.sky, m.mountains].filter(Boolean);
-    this.cine = { t: 0, dur: NOVA.cine, caster, c, o: o.clone(), f, side: new THREE.Vector3(-f.z, 0, f.x), subs: 0, stage, world, stageOn: null };
-    caster.view.anim.windBoost = 1;
-    this.app.hud.cineStart();
-    Audio.play('rumble', 0.5);
-    Audio.play('novaChant', 0.9);
-    setTimeout(() => { if (this.cine) Audio.play('novaChant', 1, 0, 1.2); }, 2500);
-    setTimeout(() => { if (this.cine) Audio.play('rumble', 0.9); }, 3600);
-    setTimeout(() => { if (this.cine) Audio.play('novaWord', 1); }, 5900);
-  }
-
+  // ---------------------------------------------------------------- scripted camera (cine)
+  // Crimson Nova no longer plays a cutscene (it runs in real time); these helpers drive the
+  // camera only when something sets this.cine.
   _cineSetStage(on) {
     const C = this.cine;
     if (C.stageOn === on) return;

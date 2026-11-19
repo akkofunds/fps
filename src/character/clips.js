@@ -405,14 +405,15 @@ const WIDE = { L: [0.2, 0, 0.12, 0], R: [-0.2, 0, -0.1, 0] };
 const LUNGE = { L: [0.2, 0, 0.3, -6], R: [-0.2, 0, -0.2, 14] };
 export const M_NOVA = compileClip([
   { t: 0, hip: [0, -0.03, 0], ik: STAND, b: SGUARD },
-  { t: 0.45, ease: 'out', hip: [0, -0.06, 0], ik: WIDE, b: NOVA_HOLD },
-  { t: 2.0, ease: 'smooth', hip: [0, -0.07, 0], ik: WIDE, b: { ...NOVA_HOLD, spine: [1, 3, 0], head: [-6, 4, 0] } },
-  { t: 3.6, ease: 'smooth', hip: [0, -0.07, 0], ik: WIDE, b: { ...NOVA_HOLD, spine: [1, -3, 0], head: [-6, -4, 0] } },
-  { t: 5.0, ease: 'smooth', hip: [0, -0.06, 0], ik: WIDE, b: NOVA_HIGH },
-  { t: 5.9, ease: 'smooth', hip: [0, -0.05, 0], ik: WIDE, b: { ...NOVA_HIGH, upperArmR: [-110, 0, 6], head: [-12, 0, 0] } },
-  // …then levels it at the target and lets go
-  { t: 6.3, ease: 'in', hip: [0, -0.15, 0.05], ik: LUNGE, b: NOVA_AIM },
-  { t: 6.7, ease: 'linear', hip: [0, -0.15, 0.05], ik: LUNGE, b: { ...NOVA_AIM, spine: [6, 0, 0] } },
+  // plant the staff and chant
+  { t: 0.22, ease: 'out', hip: [0, -0.06, 0], ik: WIDE, b: NOVA_HOLD },
+  { t: 0.8, ease: 'smooth', hip: [0, -0.07, 0], ik: WIDE, b: { ...NOVA_HOLD, spine: [1, 3, 0], head: [-6, 4, 0] } },
+  // raise it high as the last seals open
+  { t: 1.35, ease: 'smooth', hip: [0, -0.06, 0], ik: WIDE, b: NOVA_HIGH },
+  { t: 1.7, ease: 'smooth', hip: [0, -0.05, 0], ik: WIDE, b: { ...NOVA_HIGH, upperArmR: [-110, 0, 6], head: [-12, 0, 0] } },
+  // …then level it at the target and let go
+  { t: 1.95, ease: 'in', hip: [0, -0.15, 0.05], ik: LUNGE, b: NOVA_AIM },
+  { t: 2.5, ease: 'linear', hip: [0, -0.15, 0.05], ik: LUNGE, b: { ...NOVA_AIM, spine: [6, 0, 0] } },
 ]);
 
 // …and the price: she collapses face-down, completely spent, then struggles back up

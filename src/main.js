@@ -8,7 +8,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { TouchControls } from './ui/touch.js';
-import { AdminPanel, isAdminRoute, isAdmin, syncAdminPerks } from './ui/admin.js';
+import { AdminPanel, isAdminRoute, syncAdminPerks } from './ui/admin.js';
 import { initAdmin, onAdminChange, isOwner } from './core/adminAccess.js';
 import { AdminDirectory } from './network/adminDirectory.js';
 import { Input } from './core/input.js';
@@ -72,7 +72,6 @@ class App {
     this.canvas = $('game');
     this.settings = loadSettings();
     if (!QUALITY[this.settings.quality]) this.settings.quality = detectQuality();
-    if (this.settings.mage === 'meteora' && !isAdmin()) this.settings.mage = 'pyro'; // admin-only mage
     const Q = QUALITY[this.settings.quality];
     // low (Chromebooks): no MSAA on the default framebuffer — it's a big fill-rate cost on iGPUs
     // always anti-aliased: jagged edges read as "pixelated"; MSAA is nearly free on mobile GPUs

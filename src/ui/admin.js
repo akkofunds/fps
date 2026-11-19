@@ -10,7 +10,7 @@ import { isAdmin, isOwner, myToken, maskToken, ownerSignIn, ownerSignOut, adminL
 //
 // The OWNER signs in with the password + dog's name (they unlock the owner key on this device;
 // remembered, so it's a one-time thing). Only the owner gets this panel. The owner can add
-// players as ADMINS by their token (Settings → Account): admins get access to Meteora, nothing else.
+// players as ADMINS by their token (Settings → Account): every mage is open to everyone; being an admin carries no character access.
 export { isAdmin, isOwner };
 
 export function isAdminRoute() {
@@ -53,7 +53,7 @@ export class AdminPanel {
     const steps = ['STEP 1 OF 3 · PASSWORD', "STEP 2 OF 3 · SECURITY QUESTION", 'STEP 3 OF 3 · ADD AN ADMIN (OPTIONAL)'];
     box.appendChild(el('div', 'ag-step', steps[step - 1]));
     box.appendChild(el('label', 'ag-q', step === 1 ? 'Enter the admin password' : step === 2 ? "What is your dog's name?" : 'Paste the token of a player to make them an admin'));
-    if (step === 3) box.appendChild(el('p', 'muted ag-note', 'Every player has a private token in Settings → Account. Admins can play Meteora in the normal game. You can also do this later from the panel.'));
+    if (step === 3) box.appendChild(el('p', 'muted ag-note', 'Every player has a private token in Settings → Account. Every mage is open to all players. You can also do this later from the panel.'));
     const form = el('form');
     const inp = el('input');
     inp.type = step === 1 ? 'password' : 'text';
@@ -165,7 +165,7 @@ export class AdminPanel {
 
     const sec = (title, note) => { const s = el('section', 'ap-sec'); s.appendChild(el('h3', '', title)); if (note) s.appendChild(el('p', 'muted', note)); body.appendChild(s); return s; };
     // -- admins
-    const sA = sec('ADMINS', 'Admins can play Meteora in the normal game (nothing else — this panel is owner-only). Players find their token in Settings → Account. Changes reach other players the next time they are online at the same time as someone who has the new list.');
+    const sA = sec('ADMINS', 'Every mage is open to all players; the admin list unlocks no characters (this panel is owner-only). Players find their token in Settings → Account. Changes reach other players the next time they are online at the same time as someone who has the new list.');
     this.renderAdmins(sA);
 
     // -- balance
