@@ -10,7 +10,7 @@ import { ICONS } from './icons.js';
 // OWNER badge in the lobby once signed in.
 //
 // The OWNER signs in with the password + dog's name (they unlock the owner key on this device;
-// kept for this browser tab session only: close the tab and sign in again). Only the owner gets this panel. The owner can add
+// remembered, so it's a one-time thing). Only the owner gets this panel. The owner can add
 // players as ADMINS by their token (Settings → Account): every mage is open to everyone; being an admin carries no character access.
 export { isAdmin, isOwner };
 
@@ -97,7 +97,7 @@ export class AdminPanel {
           return;
         }
         this._granted();
-        toast('Signed in as owner until you close this tab.');
+        toast('Signed in as owner. This device stays signed in.');
         this.renderGate(3);
         return;
       }
