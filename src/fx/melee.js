@@ -74,6 +74,7 @@ Object.assign(Fx.prototype, {
     const tint = style === 'cursed' ? ARC.cursed : ARC[el];
     // a dome of air-pressure arcs flaring out of the hit (no flat rings)
     this.airBurst(p, dir, heavy, tint);
+    this.impactStar(p, heavy ? 1.7 : 0.9, style === 'cursed' ? [1.1, 1.4, 1.9] : el === 'fire' ? [1.8, 1.3, 0.8] : [1.2, 1.5, 1.9]);
     // sparks of the element, sprayed out the far side
     for (let k = 0; k < (heavy ? 30 : 14); k++) {
       const c = C[elem(style, heavy ? 3 : (k % 3 ? 0 : 1), k)];

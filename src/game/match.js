@@ -347,6 +347,32 @@ export class Match {
         if (v && v.alive && v.view && v !== e) { v.view.anim.play(nul || d.h ? 'launched' : 'stagger'); v.view.anim.hitStop(0.07); if (v === this.local) this.fx.shake(nul ? 0.4 : 0.15); }
         break;
       }
+      case 'flashMark': {
+        const p = new THREE.Vector3().fromArray(d.p), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        this.fx.flashMark(p, dir);
+        break;
+      }
+      case 'flashReveal': {
+        const p = new THREE.Vector3().fromArray(d.p), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        this.fx.flashReveal(p, dir); this.sound('slashHeavy', p, 1, 40);
+        const v = this.ents.get(d.v);
+        if (v && v.alive && v.view && v !== e) { v.view.anim.play('stagger'); v.view.anim.hitStop(0.09); if (v === this.local) this.fx.shake(0.3); }
+        break;
+      }
+      case 'severHold': {
+        const p = new THREE.Vector3().fromArray(d.p), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        this.fx.severHold(p, dir); this.sound('sever', p, 0.6, 50);
+        if (!local && e.view) e.view.anim.play('ksD');
+        if (e.view) e.view.anim.hitStop(0.3);
+        const v = this.ents.get(d.v);
+        if (v && v.view) v.view.anim.hitStop(0.34);
+        break;
+      }
+      case 'severEnd': {
+        const f = new THREE.Vector3().fromArray(d.f), o = new THREE.Vector3().fromArray(d.o);
+        this.fx.severEnd(f, o); this.sound('blink', o, 0.8, 30);
+        break;
+      }
       case 'skyLeap': { const o = new THREE.Vector3().fromArray(d.o); this.fx.skyLeap(o); this.sound('leapUp', o, 1, 40); e.dashFx = 0.3; break; }
       case 'skyDive': {
         const o = new THREE.Vector3().fromArray(d.o), c = new THREE.Vector3().fromArray(d.c);

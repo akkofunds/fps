@@ -67,6 +67,31 @@ const FRAG = /* glsl */`
     gl_FragColor = vec4(col, a);
   }`;
 
+// spiky impact-star texture: long thin rays of uneven length round a hot core
+let STAR = null;
+function starTex() {
+  if (STAR) return STAR;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.translate(64, 64);
+  const rays = 14;
+  for (let i = 0; i < rays; i++) {
+    const a = (i / rays) * Math.PI * 2 + (Math.random() - 0.5) * 0.25, len = (i % 2 ? 34 : 60) * (0.75 + Math.random() * 0.25), w = i % 2 ? 3 : 5;
+    const gr = g.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.beginPath();
+    g.moveTo(Math.cos(a + Math.PI / 2) * w, Math.sin(a + Math.PI / 2) * w);
+    g.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+    g.lineTo(Math.cos(a - Math.PI / 2) * w, Math.sin(a - Math.PI / 2) * w);
+    g.fill();
+  }
+  const rg = g.createRadialGradient(0, 0, 0, 0, 0, 22);
+  rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.5, 'rgba(255,255,255,0.7)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 22, 0, 6.283); g.fill();
+  STAR = new THREE.CanvasTexture(c);
+  return STAR;
+}
+
 const _m = new THREE.Matrix4(), _n = new THREE.Vector3(), _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3();
 const R = Math.random;
 
@@ -76,6 +101,11 @@ Object.assign(Fx.prototype, {
   //      core [r,g,b], edge [r,g,b], ink (0-1), inkCol, grow, twist, alpha, delay }
   arc(o) {
     if (o.delay) { const d = o.delay; o.delay = 0; setTimeout(() => this.arc(o), d * 1000); return; }
+    // a soft additive halo under every bright arc so it blooms off the screen
+    if (o.glow !== false && !o._glow && !o.ink0) {
+      const e = o.edge || [0.7, 0.75, 0.85];
+      this.arc({ ...o, _glow: true, glow: false, additive: true, sparks: 0, w: (o.w || 0.25) * 2.3, core: [e[0] * 0.9, e[1] * 0.9, e[2] * 0.9], edge: [e[0] * 0.35, e[1] * 0.35, e[2] * 0.35], ink: 0, alpha: (o.alpha ?? 1) * 0.42 });
+    }
     this.arcPool = this.arcPool || [];
     let a = this.arcPool.find((x) => !x.visible);
     if (!a) {
@@ -93,7 +123,10 @@ Object.assign(Fx.prototype, {
     }
     const U = a.material.uniforms;
     _e1.copy(o.e1).normalize(); _e2.copy(o.e2).addScaledVector(_e1, -_e1.dot(o.e2)).normalize(); _n.crossVectors(_e1, _e2);
-    a.userData = { t: 0, dur: o.dur || 0.28, head: o.head || 0.35, grow: o.grow ?? 0.15, r: o.r || 1, alpha: o.alpha ?? 1, c: o.c.clone(), e1: _e1.clone(), e2: _e2.clone(), n: _n.clone() };
+    a.userData = { t: 0, dur: o.dur || 0.28, head: o.head || 0.35, grow: o.grow ?? 0.15, r: o.r || 1, alpha: o.alpha ?? 1, c: o.c.clone(), e1: _e1.clone(), e2: _e2.clone(), n: _n.clone(),
+      angle: o.angle || 2, spiral: o.spiral || 1, sparks: o.sparks ?? (o._glow ? 0 : 2), sc0: o.core || [2.4, 2.4, 2.6], sc1: o.edge || [0.7, 0.75, 0.85] };
+    a.material.blending = o.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
+    a.renderOrder = o._glow ? 2 : 3;
     U.uAngle.value = o.angle || 2; U.uR.value = o.r || 1; U.uW.value = o.w || 0.25; U.uSpiral.value = o.spiral || 1; U.uTwist.value = o.twist || 0;
     U.uCore.value.setRGB(...(o.core || [2.4, 2.4, 2.6])); U.uEdge.value.setRGB(...(o.edge || [0.7, 0.75, 0.85]));
     U.uInkAmt.value = o.ink || 0; if (o.inkCol) U.uInk.value.setRGB(...o.inkCol); else U.uInk.value.setRGB(0.02, 0.02, 0.03);
@@ -114,7 +147,19 @@ Object.assign(Fx.prototype, {
           Uu.uHead.value = 1 - Math.pow(1 - kh, 3);
           Uu.uTail.value = Math.pow(Math.max(0, (k - D.head * 0.35) / (1 - D.head * 0.35)), 1.4);
           Uu.uAlpha.value = D.alpha * (k < 0.75 ? 1 : 1 - (k - 0.75) / 0.25);
-          this._placeArc(x, 1 + D.grow * (1 - Math.pow(1 - k, 2)));
+          const sc = 1 + D.grow * (1 - Math.pow(1 - k, 2));
+          this._placeArc(x, sc);
+          // sparks shed off the leading edge while it is still sweeping
+          if (D.sparks && Uu.uHead.value < 0.995) {
+            const th = Uu.uHead.value * D.angle, r = D.r * (1 + (D.spiral - 1) * Uu.uHead.value) * sc;
+            const cx = Math.cos(th), sx = Math.sin(th);
+            const px = D.c.x + (D.e1.x * cx + D.e2.x * sx) * r, py = D.c.y + (D.e1.y * cx + D.e2.y * sx) * r, pz = D.c.z + (D.e1.z * cx + D.e2.z * sx) * r;
+            const tx = -D.e1.x * sx + D.e2.x * cx, ty = -D.e1.y * sx + D.e2.y * cx, tz = -D.e1.z * sx + D.e2.z * cx;
+            for (let q = 0; q < D.sparks; q++) {
+              const sp = 3 + R() * 5;
+              this.fire.emit(px, py, pz, tx * sp + (R() - 0.5) * 2, ty * sp + (R() - 0.5) * 2, tz * sp + (R() - 0.5) * 2, 0.16 + R() * 0.14, 0.06, 0.01, [D.sc0[0], D.sc0[1], D.sc0[2], 1], [D.sc1[0], D.sc1[1], D.sc1[2], 0], 3, -2);
+            }
+          }
         }
         return true;
       } });
@@ -127,11 +172,52 @@ Object.assign(Fx.prototype, {
     a.matrix.copy(_m); a.matrixWorldNeedsUpdate = true;
   },
 
+  // a spiky white flash at the exact point of contact (camera-facing): the frame that sells the hit
+  impactStar(p, size = 1, color = null, life = 0.13) {
+    this.starPool = this.starPool || [];
+    let s = this.starPool.find((x) => !x.visible);
+    if (!s) {
+      if (this.starPool.length >= 12) s = this.starPool[0];
+      else {
+        s = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex(), transparent: true, depthWrite: false, depthTest: false, fog: false }));
+        s.renderOrder = 6; this.scene.add(s); this.starPool.push(s);
+        if (!this._starTick) {
+          this._starTick = true;
+          this.effects.push({ update: (dt) => {
+            for (const x of this.starPool) {
+              if (!x.visible) continue;
+              const D = x.userData, k = (D.t += dt) / D.life;
+              if (k >= 1) { x.visible = false; continue; }
+              x.scale.setScalar(D.size * (0.45 + 0.75 * Math.pow(k, 0.4)));
+              x.material.opacity = k < 0.35 ? 1 : 1 - (k - 0.35) / 0.65;
+            }
+            return true;
+          } });
+        }
+      }
+    }
+    s.position.copy(p); s.visible = true;
+    s.material.rotation = R() * Math.PI;
+    s.material.color.setRGB(...(color || [1.6, 1.65, 1.8]));
+    s.userData = { t: 0, life, size: size * 1.6 };
+    s.scale.setScalar(size * 0.6);
+  },
+
   // ---------------------------------------------------------------- building blocks
   // a crescent cut: centred `c`, from direction `from` sweeping toward `to` (both unit, the plane of
   // the cut), angle in radians
   crescent(c, from, to, r, angle, look = {}) {
     return this.arc({ c, e1: from, e2: to, r, angle, w: look.w || r * 0.32, dur: look.dur || 0.26, head: look.head || 0.32, spiral: look.spiral || 1.08, core: look.core, edge: look.edge, ink: look.ink ?? 0.35, grow: look.grow ?? 0.12, alpha: look.alpha, delay: look.delay });
+  },
+
+  // ground shock: three broken crescents flat on the ground, racing outward from c
+  groundShock(c, r = 2, look = {}) {
+    const a0 = R() * Math.PI * 2;
+    for (let k = 0; k < 3; k++) {
+      const a = a0 + k * 2.094 + (R() - 0.5) * 0.3;
+      this.arc({ c: new THREE.Vector3(c.x, c.y + 0.12, c.z), e1: new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), e2: new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)),
+        r, angle: 1.6, w: r * 0.18, spiral: 1.25, dur: look.dur || 0.42, head: 0.3, grow: look.grow ?? 1.1, core: look.core || [1.6, 1.62, 1.7], edge: look.edge || [0.5, 0.48, 0.42], ink: look.ink ?? 0.4, sparks: 0, delay: k * 0.02 });
+    }
   },
 
   // air-pressure burst (punch / kick impact): curved white arcs flaring out of the hit point in the
