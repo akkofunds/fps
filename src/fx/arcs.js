@@ -228,7 +228,7 @@ Object.assign(Fx.prototype, {
       const a = a0 + (k / n) * Math.PI;
       const ax = new THREE.Vector3().addScaledVector(side, Math.cos(a)).addScaledVector(up, Math.sin(a));
       const r = heavy ? 1.1 : 0.7;
-      const tinted = tint && k % 2 === 1;
+      const tinted = tint && (k % 2 === 1 || tint.all);
       this.arc({
         c: p.clone().addScaledVector(d, -r * 0.55), e1: ax.clone().negate(), e2: d, r, angle: Math.PI, w: r * 0.16, dur: heavy ? 0.32 : 0.24, head: 0.3,
         spiral: 1.15, grow: heavy ? 0.55 : 0.4, sparks: 0,

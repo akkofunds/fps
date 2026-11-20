@@ -110,7 +110,7 @@ Object.assign(Fx.prototype, {
     // the crescent of the cut, in the plane the blade swings through
     const F = new THREE.Vector3(dir.x, 0, dir.z).normalize(), Rt = new THREE.Vector3(-F.z, 0, F.x), U = new THREE.Vector3(0, 1, 0);
     const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(U, y).addScaledVector(F, z);
-    const L = SLASH_PAL.lime;
+    const L = SLASH_PAL.crimson;
     if (i === 0) {        // forehand: high right, over the front, down to the left
       this.slashDisc(at(0, 1.3, 0.35), Rt.clone().multiplyScalar(0.65).addScaledVector(U, 0.75), F, 3.0, L, { spin: 4, shards: 6, delay: 0.05 });
     } else if (i === 1) { // backhand: flat, left to right (a wide spinning swirl, like the reference)
@@ -120,7 +120,7 @@ Object.assign(Fx.prototype, {
       this.windSwirl(at(0, 0, 0.4), 2.6, { life: 0.6 });
     } else {              // the thrust: a straight streak, air twisting round the spear
       const tip = at(0, 1.25, 1.9);
-      setTimeout(() => this.slashLine(at(0, 1.25, 0.3), at(0, 1.25, 3.4), 0.16, 0.24, [1.2, 1.5, 1.0]), 0.1 * 1000);
+      setTimeout(() => this.slashLine(at(0, 1.25, 0.3), at(0, 1.25, 3.4), 0.16, 0.24, [1.7, 0.9, 0.8]), 0.1 * 1000);
       for (let k = 0; k < 3; k++) this.slashDisc(tip.clone().addScaledVector(F, -0.5 + k * 0.55), U, Rt, 0.9 + k * 0.25, L, { spin: 14, life: 0.26, delay: 0.1 + k * 0.03 });
       this.windSwirl(at(0, 0, 1.2), 3.0, { life: 0.7 });
     }
@@ -137,9 +137,9 @@ Object.assign(Fx.prototype, {
       // a shallow arc whose middle passes through the target, bowing away from the attacker
       this.arc({ c: p.clone().addScaledVector(F, -r * 0.9), e1: ax.clone().negate().multiplyScalar(1).addScaledVector(F, 0.0), e2: F, r: r * 1.3, angle: Math.PI, w: heavy ? 0.24 : 0.16, dur: heavy ? 0.28 : 0.2, head: 0.25, grow: 0.25, core: [2.8, 2.9, 3.1], edge: [0.4, 0.45, 0.6], ink: 0.6, delay: k * 0.03 });
     }
-    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(Math.cos(a0)).addScaledVector(U, Math.sin(a0)), F, heavy ? 2.4 : 1.6, SLASH_PAL.lime, { spin: 8, life: 0.24, shards: heavy ? 4 : 0 });
-    this.airBurst(p, dir, heavy, null);
-    this.impactStar(p, heavy ? 1.8 : 0.95, [1.3, 1.6, 1.1]);
+    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(Math.cos(a0)).addScaledVector(U, Math.sin(a0)), F, heavy ? 2.4 : 1.6, SLASH_PAL.crimson, { spin: 8, life: 0.24, shards: heavy ? 4 : 0 });
+    this.airBurst(p, dir, heavy, [[1.65, 0.4, 0.3], [0.85, 0.05, 0.02]]);
+    this.impactStar(p, heavy ? 1.8 : 0.95, [1.8, 1.05, 0.95]);
     // sparks off the steel: fast, thin, a little gravity
     for (let k = 0; k < (heavy ? 14 : 6); k++) {
       const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = (heavy ? 8 : 5) + R() * 8;
@@ -214,7 +214,7 @@ Object.assign(Fx.prototype, {
     this.fire.emit(c.x, c.y + 0.6, c.z, 0, 0, 0, 0.1, 2.2, 4.4, [2.6, 2.6, 2.8, 1], STEEL_E, 0, 0);
     this.groundShock(c, 2.4, { dur: 0.5, grow: 1.4 });
     this.windSwirl(c, 7, { life: 1.0 });
-    this.slashDisc(new THREE.Vector3(c.x, c.y + 0.5, c.z), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), 6, SLASH_PAL.lime, { spin: 6, life: 0.45, shards: 14 });
+    this.slashDisc(new THREE.Vector3(c.x, c.y + 0.5, c.z), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1), 6, SLASH_PAL.crimson, { spin: 6, life: 0.45, shards: 14 });
     this.groundShock(c, 1.4, { dur: 0.36, grow: 1.0, core: [1.8, 1.8, 1.9] });
     this.impactStar(new THREE.Vector3(c.x, c.y + 0.7, c.z), 2.6, null, 0.18);
     this.light(c, 20, 12, 0.2, 0xe8eeff);
@@ -263,8 +263,8 @@ Object.assign(Fx.prototype, {
       const a = R() * Math.PI;
       const ax = Rt.clone().multiplyScalar(Math.cos(a)).addScaledVector(U, Math.sin(a));
       this.arc({ c: p.clone().addScaledVector(F, -1.4), e1: ax.clone().negate(), e2: F, r: 1.9, angle: Math.PI, w: 0.26, dur: 0.5, head: 0.16, grow: 0.15, core: [1.7, 1.72, 1.85], edge: [0.3, 0.35, 0.5], ink: 0.7, sparks: 3 });
-      this.slashDisc(p.clone(), ax.clone(), F, 3.2, SLASH_PAL.lime, { spin: 8, life: 0.4, shards: 6 });
-      this.impactStar(p, 1.0, [1.3, 1.6, 1.1]);
+      this.slashDisc(p.clone(), ax.clone(), F, 3.2, SLASH_PAL.crimson, { spin: 8, life: 0.4, shards: 6 });
+      this.impactStar(p, 1.0, [1.8, 1.05, 0.95]);
       for (let k = 0; k < 14; k++) {
         const u = R() * 2 - 1, aa = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = 5 + R() * 7;
         this.fire.emit(p.x, p.y, p.z, Math.cos(aa) * sq * sp, u * sp * 0.6 + 1, Math.sin(aa) * sq * sp, 0.12 + R() * 0.14, 0.05, 0.01, EDGE, STEEL_E, 2.5, -9);
@@ -282,10 +282,10 @@ Object.assign(Fx.prototype, {
     this.slashLine(p.clone().addScaledVector(F, -3), p.clone().addScaledVector(F, 4.5), 0.3, 0.5);
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI + R() * 0.4;
-      this.slashDisc(p.clone(), Rt.clone().multiplyScalar(Math.cos(a)).addScaledVector(U, Math.sin(a)), F.clone().applyAxisAngle(U, (R() - 0.5) * 1.2), 5.5, SLASH_PAL.lime, { spin: k % 2 ? 6 : -6, life: 0.5, shards: 12, delay: k * 0.03 });
+      this.slashDisc(p.clone(), Rt.clone().multiplyScalar(Math.cos(a)).addScaledVector(U, Math.sin(a)), F.clone().applyAxisAngle(U, (R() - 0.5) * 1.2), 5.5, SLASH_PAL.crimson, { spin: k % 2 ? 6 : -6, life: 0.5, shards: 12, delay: k * 0.03 });
     }
-    this.impactStar(p, 3.4, [1.4, 1.7, 1.2], 0.22);
-    this.airBurst(p, F, true, null);
+    this.impactStar(p, 3.4, [1.9, 1.1, 1.0], 0.22);
+    this.airBurst(p, F, true, [[1.65, 0.4, 0.3], [0.85, 0.05, 0.02]]);
     this.groundShock(new THREE.Vector3(p.x, p.y - 1.2, p.z), 2.4);
     this.windSwirl(new THREE.Vector3(p.x, p.y - 1.2, p.z), 6.5, { life: 1.1 });
     for (let k = 0; k < 50; k++) {
@@ -307,10 +307,10 @@ Object.assign(Fx.prototype, {
       const ax = Rt.clone().multiplyScalar(Math.cos(a)).addScaledVector(U, Math.sin(a));
       this.arc({ c: p.clone().addScaledVector(F, -1.3), e1: ax.clone().negate(), e2: F, r: 1.7, angle: Math.PI, w, dur: 0.3, head: 0.2, grow: 0.2, core: [1.7, 1.72, 1.85], edge: [0.35, 0.4, 0.55], ink: 0.65, sparks: 3 });
     }
-    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(0.7).addScaledVector(U, 0.7), F, 3.0, SLASH_PAL.lime, { spin: 7, life: 0.32, shards: 10 });
-    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(0.7).addScaledVector(U, -0.7), F, 2.6, SLASH_PAL.lime, { spin: -7, life: 0.32, delay: 0.03 });
-    this.impactStar(p, 1.8, [1.3, 1.6, 1.1]);
-    this.airBurst(p, F, true, null);
+    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(0.7).addScaledVector(U, 0.7), F, 3.0, SLASH_PAL.crimson, { spin: 7, life: 0.32, shards: 10 });
+    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(0.7).addScaledVector(U, -0.7), F, 2.6, SLASH_PAL.crimson, { spin: -7, life: 0.32, delay: 0.03 });
+    this.impactStar(p, 1.8, [1.8, 1.05, 0.95]);
+    this.airBurst(p, F, true, [[1.65, 0.4, 0.3], [0.85, 0.05, 0.02]]);
     for (let k = 0; k < 30; k++) {
       const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = 6 + R() * 9;
       this.fire.emit(p.x, p.y, p.z, Math.cos(a) * sq * sp + F.x * 5, u * sp * 0.6 + 1, Math.sin(a) * sq * sp + F.z * 5, 0.14 + R() * 0.16, 0.05, 0.01, EDGE, STEEL_E, 2.5, -9);

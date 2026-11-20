@@ -88,6 +88,8 @@ export const SLASH_PAL = {
   wind: { core: [1.35, 1.4, 1.45], hi: [0.85, 0.9, 1.0], ink: [0.03, 0.03, 0.04], glow: [0.25, 0.27, 0.32] },
   // the Kine Slayer: white steel edge, a sharp lime highlight, black ink (anime wind-blade look)
   lime: { core: [1.12, 1.42, 0.92], hi: [0.36, 1.6, 0.1], ink: [0.01, 0.03, 0.01], glow: [0.22, 0.75, 0.05] },
+  // the same slash in red: a vivid red blade, a hot pink-white rim and trails, deep red shade
+  crimson: { core: [1.55, 0.16, 0.1], hi: [1.75, 0.72, 0.62], ink: [0.12, 0.0, 0.0], glow: [0.95, 0.06, 0.03] },
 };
 
 const _e1 = new THREE.Vector3(), _e2 = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _s = new THREE.Vector3();
