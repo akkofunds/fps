@@ -56,40 +56,32 @@ Object.assign(Fx.prototype, {
     const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(UP, y).addScaledVector(F, z);
     const col = ARC[style === 'cursed' ? 'cursed' : elem(style, i)];
     const look = { core: col[0], edge: col[1], ink: 0.3 };
-    if (i === 0) this.crescent(at(1.0, 1.38, -0.1), Rt.clone().negate(), F, 1.3, 1.0, { ...look, w: 0.34, dur: 0.22, delay: 0.015 });
-    else if (i === 1) this.crescent(at(-1.0, 1.38, -0.1), Rt.clone(), F, 1.3, 1.0, { ...look, w: 0.36, dur: 0.22, delay: 0.02 });
+    if (i === 0) this.crescent(at(1.0, 1.38, -0.1), Rt.clone().negate(), F, 1.3, 1.0, { ...look, ink: 0, w: 0.3, dur: 0.22, delay: 0.015 });
+    else if (i === 1) this.crescent(at(-1.0, 1.38, -0.1), Rt.clone(), F, 1.3, 1.0, { ...look, ink: 0, w: 0.32, dur: 0.22, delay: 0.02 });
     else if (i === 2) {
-      this.crescent(at(0, 1.35, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 1.0, 2.4, { ...look, w: 0.46, dur: 0.26, delay: 0.05 });
-      this.crescent(at(0, 1.28, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 1.15, 2.0, { ...look, w: 0.12, dur: 0.22, ink: 0.6, alpha: 0.7, delay: 0.07 });
+      this.crescent(at(0, 1.35, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 1.0, 2.3, { ...look, ink: 0, w: 0.34, dur: 0.24, delay: 0.05 });
     } else {
-      // roundhouse: a wide crescent from his right side round the front; Shoto's is fire and ice
-      const c2 = style === 'cursed' ? ARC.cursed : ARC.ice, c1 = style === 'cursed' ? ARC.white : ARC.fire;
+      // roundhouse: one wide swirl from his right side round the front; Shoto's is fire over ice
       const from = Rt.clone().addScaledVector(UP, -0.35).addScaledVector(F, -0.3);
-      this.slashDisc(at(0, 1.25, 0.2), from, F, 3.0, SLASH_PAL[style === 'cursed' ? 'cursed' : 'fire'], { spin: 5, life: 0.32, shards: 8, delay: 0.09 });
-      if (style !== 'cursed') this.slashDisc(at(0, 1.15, 0.2), from, F, 3.5, SLASH_PAL.ice, { spin: 4, life: 0.32, delay: 0.11 });
+      this.slashDisc(at(0, 1.25, 0.2), from, F, 3.0, SLASH_PAL[style === 'cursed' ? 'cursed' : 'fire'], { spin: 5, life: 0.32, shards: 6, delay: 0.09 });
+      if (style !== 'cursed') this.slashDisc(at(0, 1.1, 0.2), from, F, 3.5, SLASH_PAL.ice, { spin: 4, life: 0.32, delay: 0.11 });
       this.windSwirl(at(0, 0, 0.5), 3.0, { life: 0.6 });
-      this.crescent(at(0, 1.25, 0.15), from, F, 1.3, 3.1, { core: c1[0], edge: c1[1], ink: 0.35, w: 0.62, dur: 0.32, delay: 0.08 });
-      this.crescent(at(0, 1.18, 0.15), from, F, 1.5, 2.7, { core: c2[0], edge: c2[1], ink: 0.5, w: 0.22, dur: 0.3, alpha: 0.85, delay: 0.1 });
     }
   },
 
   punchImpact(p, dir, style, heavy) {
     const el = elem(style, heavy ? 3 : 0);
-    const tint = style === 'cursed' ? ARC.cursed : ARC[el];
     // a dome of air-pressure arcs flaring out of the hit (no flat rings)
-    this.airBurst(p, dir, heavy, tint);
-    // a jagged crescent flash across the hit, spinning off (in the element's colours)
-    const D = new THREE.Vector3(dir.x, 0, dir.z).normalize();
-    this.slashDisc(p.clone(), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-D.z, 0, D.x), heavy ? 2.0 : 1.2, SLASH_PAL[style === 'cursed' ? 'cursed' : el === 'fire' ? 'fire' : 'ice'], { spin: 11, life: 0.22, shards: heavy ? 8 : 3 });
-    this.impactStar(p, heavy ? 1.7 : 0.9, style === 'cursed' ? [1.1, 1.4, 1.9] : el === 'fire' ? [1.8, 1.3, 0.8] : [1.2, 1.5, 1.9]);
+    this.airBurst(p, dir, heavy, null);   // clean white air arcs (no coloured slash on a punch)
+    this.impactStar(p, heavy ? 1.7 : 0.9);
     // sparks of the element, sprayed out the far side
-    for (let k = 0; k < (heavy ? 30 : 14); k++) {
+    for (let k = 0; k < (heavy ? 14 : 6); k++) {
       const c = C[elem(style, heavy ? 3 : (k % 3 ? 0 : 1), k)];
       const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = (heavy ? 7 : 4) + R() * (heavy ? 9 : 5);
       this.fire.emit(p.x, p.y, p.z, Math.cos(a) * sq * sp + dir.x * sp, u * sp * 0.6, Math.sin(a) * sq * sp + dir.z * sp, 0.14 + R() * 0.14, heavy ? 0.14 : 0.1, 0.02, c[0], c[1], 5, 0);
     }
     // speed lines straight out of the impact
-    for (let k = 0; k < (heavy ? 12 : 6); k++) {
+    for (let k = 0; k < (heavy ? 6 : 3); k++) {
       const a = Math.atan2(dir.z, dir.x) + (R() - 0.5) * 1.2, v = (heavy ? 24 : 15) + R() * 8, y = (R() - 0.5) * 4;
       this.fire.emit(p.x, p.y, p.z, Math.cos(a) * v, y, Math.sin(a) * v, 0.08, 0.07, 0.02, C.white[0], C.white[1], 2, 0);
     }

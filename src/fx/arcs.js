@@ -47,22 +47,19 @@ const FRAG = /* glsl */`
   uniform vec3 uCore, uEdge, uInk;
   uniform float uInkAmt, uAlpha, uHead, uTail, uSeed;
   varying vec2 vUv; varying float vS;
-  float h(float x) { return fract(sin(x * 91.17 + uSeed) * 43758.5453); }
   void main() {
     float u = vUv.x;
     if (u > uHead || u < uTail) discard;
     float d = abs(vUv.y - 0.5) * 2.0;            // 0 = centre line, 1 = edge
-    // lengthwise motion streaks: thin lines of varying brightness across the ribbon
-    float lane = floor(vUv.y * 22.0);
-    float streak = 0.55 + 0.45 * h(lane) * (0.6 + 0.4 * sin(u * 40.0 + h(lane + 3.0) * 6.28));
-    float core = exp(-d * d * 4.0) * (0.35 + 0.65 * vS);
+    // clean ribbon: bright core line, smooth falloff to the edge, brightest toward the head
+    float core = exp(-d * d * 5.0) * (0.4 + 0.6 * vS);
     vec3 col = mix(uEdge, uCore, clamp(core * 1.4, 0.0, 1.0));
-    float a = smoothstep(1.0, 0.62, d) * (0.38 + 0.62 * pow(vS, 0.6)) * (0.62 + 0.38 * streak);
-    // ink: a dark line just inside the outer edge (and a fainter one inside), comic-style
-    float ink = (smoothstep(0.62, 0.78, d) - smoothstep(0.86, 0.98, d)) * uInkAmt * (0.4 + 0.6 * h(lane + 7.0));
-    col = mix(col, uInk, clamp(ink * 1.6, 0.0, 1.0));
-    a = max(a, ink * 0.85 * smoothstep(1.0, 0.8, d));
-    a *= uAlpha * smoothstep(0.0, 0.08, vS);
+    float a = smoothstep(1.0, 0.55, d) * (0.35 + 0.65 * pow(vS, 0.6));
+    // ink: one clean, continuous dark line along the outside edge
+    float ink = (smoothstep(0.7, 0.8, d) - smoothstep(0.88, 0.96, d)) * uInkAmt;
+    col = mix(col, uInk, clamp(ink * 1.4, 0.0, 1.0));
+    a = max(a, ink * 0.8);
+    a *= uAlpha * smoothstep(0.0, 0.1, vS);
     if (a < 0.01) discard;
     gl_FragColor = vec4(col, a);
   }`;
@@ -223,28 +220,20 @@ Object.assign(Fx.prototype, {
   // air-pressure burst (punch / kick impact): curved white arcs flaring out of the hit point in the
   // direction of the blow, a dome of displaced air with a few dark ink strokes through it
   airBurst(p, dir, heavy, tint) {
+    // a few clean, evenly spaced air arcs bowing out of the hit in the direction of the blow
     const d = new THREE.Vector3(dir.x, dir.y || 0, dir.z).normalize();
     const side = new THREE.Vector3(-d.z, 0, d.x).normalize(), up = new THREE.Vector3().crossVectors(side, d).normalize();
-    const n = heavy ? 9 : 5;
+    const n = heavy ? 5 : 3, a0 = R() * Math.PI;
     for (let k = 0; k < n; k++) {
-      // each arc lies in a plane containing the blow direction, rotated about it
-      const a = (k / n) * Math.PI * 2 + R() * 0.6;
+      const a = a0 + (k / n) * Math.PI;
       const ax = new THREE.Vector3().addScaledVector(side, Math.cos(a)).addScaledVector(up, Math.sin(a));
-      const span = (heavy ? 2.2 : 1.7) + R() * 0.6;
-      const r = (heavy ? 0.95 : 0.6) + R() * (heavy ? 0.6 : 0.35);
-      // the arc bows forward: it starts on one side, passes in front of the hit, ends on the other
-      const from = ax.clone().multiplyScalar(Math.cos(span / 2)).addScaledVector(d, -Math.sin(span / 2) * 0.15).normalize();
-      const start = new THREE.Vector3().copy(ax).multiplyScalar(-Math.cos(span / 2)).addScaledVector(d, Math.sin(span / 2)).normalize();
-      const c = p.clone().addScaledVector(d, -r * 0.55);
-      const ink = k % 3 === 0;
-      const tinted = tint && k % 2 === 1;
+      const r = heavy ? 1.1 : 0.7;
+      const tinted = tint && (k % 2 === 1 || tint.all);
       this.arc({
-        c, e1: ax.clone().negate(), e2: d, r, angle: Math.PI, w: r * (ink ? 0.1 : 0.22), dur: (heavy ? 0.34 : 0.24) + R() * 0.08, head: 0.3,
-        spiral: 1.15 + R() * 0.25, grow: heavy ? 0.6 : 0.45, twist: (R() - 0.5) * 0.6,
-        core: ink ? [0.08, 0.08, 0.1] : tinted ? tint[0] : [1.55, 1.58, 1.7], edge: ink ? [0.02, 0.02, 0.03] : tinted ? tint[1] : [0.55, 0.6, 0.75],
-        ink: ink ? 0 : 0.45, alpha: ink ? 0.75 : 0.95, delay: R() * 0.03,
+        c: p.clone().addScaledVector(d, -r * 0.55), e1: ax.clone().negate(), e2: d, r, angle: Math.PI, w: r * 0.16, dur: heavy ? 0.32 : 0.24, head: 0.3,
+        spiral: 1.15, grow: heavy ? 0.55 : 0.4, sparks: 0,
+        core: tinted ? tint[0] : [1.55, 1.58, 1.7], edge: tinted ? tint[1] : [0.55, 0.6, 0.75], ink: 0, alpha: 0.9,
       });
-      void from; void start;
     }
   },
 });

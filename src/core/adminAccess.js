@@ -48,7 +48,11 @@ const listeners = new Set();
 export function onAdminChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 const changed = () => { for (const fn of listeners) { try { fn(); } catch (e) { console.warn(e); } } };
 
-export const isOwner = () => !!read(OWNER_KEY);
+// owner = this device holds the real owner key. A key in storage is only trusted once it has been
+// checked against the owner's public key (initAdmin / ownerSignIn), so writing something into
+// localStorage by hand does not make anyone the owner.
+let ownerOk = false;
+export const isOwner = () => ownerOk;
 // Meteora access: the owner, or a token on the signed list
 export function isAdmin() { return isOwner() || !!(myHash && list && Array.isArray(list.admins) && list.admins.some((a) => a.h === myHash)); }
 export const adminList = () => (list ? list.admins.slice() : []);
@@ -92,11 +96,22 @@ export async function ownerSignIn(password, pet) {
     const aes = await subtle.deriveKey({ name: 'PBKDF2', salt: ub64(OWNER.salt), iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
     const pkcs8 = await subtle.decrypt({ name: 'AES-GCM', iv: ub64(OWNER.iv) }, aes, ub64(OWNER.data));
     write(OWNER_KEY, b64(pkcs8));
+    ownerOk = await keyMatchesOwner();
     changed();
-    return true;
+    return ownerOk;
   } catch { return false; }
 }
-export function ownerSignOut() { write(OWNER_KEY, null); changed(); }
+export function ownerSignOut() { write(OWNER_KEY, null); ownerOk = false; changed(); }
+// the stored key really is the owner's: it signs a challenge that the owner's public key accepts
+async function keyMatchesOwner() {
+  try {
+    const key = await ownerKey();
+    if (!key) return false;
+    const msg = new TextEncoder().encode('magebreak-owner-check|' + Math.random());
+    const sig = await subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, msg);
+    return await subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, await pub(), sig, msg);
+  } catch { return false; }
+}
 
 async function publish(admins, cfg = globalCfg()) {
   const key = await ownerKey();
@@ -120,6 +135,8 @@ export async function setGlobalCfg(patch) { return publish(adminList(), { ...glo
 // ---------------------------------------------------------------- boot
 export async function initAdmin() {
   if (!subtle) return;
+  ownerOk = await keyMatchesOwner();
+  if (!ownerOk && read(OWNER_KEY)) write(OWNER_KEY, null); // not the real key: forget it
   const t = myToken();
   myHash = await tokenHash(t);
   write('magebreak.tokenHash', { t, h: myHash });
