@@ -15,64 +15,46 @@ const SZ = 256, C0 = SZ / 2;
 function canvas() { const c = document.createElement('canvas'); c.width = c.height = SZ; return c; }
 const P = (a, r) => [C0 + Math.cos(a) * r * C0, C0 - Math.sin(a) * r * C0]; // texture space: CCW, y up
 
-// a crescent from angle 0 (tail) to `span` (head): thickest just behind the head, serrated outer
-// edge, the inner edge feathered; brightest at the head, fading to nothing at the tail
-function crescentTex(span, thick, jag, seed) {
+// Clean geometry only: smooth round edges, smooth tapers, continuous lines (no jitter, no zig-zags).
+// The crescent runs from angle 0 (tail) to `span` (head); every texture fades out toward the tail.
+const smooth = (u) => u * u * (3 - 2 * u);
+// thickness along the crescent: grows smoothly from a fine point at the tail, fullest just behind
+// the head, then rounds off to a point at the head
+const prof = (u) => Math.pow(Math.sin(Math.PI * Math.pow(u, 0.72)), 0.85);
+
+function bladeTex(span, thick, rim) {
   const c = canvas(), g = c.getContext('2d');
-  const N = 140, outer = [], inner = [];
-  let s = seed;
-  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+  const N = 220, ro = 0.94, outer = [], inner = [];
   for (let i = 0; i <= N; i++) {
     const u = i / N, a = u * span;
-    const prof = Math.pow(u, 0.7) * Math.pow(1 - u, 0.35) * 1.9;              // tapered at both ends
-    const spike = (i % 6 < 3 ? (i % 6) / 3 : (6 - (i % 6)) / 3) * jag * (0.4 + rnd() * 0.8) * prof;
-    const ro = 0.93 + spike * 0.06;
     outer.push(P(a, ro));
-    inner.push(P(a, ro - thick * prof));
+    inner.push(P(a, ro - thick * prof(u)));
   }
-  // body
   g.beginPath(); g.moveTo(...outer[0]);
   for (const p of outer) g.lineTo(...p);
   for (let i = inner.length - 1; i >= 0; i--) g.lineTo(...inner[i]);
   g.closePath();
-  const rg = g.createRadialGradient(C0, C0, C0 * (0.93 - thick * 1.1), C0, C0, C0 * 0.97);
-  rg.addColorStop(0, 'rgba(255,255,255,0)'); rg.addColorStop(0.55, 'rgba(255,255,255,0.55)'); rg.addColorStop(0.86, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0.9)');
+  // solid toward the outer edge, softly feathered toward the inside
+  const rg = g.createRadialGradient(C0, C0, C0 * (ro - thick), C0, C0, C0 * ro);
+  rg.addColorStop(0, 'rgba(255,255,255,0)'); rg.addColorStop(0.45, 'rgba(255,255,255,0.5)'); rg.addColorStop(0.82, 'rgba(255,255,255,0.95)'); rg.addColorStop(1, 'rgba(255,255,255,1)');
   g.fillStyle = rg; g.fill();
-  // a hard bright edge line along the outside of the head half
-  g.lineWidth = 2.2; g.strokeStyle = 'rgba(255,255,255,1)';
-  g.beginPath(); for (let i = Math.floor(N * 0.35); i <= N; i++) { const p = outer[i]; if (i === Math.floor(N * 0.35)) g.moveTo(...p); else g.lineTo(...p); } g.stroke();
-  fadeTail(g, span);
-  return c;
-}
-// motion streaks: many thin concentric arcs of random length and brightness
-function streakTex(span, seed) {
-  const c = canvas(), g = c.getContext('2d');
-  let s = seed;
-  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  g.lineCap = 'round';
-  for (let k = 0; k < 46; k++) {
-    const r = 0.5 + rnd() * 0.46, a1 = span * (0.25 + rnd() * 0.75), a0 = a1 - span * (0.15 + rnd() * 0.55);
-    g.strokeStyle = `rgba(255,255,255,${0.25 + rnd() * 0.75})`;
-    g.lineWidth = 0.8 + rnd() * 2.6;
-    g.beginPath();
-    for (let i = 0; i <= 24; i++) { const a = a0 + (a1 - a0) * (i / 24); const p = P(a, r); if (i) g.lineTo(...p); else g.moveTo(...p); }
-    g.stroke();
+  // a crisp, continuous bright rim along the outside
+  if (rim) {
+    g.lineWidth = rim; g.lineCap = 'round'; g.strokeStyle = 'rgba(255,255,255,1)';
+    g.beginPath(); g.arc(C0, C0, C0 * ro, -span, -span * 0.12, false); g.stroke();
   }
   fadeTail(g, span);
   return c;
 }
-// ink: a few thin, broken, jagged strokes (drawn dark with normal blending)
-function inkTex(span, seed) {
+// smooth concentric trail lines (like motion blur behind the edge): continuous arcs of a few
+// lengths and weights, evenly spread
+function trailTex(span) {
   const c = canvas(), g = c.getContext('2d');
-  let s = seed;
-  const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-  g.strokeStyle = '#fff'; g.lineCap = 'round';
-  for (let k = 0; k < 7; k++) {
-    const r = 0.72 + rnd() * 0.24, a0 = span * rnd() * 0.5, a1 = a0 + span * (0.25 + rnd() * 0.45);
-    g.lineWidth = 1.2 + rnd() * 2.4;
-    g.beginPath();
-    for (let i = 0; i <= 30; i++) { const a = a0 + (a1 - a0) * (i / 30); const p = P(a, r + (i % 3 === 1 ? 0.012 : 0) * (rnd() > 0.5 ? 1 : -1)); if (i) g.lineTo(...p); else g.moveTo(...p); }
-    g.stroke();
+  g.lineCap = 'round';
+  const L = [[0.9, 0.9, 3.2, 0.95], [0.84, 0.75, 2.2, 0.8], [0.78, 0.6, 1.6, 0.65], [0.71, 0.82, 1.2, 0.5], [0.64, 0.5, 1.0, 0.4], [0.57, 0.68, 0.8, 0.3]];
+  for (const [r, len, w, al] of L) {
+    g.strokeStyle = `rgba(255,255,255,${al})`; g.lineWidth = w;
+    g.beginPath(); g.arc(C0, C0, C0 * r, -span, -span * (1 - len), false); g.stroke();
   }
   fadeTail(g, span);
   return c;
@@ -81,21 +63,19 @@ function inkTex(span, seed) {
 function fadeTail(g, span) {
   g.globalCompositeOperation = 'destination-in';
   if (g.createConicGradient) {
-    // conic gradients start at +x and go clockwise in canvas space = our angle 0 going "backwards"
+    // canvas angles run clockwise; our crescent runs counter-clockwise from 0 to `span`
     const cg = g.createConicGradient(-span, C0, C0);
-    cg.addColorStop(0, 'rgba(0,0,0,1)');
-    cg.addColorStop(Math.min(0.99, span / (2 * Math.PI)) * 0.15, 'rgba(0,0,0,1)');
-    cg.addColorStop(Math.min(0.99, span / (2 * Math.PI)), 'rgba(0,0,0,0)');
-    cg.addColorStop(1, 'rgba(0,0,0,0)');
+    const f = Math.min(0.999, span / (2 * Math.PI));
+    cg.addColorStop(0, 'rgba(0,0,0,1)'); cg.addColorStop(f * 0.25, 'rgba(0,0,0,1)'); cg.addColorStop(f, 'rgba(0,0,0,0)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = cg; g.fillRect(0, 0, SZ, SZ);
   }
   g.globalCompositeOperation = 'source-over';
 }
+void smooth;
 function tex(kind) {
   if (TEX[kind]) return TEX[kind];
-  const c = { jag: () => crescentTex(3.9, 0.3, 1, 7), jag2: () => crescentTex(3.3, 0.18, 1.6, 31), thin: () => crescentTex(4.4, 0.09, 0.6, 77),
-    streak: () => streakTex(4.2, 13), ink: () => inkTex(3.8, 5) }[kind]();
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const c = { blade: () => bladeTex(3.6, 0.26, 3), thin: () => bladeTex(3.9, 0.07, 2), shade: () => bladeTex(3.4, 0.34, 0), trail: () => trailTex(3.8) }[kind]();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return (TEX[kind] = t);
 }
 
@@ -158,21 +138,22 @@ Object.assign(Fx.prototype, {
     if (o.delay) { const d = o.delay; o = { ...o, delay: 0 }; setTimeout(() => this.slashDisc(c, from, to, size, pal, o), d * 1000); return; }
     _e1.copy(from).normalize(); _e2.copy(to).addScaledVector(_e1, -_e1.dot(to)).normalize(); _n.crossVectors(_e1, _e2);
     const base = { c: c.clone(), e1: _e1.clone(), e2: _e2.clone(), n: _n.clone(), t: 0 };
-    const life = (o.life || 0.3) * (0.9 + R() * 0.2), spin = (o.spin ?? 3.2) * (0.8 + R() * 0.4);
-    const S = size * (0.9 + R() * 0.2), r0 = (R() - 0.5) * 0.35 - 0.35;   // starts a touch "behind" and spins into place
+    const life = (o.life || 0.3) * (0.95 + R() * 0.1), spin = (o.spin ?? 3.2) * (0.9 + R() * 0.2);
+    const S = size * (0.93 + R() * 0.14), r0 = (R() - 0.5) * 0.16 - 0.3;   // starts a touch "behind" and spins into place
+    // back to front: soft glow, dark shade for depth, trail lines, the blade, a fine bright edge
     const layers = [
-      { tex: 'jag', color: pal.glow, add: true, size: S * 1.12, alpha: 0.55, z: -0.02, rot: r0, order: 3 },
-      { tex: 'streak', color: pal.hi, size: S * 1.06, alpha: 0.85, z: -0.01, rot: r0 - 0.12 },
-      { tex: 'jag', color: pal.core, size: S, alpha: 1, z: 0, rot: r0 },
-      { tex: R() < 0.5 ? 'jag2' : 'thin', color: pal.hi, size: S * (0.82 + R() * 0.1), alpha: 0.95, z: 0.01, rot: r0 + 0.25 + R() * 0.2 },
-      { tex: 'ink', color: pal.ink, size: S * 1.02, alpha: o.ink ?? 0.85, z: 0.02, rot: r0 + 0.05, order: 5 },
+      { tex: 'blade', color: pal.glow, add: true, size: S * 1.1, alpha: 0.5, z: -0.02, rot: r0 - 0.04, order: 3 },
+      { tex: 'shade', color: pal.ink, size: S * 1.03, alpha: (o.ink ?? 0.6) * 0.75, z: -0.015, rot: r0 - 0.1 },
+      { tex: 'trail', color: pal.hi, size: S * 0.96, alpha: 0.85, z: -0.005, rot: r0 - 0.06 },
+      { tex: 'blade', color: pal.core, size: S, alpha: 1, z: 0, rot: r0 },
+      { tex: 'thin', color: pal.hi, size: S * 1.04, alpha: 0.95, z: 0.01, rot: r0 + 0.04, order: 5 },
     ];
-    for (const L of layers) this._disc({ ...base, ...L, life: life * (0.9 + R() * 0.2), spin: spin * (0.85 + R() * 0.3), grow: 0.25 + R() * 0.15 });
+    for (const L of layers) this._disc({ ...base, ...L, life, spin, grow: 0.22 });
     if (o.light) this.light(c, o.light, size * 3, 0.1, new THREE.Color(...pal.hi).getHex());
     // shards of the highlight colour flung off the head of the cut
     if (o.shards) {
       const p = c.clone().addScaledVector(base.e1, Math.cos(2.6) * size * 0.45).addScaledVector(base.e2, Math.sin(2.6) * size * 0.45);
-      for (let k = 0; k < o.shards; k++) {
+      for (let k = 0; k < Math.ceil(o.shards * 0.5); k++) {
         const v = base.e2.clone().multiplyScalar(-4 - R() * 5).addScaledVector(base.e1, -2 - R() * 3).add(new THREE.Vector3((R() - 0.5) * 3, 1 + R() * 3, (R() - 0.5) * 3));
         this.fire.emit(p.x + (R() - 0.5) * 0.4, p.y + (R() - 0.5) * 0.4, p.z + (R() - 0.5) * 0.4, v.x, v.y, v.z, 0.35 + R() * 0.3, 0.07 + R() * 0.05, 0.03, [pal.hi[0] * 1.3, pal.hi[1] * 1.3, pal.hi[2] * 1.3, 1], [pal.hi[0] * 0.5, pal.hi[1] * 0.5, pal.hi[2] * 0.5, 0], 1.5, -7);
       }
@@ -188,9 +169,8 @@ Object.assign(Fx.prototype, {
     base.n = new THREE.Vector3().crossVectors(base.e1, base.e2);
     const life = o.life || 0.8;
     for (const L of [
-      { tex: 'streak', color: [0.62, 0.64, 0.68], size: size, alpha: 0.75, z: 0.0, rot: 0 },
-      { tex: 'streak', color: [0.75, 0.77, 0.8], size: size * 0.72, alpha: 0.6, z: 0.01, rot: 1.9 },
-      { tex: 'ink', color: [0.05, 0.05, 0.06], size: size * 0.9, alpha: 0.55, z: 0.02, rot: 3.6 },
+      { tex: 'trail', color: [0.7, 0.72, 0.76], size: size, alpha: 0.7, z: 0.0, rot: 0 },
+      { tex: 'trail', color: [0.82, 0.84, 0.88], size: size * 0.7, alpha: 0.55, z: 0.01, rot: 2.1 },
     ]) this._disc({ ...base, ...L, life: life * (0.85 + R() * 0.3), spin: 2.4 + R(), grow: 0.35, order: 2, delay: 0 });
   },
 });

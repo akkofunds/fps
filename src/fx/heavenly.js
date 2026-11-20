@@ -137,11 +137,11 @@ Object.assign(Fx.prototype, {
       // a shallow arc whose middle passes through the target, bowing away from the attacker
       this.arc({ c: p.clone().addScaledVector(F, -r * 0.9), e1: ax.clone().negate().multiplyScalar(1).addScaledVector(F, 0.0), e2: F, r: r * 1.3, angle: Math.PI, w: heavy ? 0.24 : 0.16, dur: heavy ? 0.28 : 0.2, head: 0.25, grow: 0.25, core: [2.8, 2.9, 3.1], edge: [0.4, 0.45, 0.6], ink: 0.6, delay: k * 0.03 });
     }
-    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(Math.cos(a0)).addScaledVector(U, Math.sin(a0)), F, heavy ? 2.4 : 1.6, SLASH_PAL.lime, { spin: 9, life: 0.24, shards: heavy ? 10 : 5 });
+    this.slashDisc(p.clone(), Rt.clone().multiplyScalar(Math.cos(a0)).addScaledVector(U, Math.sin(a0)), F, heavy ? 2.4 : 1.6, SLASH_PAL.lime, { spin: 8, life: 0.24, shards: heavy ? 4 : 0 });
     this.airBurst(p, dir, heavy, null);
     this.impactStar(p, heavy ? 1.8 : 0.95, [1.3, 1.6, 1.1]);
     // sparks off the steel: fast, thin, a little gravity
-    for (let k = 0; k < (heavy ? 34 : 16); k++) {
+    for (let k = 0; k < (heavy ? 14 : 6); k++) {
       const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = (heavy ? 8 : 5) + R() * 8;
       this.fire.emit(p.x, p.y, p.z, Math.cos(a) * sq * sp + dir.x * sp * 0.6, u * sp * 0.6 + 1.5, Math.sin(a) * sq * sp + dir.z * sp * 0.6, 0.12 + R() * 0.16, 0.05, 0.01, EDGE, STEEL_E, 2.5, -9);
     }
