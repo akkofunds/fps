@@ -121,7 +121,10 @@ class App {
     for (let i = 0; i < tiers; i++) this._degrade(true);
     if (IGPU.test(this.gpu) && !/Mac/.test(navigator.platform) && !isIPad()) setTimeout(() => toast('Your browser is using integrated graphics. For much smoother play, set your browser to use your graphics card (Windows: Settings → Display → Graphics → your browser → High performance).', 9000), 4000);
     this.progress(0.55, 'Summoning Pyro…');
-    try { await Promise.all(MAGE_LIST.map((m) => loadMageModel(m.model))); } catch (e) { console.error(e); toast('Failed to load a character model.'); }
+    // each model on its own: one that fails (and keeps failing after a retry) only affects that
+    // character, who then shows with a stand-in model; name it so the cause can be tracked down
+    const res = await Promise.allSettled(MAGE_LIST.map((m) => loadMageModel(m.model)));
+    res.forEach((r, i) => { if (r.status === 'rejected') { console.error('model', MAGE_LIST[i].model, r.reason); toast(`Couldn't load ${MAGE_LIST[i].name} (${(r.reason && (r.reason.message || r.reason.type)) || 'network error'}). Using a stand-in model.`, 7000); } });
     await this.lobbyScene.init(this.map);
     this.progress(0.85, 'Lighting the braziers…');
     // warm up shaders so the first frames don't hitch
