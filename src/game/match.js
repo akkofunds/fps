@@ -420,7 +420,13 @@ export class Match {
           const fx = Math.sin(yw), fz = Math.cos(yw);
           return out.set(p.x + fx * PURPLE.front + fz * side, p.y + PURPLE.height, p.z + fz * PURPLE.front - fx * side);
         };
-        this.fx.purpleCharge(at(PURPLE.spread), at(-PURPLE.spread), at(0), PURPLE.charge, PURPLE.orbsAt, PURPLE.formR);
+        // …but first they appear behind him, Red over his right shoulder, Blue over his left
+        const behind = (side) => (out) => {
+          const yw = e === this.local ? this.body.yaw : e.yaw, p = e === this.local ? this.body.pos : e.pos;
+          const fx = Math.sin(yw), fz = Math.cos(yw);
+          return out.set(p.x - fx * PURPLE.back + fz * side, p.y + PURPLE.backH, p.z - fz * PURPLE.back - fx * side);
+        };
+        this.fx.purpleCharge(at(PURPLE.spread), at(-PURPLE.spread), at(0), PURPLE.charge, PURPLE.orbsAt, PURPLE.formR, behind(PURPLE.backSpread), behind(-PURPLE.backSpread));
         this.sound('purpleCharge', e.pos, 1, 50);
         break;
       case 'purple': {

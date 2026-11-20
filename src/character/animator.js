@@ -372,6 +372,57 @@ export class Animator {
     }
     rig.apply(out);
     if (this.fingers) this._applyFingers();
+    if (rig.hasProp && rig.ends && rig.ends.prop && !this.lobbyStill) this._resolveStaff();
+  }
+
+  // The staff must never pass through her: after the pose is applied, check the staff (both sides
+  // of the grip) against the torso and thigh capsules and, where it would go through, pivot it round
+  // the gripping hand just far enough to clear the body. The hand itself never moves.
+  _resolveStaff() {
+    const rig = this.rig, V = THREE.Vector3;
+    const S = this._rs || (this._rs = { a: new V(), b: new V(), h: new V(), tip: new V(), d: new V(), p: new V(), c: new V(), n: new V(), ax: new V(), q: new THREE.Quaternion(), wq: new THREE.Quaternion(), pq: new THREE.Quaternion(), caps: [] });
+    rig.root.updateMatrixWorld(true);
+    const bone = rig.bones[B.propR];
+    if (!bone) return;
+    const wp = (i, out) => rig.bones[i].getWorldPosition(out);
+    const caps = S.caps;
+    const capsDef = [[B.hips, B.neck, 0.15], [B.upperLegL, B.lowerLegL, 0.095], [B.upperLegR, B.lowerLegR, 0.095]];
+    while (caps.length < capsDef.length) caps.push({ a: new V(), b: new V(), r: 0 });
+    capsDef.forEach(([i, j, r], k) => { wp(i, caps[k].a); wp(j, caps[k].b); caps[k].r = r; });
+    for (let iter = 0; iter < 3; iter++) {
+      wp(B.handR, S.h); rig.ends.prop.getWorldPosition(S.tip);
+      const len = S.tip.distanceTo(S.h);
+      if (len < 1e-3) return;
+      S.d.subVectors(S.tip, S.h).divideScalar(len);
+      let worst = 0, wPoint = null, wN = null, wArm = 0;
+      for (const cap of caps) {
+        // sample along the staff (tip side and butt side), skipping the grip itself
+        for (let k = -6; k <= 14; k++) {
+          const s = k < 0 ? (k / 6) * len * 0.55 : (k / 14) * len;
+          if (Math.abs(s) < 0.09) continue;
+          S.p.copy(S.h).addScaledVector(S.d, s);
+          S.ax.subVectors(cap.b, cap.a);
+          const t = Math.max(0, Math.min(1, S.c.subVectors(S.p, cap.a).dot(S.ax) / Math.max(1e-6, S.ax.lengthSq())));
+          S.c.copy(cap.a).addScaledVector(S.ax, t);
+          const dist = S.p.distanceTo(S.c), pen = cap.r - dist;
+          if (pen > worst) { worst = pen; wPoint = S.p.clone(); wN = S.n.subVectors(S.p, S.c).normalize().clone(); wArm = s; }
+        }
+      }
+      if (worst <= 0.002 || !wPoint) return;
+      // rotate the staff round the hand so that point moves out along the push direction
+      if (wN.lengthSq() < 1e-6) wN.set(0, 0, 1);
+      const arm = S.p.subVectors(wPoint, S.h);
+      const axis = S.ax.crossVectors(arm, wN);
+      if (axis.lengthSq() < 1e-8) return;
+      axis.normalize();
+      const ang = Math.min(0.9, Math.asin(Math.min(1, (worst + 0.01) / Math.max(0.05, Math.abs(wArm)))));
+      S.q.setFromAxisAngle(axis, ang);
+      bone.getWorldQuaternion(S.wq);
+      S.wq.premultiply(S.q);
+      bone.parent.getWorldQuaternion(S.pq);
+      bone.quaternion.copy(S.pq.invert().multiply(S.wq));
+      bone.updateMatrixWorld(true);
+    }
   }
 
   // finger bones: the source finger animation while the retargeted clip plays, else at rest (curl)

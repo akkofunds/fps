@@ -87,6 +87,17 @@ export class Fx {
     return l;
   }
   ring(pos, radius, life = 0.45, color = null) {
+    // no flat circles floating in the air: every shockwave lands on the ground under the effect, as
+    // three broken crescents racing outward (arcs.js), tinted with the effect's colour
+    if (this.groundShock) {
+      const c = color || { r: 3, g: 1.3, b: 0.4 };
+      const k = 0.55 / Math.max(1, c.r, c.g, c.b);
+      const gy = groundH(pos.x, pos.z);
+      if (pos.y - gy > 4) return; // high in the air: nothing on the ground to shake
+      this.groundShock({ x: pos.x, y: gy, z: pos.z }, Math.max(0.6, radius * 0.5), { dur: Math.max(0.3, life), grow: 1.3, ink: 0,
+        core: [Math.min(1.6, c.r * k * 2.2), Math.min(1.6, c.g * k * 2.2), Math.min(1.6, c.b * k * 2.2)], edge: [c.r * k, c.g * k, c.b * k] });
+      return;
+    }
     const m = this.rings.find((x) => !x.visible) || this.rings[0];
     m.position.set(pos.x, pos.y + 0.15, pos.z); m.visible = true; m.userData.t = 0; m.userData.life = life; m.userData.r = radius;
     if (color) m.material.color.copy(color); else m.material.color.setRGB(3, 1.3, 0.4);
