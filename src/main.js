@@ -161,6 +161,7 @@ class App {
     onAdminChange(() => {
       syncAdminPerks();
       this.lobby.refreshAccess();
+      this.lobby.renderMotd();
       if (isOwner()) this.lobby.showAdminBadge(() => this.admin.open()); else this.lobby.hideAdminBadge();
     });
     initAdmin().then(() => { this.adminDir = new AdminDirectory(this.pm); this.adminDir.start(); });
@@ -414,7 +415,7 @@ class App {
     this.lastT = t;
     this._dynRes(dt);
     if (this.match) {
-      this.match.update(dt);
+      this.match.update(dt * (this.match.cfg.mode === 'practice' ? (this.timeScale || 1) : 1)); // owner slow-mo: practice only
       if (this.match) { this.touch.update(this.match); this.match.render(); }
     } else {
       this.lobbyScene.update(dt);

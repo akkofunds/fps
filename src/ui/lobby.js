@@ -1,6 +1,7 @@
 import { $, el, show, toast } from './dom.js';
 import { ICONS, ABILITY_ICON } from './icons.js';
 import { isAdmin } from './admin.js';
+import { isPublicMage, globalCfg } from '../core/adminAccess.js';
 import { myToken, maskToken } from '../core/adminAccess.js';
 import { MAGES as MAGE_DEFS, mageOf } from '../game/mages.js';
 import { parseTag, sanitizeName, randomTag, saveIdentity, loadRecent } from '../core/storage.js';
@@ -38,6 +39,7 @@ export class Lobby {
     this._bind();
     this.renderParty(); this.renderSocial(); this.renderMages(); this.renderCareer();
     this.setMode('ffa');
+    this.renderMotd();
   }
 
   _bind() {
@@ -285,7 +287,7 @@ export class Lobby {
 
   // ---------------------------------------------------------------- mages + career
   // Meteora is reserved for the unlocked admin client
-  canUse(id) { const m = MAGES.find((x) => x.id === id); return !!m && m.open && (!m.admin || isAdmin()); }
+  canUse(id) { const m = MAGES.find((x) => x.id === id); return !!m && m.open && (!m.admin || isAdmin() || isPublicMage(id)); }
   // re-check after the admin unlocks / locks
   refreshAccess() { if (!this.canUse(this.mage)) this.selectMage('pyro'); this.renderMages(); }
 
@@ -382,6 +384,15 @@ export class Lobby {
       hist.appendChild(r);
     }
     c.appendChild(hist);
+  }
+
+  // the owner's announcement (signed, travels with the admin list to every player)
+  renderMotd() {
+    let m = document.getElementById('motd');
+    if (!m) { m = el('div', 'motd mb-plate'); m.id = 'motd'; $('tabPlay').appendChild(m); }
+    const t = globalCfg().motd;
+    m.textContent = t; m.classList.toggle('hidden', !t);
+    if (t && t !== this._motd) { this._motd = t; toast(`📣 ${t}`, 6000); }
   }
 
   showAdminBadge(open) { const b = $('adminBadge'); b.classList.remove('hidden'); b.onclick = open; }
