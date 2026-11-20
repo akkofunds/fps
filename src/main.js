@@ -106,6 +106,9 @@ class App {
     window.addEventListener('pointerdown', unlock, { capture: true });
     window.addEventListener('keydown', unlock, { capture: true });
     this._bindMatchUi();
+    // the GPU dropped the WebGL context (driver reset, memory pressure after long sessions): the
+    // screen would stay blank, so reload cleanly instead
+    this.canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); toast('Graphics reset by the browser — reloading…', 3000); setTimeout(() => location.reload(), 1500); });
     this.lastT = performance.now() / 1000;
     this._loop = (t) => this.loop(t);
     this.boot();

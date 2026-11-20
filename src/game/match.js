@@ -81,7 +81,17 @@ export class Match {
     this._ready = false; this._queue = [];
     if (isHost) {
       this._offs = [
-        net.on('msg', (pid, msg) => { if (this._ready) { const e = this.byId.get(pid); if (e) this.hostHandle(e, msg); } else this._queue.push(['h', pid, msg]); }),
+        net.on('msg', (pid, msg) => {
+          if (!this._ready) { this._queue.push(['h', pid, msg]); return; }
+          let e = this.byId.get(pid);
+          // a player the host lost track of asks to be spawned: add them from the session roster
+          if (!e && msg && msg.t === 'needSpawn' && this.cfg.queue) {
+            const h = (this.app.session.humans || []).find((x) => x.id === pid);
+            if (h) { this.hostAddPlayer({ ...h }); e = this.byId.get(pid); }
+            return;
+          }
+          if (e) this.hostHandle(e, msg);
+        }),
         net.on('leave', (pid) => { if (this._ready) this.onLeave(pid); else this._queue.push(['l', pid]); }),
       ];
     } else {
@@ -206,16 +216,38 @@ export class Match {
     const e = this._makeEnt(p);
     this.players.push(p);
     this.net.broadcast({ t: 'join', p }, p.id);
-    // catch the newcomer up: where everyone is, the phase, the board
-    for (const o of this.ents.values()) {
-      if (o === e || !o.alive) continue;
-      const pos = o.isLocal ? this.body.pos : o.pos;
-      this.net.send(p.id, { t: 'spawn', n: o.n, x: pos.x, y: pos.y, z: pos.z, yaw: o.isLocal ? this.body.yaw : o.yaw, quiet: 1 });
-    }
-    this.net.send(p.id, { t: 'phase', p: this.rules.phase, tl: 0 });
+    this._catchUp(p.id, e);
     this.rules.spawn(e);
     this.rules.sendBoard();
     this.app.chat.system(`${p.name} joined the ${this.mode.quickplay ? 'match' : 'lobby'}.`);
+  }
+
+  // Never leave a client standing in an empty world: if the host's spawn hasn't arrived a few
+  // seconds after loading in, ask for it (again and again); if the host stops talking entirely, or
+  // we still aren't in after a long while, go back to the queue instead of hanging.
+  _joinWatchdog(dt) {
+    if (this.ended) return;
+    this._hostQuiet = (this._hostQuiet || 0) + dt;
+    if (this._hostQuiet > 12) { this.app.leaveMatch('Lost contact with the match host — searching again…', { requeue: !!this.cfg.queue }); return; }
+    if (this._spawned) return;
+    this._askT = (this._askT || 0) - dt;
+    if (this.time > 3 && this._askT <= 0) {
+      this._askT = 2.5;
+      const me = this.local;
+      this.net.send({ t: 'needSpawn', p: { id: me.id, name: me.name, tag: me.tag, mage: me.mage } });
+    }
+    if (this.time > 20) this.app.leaveMatch('Could not join the match — searching again…', { requeue: !!this.cfg.queue });
+  }
+
+  // catch a (re)joining player up: where everyone else is, the phase
+  _catchUp(pid, e) {
+    for (const o of this.ents.values()) {
+      if (o === e || !o.alive) continue;
+      const pos = o.isLocal ? this.body.pos : o.pos;
+      this.net.send(pid, { t: 'spawn', n: o.n, x: pos.x, y: pos.y, z: pos.z, yaw: o.isLocal ? this.body.yaw : o.yaw, quiet: 1 });
+    }
+    this.net.send(pid, { t: 'phase', p: this.rules.phase, tl: Math.max(0, this.rules.phaseEnd - this.rules.now) });
+    this.rules.sendBoard();
   }
 
   _placeCamera() {
@@ -381,6 +413,38 @@ export class Match {
       }
       case 'skySlam': { const c = new THREE.Vector3().fromArray(d.c); this.fx.skySlam(c); this.sound('slam', c, 1, 60); if (!local) this.fx.shake(Math.max(0, 0.4 - this.local.pos.distanceTo(c) * 0.02)); break; }
       case 'nullCast': { this.fx.nullCast((k, out) => e.view.weaponTip(out, k)); this.sound('slash', e.pos, 0.6, 25); break; }
+      // ---- Kine Slayer v2: thrown spear, whirlwind, world-cutting ultimate
+      case 'spearThrow': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3().fromArray(d.d).normalize();
+        if (e.view) e.view.setWeaponVisible(false);
+        if (e.spearFx) e.spearFx.dispose();
+        e.spearFx = this.fx.flyingSpear(o, dir, 48);
+        if (!local) this.sound('slash', o, 0.9, 30);
+        break;
+      }
+      case 'spearStick': { if (e.spearFx) e.spearFx.stick(new THREE.Vector3().fromArray(d.p)); this.sound('slashHit', tmpV.fromArray(d.p), 0.7, 30); break; }
+      case 'spearRecall': { if (e.spearFx) e.spearFx.recall(() => (e.view ? e.view.handWorld('R', new THREE.Vector3()) : e.pos.clone()), 58); this.sound('blink', tmpV.fromArray(d.p), 0.8, 30); break; }
+      case 'spearCatch': { if (e.spearFx) { e.spearFx.dispose(); e.spearFx = null; } if (e.view) e.view.setWeaponVisible(true); this.sound('slash', e.pos, 0.6, 20); break; }
+      case 'whirl': {
+        const n = Number(d.n) || 5, g = Number(d.g) || 0.2;
+        this.fx.whirlwind(() => e.pos, n, g);
+        this.sound('sever', e.pos, 0.7, 40);
+        break;
+      }
+      case 'severWind': {
+        const o = new THREE.Vector3().fromArray(d.o);
+        this.fx.severWind(o, 0.65);
+        this.sound('sever', o, 1, 70);
+        if (!local && e.view) e.view.anim.play('ksSever');
+        break;
+      }
+      case 'severWave': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        this.fx.severWave(o, dir, !!d.v, 40, 60, 10);
+        this.sound('slashHeavy', o, 1.3, 90);
+        if (o.distanceTo(this.local.pos) < 30 && e !== this.local) { this.fx.shake(0.4); this.app.hud.dashImpact(); }
+        break;
+      }
       case 'severStart': { const o = new THREE.Vector3().fromArray(d.o); this.fx.severStart(o); this.sound('sever', o, 1, 60); e.dashFx = 1.0; break; }
       case 'severCut': {
         const from = new THREE.Vector3().fromArray(d.f), to = new THREE.Vector3().fromArray(d.o), p = new THREE.Vector3().fromArray(d.p);
@@ -1042,6 +1106,14 @@ export class Match {
         break;
       }
       case 'hit': if (this.rules) this.rules.onHit(e, msg); break;
+      case 'needSpawn': {
+        // a client loaded in but never got (or lost) its spawn: catch it up and spawn it now
+        if (!this.rules || e === this.local || this.ended) break;
+        this._catchUp(e.id, e);
+        if (!e.alive && !this.rules.respawnAt.has(e.n)) this.rules.spawn(e);
+        else if (e.alive) this.net.send(e.id, { t: 'spawn', n: e.n, x: e.pos.x, y: e.pos.y, z: e.pos.z, yaw: e.yaw, quiet: 1 });
+        break;
+      }
       case 'chat': {
         const text = String(msg.msg || '').slice(0, 120);
         if (!text) return;
@@ -1065,6 +1137,7 @@ export class Match {
 
   // ---------------------------------------------------------------- client side (also runs on host)
   clientHandle(msg) {
+    this._hostQuiet = 0;
     if (!msg || typeof msg !== 'object') return;
     const hud = this.app.hud;
     switch (msg.t) {
@@ -1171,6 +1244,7 @@ export class Match {
         if (!msg.quiet) { e.view.anim.play('respawn'); this.fx.spawnPillar(e.pos); e.spawnProt = this.time + 1.5; }
         e.view.setVisible(true);
         if (e === this.local) {
+          this._spawned = true;
           this.body.teleport(msg.x, msg.y, msg.z, msg.yaw);
           this.cam.yaw = msg.yaw; this.cam.pitch = -0.08; this.cam.pivotY = null;
           this.kit.reset();
@@ -1382,6 +1456,7 @@ export class Match {
   update(dt) {
     const app = this.app, input = app.input;
     this.time += dt;
+    if (!this.isHost) this._joinWatchdog(dt);
     if (this.phaseEnd) this.timeLeft = Math.max(0, this.phaseEnd - this.time);
     const st = input.poll();
     const [dx, dy] = input.consumeLook();
@@ -1575,6 +1650,7 @@ export class Match {
   sendChat(text) { this.sendToHost({ t: 'chat', msg: text }); }
 
   dispose() {
+    for (const e of this.ents.values()) if (e.spearFx) { e.spearFx.dispose(); e.spearFx = null; }
     if (this.cine) this._endCine();
     for (const off of this._offs || []) off();
     for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);

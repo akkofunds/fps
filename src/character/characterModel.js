@@ -127,10 +127,16 @@ export class MageInstance {
   }
 
   setVisible(v) { this.root.visible = v; }
+  // show / hide a hand-held weapon (the Kine Slayer's spear while it is thrown)
+  setWeaponVisible(on) {
+    this._weaponHidden = !on;
+    for (const m of this.meshes) if (/spear/i.test(m.name)) m.visible = on && (!m.userData.outline || this._outl !== false);
+  }
+
   setOutlines(on) {
     if (this._outl === on) return;
     this._outl = on;
-    for (const m of this.meshes) if (m.userData.outline) m.visible = on;
+    for (const m of this.meshes) if (m.userData.outline) m.visible = on && !(this._weaponHidden && /spear/i.test(m.name));
   }
 
   // swap to the simplified meshes (far away, or always on Low)

@@ -63,6 +63,8 @@ const ACTIONS = {
   ksLeap: { clip: C.KS_LEAP, in: 0.04, out: 0.15, aimOff: true },
   ksDive: { clip: C.KS_DIVE, in: 0.08, out: 0.1, aimOff: true },
   ksLand: { clip: C.KS_LAND, in: 0.02, out: 0.18, aimOff: true },
+  ksWhirl: { clip: C.KS_WHIRL, in: 0.05, out: 0.15, aimOff: true },
+  ksSever: { clip: C.KS_SEVER, in: 0.06, out: 0.2, aimOff: true },
   // getting comboed: alternating staggers, and the finisher's launch
   staggerA: { clip: C.STAGGER_A, in: 0.02, out: 0.14, aimOff: true },
   staggerB: { clip: C.STAGGER_B, in: 0.02, out: 0.14, aimOff: true },
@@ -86,6 +88,8 @@ const CASTS = {
   jabL: { clip: C.JAB_L, in: 0.02, out: 0.08 },
   gBlue: { clip: C.G_BLUE, in: 0.04, out: 0.14 },
   gRed: { clip: C.G_RED, in: 0.04, out: 0.16 },
+  ksThrow: { clip: C.KS_THROW, in: 0.04, out: 0.18 },
+  ksCatch: { clip: C.KS_CATCH, in: 0.03, out: 0.15 },
   fidgetP: { clip: C.FIDGET_P, in: 0.3, out: 0.4, fidget: true },
   fidgetM: { clip: C.FIDGET_M, in: 0.3, out: 0.4, fidget: true },
 };

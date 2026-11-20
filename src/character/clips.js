@@ -1033,3 +1033,46 @@ export const KS_LAND = compileClip([
   { t: 0.3, ease: 'linear', hip: [0, -0.4, 0], ik: KS_WIDE, b: { ...KS_LAND_POSE, spine: [24, 0, 0] } },
   { t: 0.62, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
 ]);
+
+// ---- Kine Slayer v2
+// E — Spear Throw (upper body): turn the shoulder back, then hurl it overhand and follow through
+const KS_UPPER_GUARD = { spine: [6, -4, 0], chest: [4, -6, 0], upperArmL: [-46, 0, -6], foreArmL: [-84, 0, 0], upperArmR: [-10, 0, 22], foreArmR: [-62, 0, 0] };
+export const KS_THROW = compileClip([
+  { t: 0, b: KS_UPPER_GUARD },
+  { t: 0.14, ease: 'out', b: { spine: [-4, -18, 0], chest: [-6, -26, 0], neck: [0, 18, 0], head: [-4, 22, 0], upperArmR: [28, 0, 52], foreArmR: [-96, 0, 0], handR: [0, 70, 0], upperArmL: [-80, 0, 18], foreArmL: [-20, 0, 0] } },
+  { t: 0.2, ease: 'in', b: { spine: [12, 14, 0], chest: [8, 22, 0], neck: [0, -16, 0], head: [-6, -18, 0], upperArmR: [-150, 0, 12], foreArmR: [-6, 0, 0], handR: [0, 80, 0], upperArmL: [10, 0, 30], foreArmL: [-40, 0, 0] } },
+  { t: 0.32, ease: 'out', b: { spine: [18, 20, 0], chest: [10, 26, 0], upperArmR: [-58, 0, -32], foreArmR: [-14, 0, 0], handR: [0, 30, 0], upperArmL: [14, 0, 30], foreArmL: [-40, 0, 0] } },
+  { t: 0.6, ease: 'smooth', b: { spine: [4, 0, 0], upperArmR: [-8, 0, 14], foreArmR: [-30, 0, 0], upperArmL: [-30, 0, -4], foreArmL: [-70, 0, 0] } },
+]);
+// E again — the catch: open hand out front, the spear smacks into it, back to guard
+export const KS_CATCH = compileClip([
+  { t: 0, b: { upperArmR: [-8, 0, 14], foreArmR: [-30, 0, 0] } },
+  { t: 0.1, ease: 'out', b: { spine: [2, 8, 0], chest: [2, 10, 0], upperArmR: [-82, 0, 26], foreArmR: [-8, 0, 0], handR: [-20, 0, 0] } },
+  { t: 0.2, ease: 'out', b: { spine: [-4, 12, 0], chest: [-4, 14, 0], upperArmR: [-62, 0, 34], foreArmR: [-50, 0, 0], handR: [10, 0, 0] } },
+  { t: 0.45, ease: 'smooth', b: KS_UPPER_GUARD },
+]);
+// V — Severing Whirlwind: spear held straight out, the whole body spinning on the spot
+const KS_SPIN = { spine: [8, 0, 0], chest: [4, 0, 0], neck: [-6, 0, 0], head: [-8, 0, 0], upperArmR: [-90, 0, 74], foreArmR: [-4, 0, 0], handR: [0, 80, 0], upperArmL: [-40, 0, 64], foreArmL: [-30, 0, 0],
+  upperLegL: [-26, 0, 10], lowerLegL: [40, 0, 0], upperLegR: [-14, 0, 10], lowerLegR: [34, 0, 0] };
+export const KS_WHIRL = compileClip([
+  { t: 0, hip: [0, -0.08, 0], b: { ...KS_SPIN, hips: [6, 0, 0] } },
+  ...Array.from({ length: 9 }, (_, i) => ({ t: 0.07 + i * 0.125, ease: 'linear', hip: [0, -0.16, 0], b: { ...KS_SPIN, hips: [6, -120 * (i + 1), 0] } })),
+  { t: 1.3, ease: 'smooth', hip: [0, -0.06, 0], b: { hips: [6, -1080, 0], spine: [10, -4, 0], upperArmR: [-10, 0, 22], foreArmR: [-62, 0, 0], upperArmL: [-46, 0, -6], foreArmL: [-84, 0, 0] } },
+]);
+// X — Heavenly Severance: sink into a deep crouch with the spear drawn far back… a huge flat cut
+// across the whole field, then up overhead and a vertical one down the same line
+const KS_SV_WIND = { hips: [22, -40, 0], spine: [24, -22, 0], chest: [10, -20, 0], neck: [-12, 26, 0], head: [-14, 30, 0], upperArmR: [24, 0, 46], foreArmR: [-56, 0, 0], handR: [0, 70, 0], upperArmL: [-60, 0, 30], foreArmL: [-40, 0, 0] };
+const KS_SV_FLAT = { hips: [8, 44, 0], spine: [12, 30, 0], chest: [8, 40, 0], neck: [0, -40, 0], head: [-6, -44, 0], upperArmR: [-94, 0, 74], foreArmR: [-4, 0, 0], handR: [0, 40, 0], upperArmL: [-30, 0, 40], foreArmL: [-40, 0, 0] };
+const KS_SV_UP = { hips: [-6, 10, 0], spine: [-10, 8, 0], chest: [-6, 8, 0], upperArmR: [-172, 0, 12], foreArmR: [-10, 0, 0], handR: [0, 30, 0], upperArmL: [-150, 0, 20], foreArmL: [-20, 0, 0] };
+const KS_SV_DOWN = { hips: [24, 6, 0], spine: [30, 4, 0], chest: [10, 4, 0], neck: [-18, 0, 0], head: [-20, 0, 0], upperArmR: [-50, 0, -6], foreArmR: [-8, 0, 0], handR: [0, 80, 0], upperArmL: [-40, 0, 20], foreArmL: [-20, 0, 0] };
+const KS_SV_FEET = { L: [0.28, 0, 0.3, -20], R: [-0.28, 0, -0.32, 30] };
+export const KS_SEVER = compileClip([
+  { t: 0, hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+  { t: 0.22, ease: 'out', hip: [0, -0.4, -0.06], ik: KS_SV_FEET, b: KS_SV_WIND },
+  { t: 0.6, ease: 'linear', hip: [0, -0.42, -0.08], ik: KS_SV_FEET, b: { ...KS_SV_WIND, spine: [26, -24, 0] } },
+  { t: 0.68, ease: 'in', hip: [0, -0.3, 0.12], ik: KS_SV_FEET, b: KS_SV_FLAT },
+  { t: 0.84, ease: 'out', hip: [0, -0.18, 0.08], ik: KS_SV_FEET, b: KS_SV_UP },
+  { t: 1.05, ease: 'in', hip: [0, -0.38, 0.12], ik: KS_SV_FEET, b: KS_SV_DOWN },
+  { t: 1.3, ease: 'linear', hip: [0, -0.38, 0.12], ik: KS_SV_FEET, b: { ...KS_SV_DOWN, spine: [28, 4, 0] } },
+  { t: 1.7, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);
