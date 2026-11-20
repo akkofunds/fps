@@ -112,6 +112,11 @@ Object.assign(Fx.prototype, {
   // dash (exactly as in PR 4): an afterimage streak of flame/arcane wisps along the path (per frame while dashing)
   dashStreak(p, v, mage) {
     const arc = mage === 'meteora', lim = mage === 'sorcerer';
+    if (mage === 'kineslayer') {
+      // no energy: just air torn apart behind him
+      for (let i = 0; i < 4; i++) this.fire.emit(p.x + (R() - 0.5) * 0.4, p.y + 0.15 + R() * 1.6, p.z + (R() - 0.5) * 0.4, -v.x * 0.15 + (R() - 0.5) * 0.4, (R() - 0.5) * 0.4, -v.z * 0.15 + (R() - 0.5) * 0.4, 0.18 + R() * 0.12, 0.05, 0.02, [1.3, 1.4, 1.5, 0.5], [0.7, 0.75, 0.85, 0], 3, 0);
+      return;
+    }
     for (let i = 0; i < 5; i++) {
       const h = 0.15 + R() * 1.5;
       const c0 = lim ? (R() < 0.4 ? [2.4, 3.0, 3.8, 1] : [0.5, 1.5, 3.6, 1]) : arc ? (R() < 0.4 ? [3.2, 1.9, 0.6, 1] : [3.0, 0.5, 0.35, 1]) : (R() < 0.35 ? WHITE : FLAME);
@@ -120,6 +125,11 @@ Object.assign(Fx.prototype, {
   },
   dashBurst(p, dir, mage) {
     const arc = mage === 'meteora', lim = mage === 'sorcerer';
+    if (mage === 'kineslayer') {
+      for (let i = 0; i < 10; i++) this.smoke.emit(p.x, p.y + 0.1, p.z, (R() - 0.5) * 3 - dir.x * 3, 0.4 + R() * 0.5, (R() - 0.5) * 3 - dir.z * 3, 0.5, 0.3, 1.1, [0.5, 0.47, 0.42, 0.45], [0.58, 0.55, 0.5, 0], 3, 0.2);
+      this.ring(p, 1.5, 0.2, new THREE.Color(1.6, 1.7, 1.9));
+      return;
+    }
     for (let i = 0; i < 26; i++) {
       const a = Math.atan2(-dir.z, -dir.x) + (R() - 0.5) * 1.8, sp = 3 + R() * 6;
       this.fire.emit(p.x, p.y + 0.3 + R() * 1.2, p.z, Math.cos(a) * sp, R() * 2, Math.sin(a) * sp, 0.2 + R() * 0.2, 0.35, 0.04, lim ? [0.6, 1.6, 3.8, 1] : arc ? [3.0, 0.5, 0.35, 1] : HOT, lim ? [0.05, 0.1, 0.4, 0] : DARK, 4, 0);

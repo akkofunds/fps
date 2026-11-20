@@ -9,6 +9,7 @@ import '../fx/novaStage.js';
 import '../fx/frost.js';
 import '../fx/limitless.js';
 import '../fx/melee.js';
+import '../fx/heavenly.js';
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
@@ -21,6 +22,7 @@ import { mageOf, MAGE_LIST } from './mages.js';
 import { NOVA, STARFALL } from './meteora.js';
 import { BAL, applyBalance } from './balance.js';
 import { Rules } from './rules.js';
+import { toast } from '../ui/dom.js';
 
 // One match: world, entities, local control, network sync, abilities and rendering.
 //
@@ -119,6 +121,7 @@ export class Match {
     this.cam.baseFov = app.settings.fov;
     this.mageDef = mageOf(this.local.mage);
     this.kit = new this.mageDef.Kit(this);
+    this.body.setPerk(this.mageDef.perk);
     this.sigils = new Map(); // owner n → [handles]
 
     if (this.isHost) this.rules = new Rules(this);
@@ -144,7 +147,7 @@ export class Match {
     if (!g) {
       if (this.ghosts.length >= 10) return;
       const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
-      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : e.mage === 'sorcerer' ? new THREE.Color(0.6, 1.4, 3.0) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : e.mage === 'sorcerer' ? new THREE.Color(0.6, 1.4, 3.0) : e.mage === 'kineslayer' ? new THREE.Color(0.9, 0.95, 1.1) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
       for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
       inst.setLod(true);
       this.scene.add(inst.root);
@@ -244,12 +247,13 @@ export class Match {
     if (extra.kb) msg.kb = extra.kb;
     if (extra.slow) msg.slow = extra.slow;
     if (extra.stun) msg.stun = extra.stun;
+    if (extra.nul) msg.nul = 1;
     this.sendToHost(msg);
     // instant feedback (host confirms HP)
     this.app.hud.hitMarker(extra.head, dmg);
     this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
     Audio.play(extra.head ? 'head' : 'hit', 0.6);
-    if (!/^(nova|meteor|adolla|zero)/.test(ab)) this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
+    if (!/^(nova|meteor|adolla|zero|sever)/.test(ab)) this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
   }
 
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
@@ -290,15 +294,25 @@ export class Match {
       // ---------------- M1 combo (Shoto / Sorcerer)
       case 'm1': {
         const i = Number(d.i) || 0, fin = i === 3, dir = tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        if (d.s === 'spear') {
+          this.fx.slashSwing((k, out) => e.view.weaponTip(out, k), dir.clone(), i, Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : e.pos.clone());
+          if (!local) this.sound('slash', e.pos, 0.5, 22);
+          break;
+        }
         const getP = fin ? (out) => e.view.rig.bones[20].getWorldPosition(out) : (out) => e.view.palmWorld(i === 1 ? 'R' : 'L', out);
-        this.fx.punchSwing(getP, dir.clone(), d.s, i);
+        this.fx.punchSwing(getP, dir.clone(), d.s, i, Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : e.pos.clone());
         if (!local) this.sound(fin ? 'kick' : 'swing', e.pos, 0.5, 22);
         break;
       }
       case 'm1hit': {
         const p = new THREE.Vector3().fromArray(d.p), i = Number(d.i) || 0;
-        this.fx.punchImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1), d.s, i === 3);
-        this.sound(i === 3 ? 'punchHeavy' : 'punchHit', p, i === 3 ? 1 : 0.7, 30);
+        if (d.s === 'spear') {
+          this.fx.slashImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).clone(), i === 3);
+          this.sound(i === 3 ? 'slashHeavy' : 'slashHit', p, i === 3 ? 1 : 0.7, 30);
+        } else {
+          this.fx.punchImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1), d.s, i === 3);
+          this.sound(i === 3 ? 'punchHeavy' : 'punchHit', p, i === 3 ? 1 : 0.7, 30);
+        }
         // hit-stop on both fighters, and the victim reels (alternating sides) or is launched
         const fin = i === 3;
         if (e.view) e.view.anim.hitStop(fin ? 0.1 : 0.055);
@@ -308,6 +322,46 @@ export class Match {
           v.view.anim.hitStop(fin ? 0.12 : 0.07);
           if (v === this.local) this.fx.shake(fin ? 0.35 : 0.12);
         }
+        break;
+      }
+      // ---------------- Kine Slayer
+      case 'flash': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        this.fx.flashStep(o, dir, Math.min(30, Number(d.l) || 0), !!d.big);
+        e.dashFx = 0.22;
+        if (!local) this.sound('blink', o, 0.9, 30);
+        break;
+      }
+      case 'ksHit': case 'nullHit': {
+        const p = new THREE.Vector3().fromArray(d.p), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        const nul = d.ab === 'nullHit';
+        if (nul) { this.fx.nullHit(p, dir); this.sound('nullify', p, 1, 40); }
+        else { this.fx.slashImpact(p, dir, !!d.h); this.sound(d.h ? 'slashHeavy' : 'slashHit', p, 0.8, 30); }
+        if (e.view) e.view.anim.hitStop(nul ? 0.1 : 0.05);
+        const v = this.ents.get(d.v);
+        if (v && v.alive && v.view && v !== e) { v.view.anim.play(nul || d.h ? 'launched' : 'stagger'); v.view.anim.hitStop(0.07); if (v === this.local) this.fx.shake(nul ? 0.4 : 0.15); }
+        break;
+      }
+      case 'skyLeap': { const o = new THREE.Vector3().fromArray(d.o); this.fx.skyLeap(o); this.sound('leapUp', o, 1, 40); e.dashFx = 0.3; break; }
+      case 'skyDive': {
+        const o = new THREE.Vector3().fromArray(d.o), c = new THREE.Vector3().fromArray(d.c);
+        this.fx.skyDive(o, c); this.sound('dive', o, 0.9, 40); e.dashFx = 0.5;
+        break;
+      }
+      case 'skySlam': { const c = new THREE.Vector3().fromArray(d.c); this.fx.skySlam(c); this.sound('slam', c, 1, 60); if (!local) this.fx.shake(Math.max(0, 0.4 - this.local.pos.distanceTo(c) * 0.02)); break; }
+      case 'nullCast': { this.fx.nullCast((k, out) => e.view.weaponTip(out, k)); this.sound('slash', e.pos, 0.6, 25); break; }
+      case 'severStart': { const o = new THREE.Vector3().fromArray(d.o); this.fx.severStart(o); this.sound('sever', o, 1, 60); e.dashFx = 1.0; break; }
+      case 'severCut': {
+        const from = new THREE.Vector3().fromArray(d.f), to = new THREE.Vector3().fromArray(d.o), p = new THREE.Vector3().fromArray(d.p);
+        const dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        this.fx.severCut(from, to, p, dir, !!d.fin);
+        this.sound(d.fin ? 'slashHeavy' : 'slashHit', p, 1, 45);
+        this.sound('blink', to, 0.5, 30);
+        e.dashFx = Math.max(e.dashFx || 0, 0.12);
+        if (!local && e.view) { e.view.anim.play(d.fin ? 'ksD' : ['ksA', 'ksB', 'ksC'][(Number(d.i) || 0) % 3]); }
+        if (e.view) e.view.anim.hitStop(d.fin ? 0.12 : 0.05);
+        const v = this.ents.get(d.v);
+        if (v && v.alive && v.view) { v.view.anim.play(d.fin ? 'launched' : 'stagger'); v.view.anim.hitStop(d.fin ? 0.14 : 0.06); if (v === this.local) { this.fx.shake(d.fin ? 0.5 : 0.18); if (d.fin) this.app.hud.dashImpact(); } }
         break;
       }
       // ---------------- Sorcerer
@@ -1028,7 +1082,17 @@ export class Match {
         if (!e) return;
         const s = Math.max(0, Math.min(1.2, Number(msg.s) || 0));
         e.stunT = Math.max(e.stunT || 0, s);
-        if (e === this.local) { this.stunT = Math.max(this.stunT || 0, s); this.body.locked = Math.max(this.body.locked, s); this.body.dashT = 0; }
+        if (e === this.local) {
+          this.stunT = Math.max(this.stunT || 0, s); this.body.locked = Math.max(this.body.locked, s); this.body.dashT = 0;
+          // the Inverted Spear of Heaven: whatever technique you were winding up is cancelled
+          if (msg.nul && this.kit) {
+            this.kit.pending.length = 0; this.kit.busy = 0;
+            this.body.slow = 1; this.body.lungeT = 0;
+            if (this.kit.sweep) this.kit.sweep = null;
+            if (this.kit.sky) this.kit.sky = null;
+            toast('TECHNIQUE NULLIFIED', 1600);
+          }
+        }
         break;
       }
       case 'slow': {
@@ -1351,6 +1415,7 @@ export class Match {
         if (e.leapT > 0) { e.leapT -= dt; if (e.vel.y > 0 || e.leapT > 0.5) { this.fx.jet(v.handWorld('R', tmpV)); this.fx.jet(v.handWorld('L', tmpV)); } }
         if (e.mage === 'meteora') { if (Math.random() < 0.35) this.fx.staffGlow(v.staffTip(tmpV)); }
         else if (e.mage === 'sorcerer') { if (v.root.visible) this.fx.sixEyes(v.head.getWorldPosition(tmpV).add(tmpV2.set(Math.sin(e.yaw) * 0.09, 0.08, Math.cos(e.yaw) * 0.09))); }
+        else if (e.mage === 'kineslayer') { /* no cursed energy: nothing glows on him */ }
         else {
           // Shoto: fire from the left hand, frost from the right
           if (Math.random() < 0.5) this.fx.palmFlame(v.palmWorld('L', tmpV), 0.7);

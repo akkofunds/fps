@@ -6,7 +6,7 @@ import { MeleeCombo } from './melee.js';
 
 // SORCERER — the strongest. Limitless: space itself bends around him.
 //   LMB Cursed Flick · E Lapse: Blue · C Reversal: Red · V Hollow Purple
-//   X Domain Expansion: Unlimited Void (admin-only character)
+//   X Domain Expansion: Unlimited Void
 export const SORCERER = {
   id: 'sorcerer',
   name: 'SORCERER',
@@ -18,20 +18,20 @@ export const SORCERER = {
     { key: 'LMB', id: 'flick', name: 'Cursed Strikes', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick) charged with cursed energy. Every hit stuns so the next one connects, each swing lunges you onto the target, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Blink Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Press jump again in the air to double jump.' },
     { key: 'E', id: 'blue', name: 'Lapse: Blue', cd: 9, desc: 'Create a point of attraction where you aim. Everything nearby is dragged into it and ground down, then it collapses.' },
-    { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (46 + splash).' },
-    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 18, desc: 'The full Hollow Purple: focus, draw out Blue and Red in each hand, bring them together into imaginary mass and release it, a huge sphere that tears straight through everything in its path (120 damage). A long, planted cast.' },
-    { key: 'X', id: 'domain', name: 'Domain Expansion: Unlimited Void', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Expand your domain. Everyone caught inside is trapped in the void: frozen for a moment, then slowed and dealing 40% less damage for 9 s, while your cooldowns run twice as fast.' },
+    { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (34 + splash).' },
+    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 18, desc: 'The full Hollow Purple: focus, draw out Blue and Red in each hand, bring them together into imaginary mass and release it, a huge sphere that tears straight through everything in its path (72 damage). A long, planted cast.' },
+    { key: 'X', id: 'domain', name: 'Domain Expansion: Unlimited Void', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Expand your domain. Everyone caught inside is trapped in the void: frozen for a moment, then slowed and dealing 25% less damage for 7 s, while your cooldowns run 50% faster.' },
   ],
 };
 
 export const FLICK = { cd: 0.3 };
-export const BLUE = { range: 32, delay: 0.22, life: 1.9, pullR: 9, crushR: 3.4, pull: 24, tick: 0.3, tickDmg: 6, implode: 22 };
-export const RED = { charge: 0.36, radius: 3.8, splash: 32, minSplash: 12, kb: 15 };
+export const BLUE = { range: 32, delay: 0.22, life: 1.9, pullR: 9, crushR: 3.4, pull: 24, tick: 0.3, tickDmg: 4, implode: 16 };
+export const RED = { charge: 0.36, radius: 3.8, splash: 20, minSplash: 8, kb: 15 };
 // the model's own Hollow Purple animation at its real speed (source 6.5 s → 13.1 s): Blue and Red
 // appear at the hands at 4.5 s (source 11.0), converge, the purple mass grows, release at 6.4 s;
 // it travels at the source's speed (~16 m/s)
-export const PURPLE = { charge: 6.4, orbsAt: 4.5, front: 1.5, height: 1.35, spread: 0.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 120 };
-export const VOID = { cine: 5.6, radius: 30, dur: 9, enemyDmg: 0.6, enemySlow: 0.62, cdBoost: 2, stun: 1.2, dmg: 10 };
+export const PURPLE = { charge: 6.4, orbsAt: 4.5, front: 1.5, height: 1.35, spread: 0.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 72 };
+export const VOID = { cine: 5.6, radius: 30, dur: 7, enemyDmg: 0.75, enemySlow: 0.7, cdBoost: 1.5, stun: 1.0, dmg: 8 };
 
 const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 18 };
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));

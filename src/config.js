@@ -23,8 +23,8 @@ export const MOVE = {
 };
 
 export const MAX_HP = 150;
-export const REGEN_DELAY = 5;
-export const REGEN_RATE = 14;
+export const REGEN_DELAY = 8;
+export const REGEN_RATE = 5.5;
 export const ULT_COST = 100;
 
 export const MODES = {

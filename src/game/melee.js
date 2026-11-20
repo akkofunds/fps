@@ -23,9 +23,10 @@ export const M1 = {
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
 export class MeleeCombo {
-  // style: 'frostflame' (Shoto) | 'cursed' (Sorcerer)
-  constructor(kit, style) {
-    this.k = kit; this.m = kit.m; this.style = style;
+  // style: 'frostflame' (Shoto) | 'cursed' (Sorcerer) | 'spear' (Kine Slayer); def: the string
+  // (hits / timing / reach), M1 by default
+  constructor(kit, style, def = M1) {
+    this.k = kit; this.m = kit.m; this.style = style; this.D = def;
     this.i = 0; this.cd = 0; this.last = -9;
   }
 
@@ -45,7 +46,7 @@ export class MeleeCombo {
       const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
       if (d > maxD || Math.abs(e.pos.y - p.y) > 2.2) continue;
       const dot = d > 0.01 ? (dx * fwd.x + dz * fwd.z) / d : 1;
-      if (dot < M1.cone) continue;
+      if (dot < this.D.cone) continue;
       const s = dot * 2 - d / maxD;
       if (s > bestS) { bestS = s; best = e; }
     }
@@ -54,19 +55,20 @@ export class MeleeCombo {
 
   swing() {
     const m = this.m, b = m.body, k = this.k;
-    if (m.time - this.last > M1.window) this.i = 0;
-    const idx = this.i, h = M1.hits[idx];
+    if (m.time - this.last > this.D.window) this.i = 0;
+    const idx = this.i, h = this.D.hits[idx];
     this.last = m.time;
-    this.i = (idx + 1) % M1.hits.length;
-    this.cd = h.fin ? M1.endlag : M1.gap;
+    this.i = (idx + 1) % this.D.hits.length;
+    this.cd = h.fin ? this.D.endlag : this.D.gap;
     const fwd = this._facing(new THREE.Vector3());
     // lunge onto the target in front of you (TSB-style), or a short step forward
-    const tgt = this._target(fwd, M1.seek);
+    const tgt = this._target(fwd, this.D.seek);
     if (tgt) {
       const dx = tgt.pos.x - b.pos.x, dz = tgt.pos.z - b.pos.z, d = Math.hypot(dx, dz);
       fwd.set(dx / d, 0, dz / d);
       // stop about an arm's length away (the lunge carries a little momentum past its end)
-      if (d > 1.5) b.lunge(fwd, Math.min(22, (d - 1.45) / 0.12), 0.12);
+      const stop = this.D.stop || 1.45;
+      if (d > stop + 0.05) b.lunge(fwd, Math.min(this.D.lungeMax || 22, (d - stop) / 0.12), 0.12);
     } else b.lunge(fwd, h.fin ? 9 : 5, 0.1);
     b.slow = 0.35;
     k.pending.push({ t: h.fin ? 0.5 : 0.32, fn: () => { b.slow = 1; } });
@@ -74,7 +76,7 @@ export class MeleeCombo {
     m.faceLockT = 0.5;
     const o = b.pos;
     m.castAbility({ ab: 'm1', i: idx, s: this.style, o: [o.x, o.y, o.z], d: [Math.round(fwd.x * 100) / 100, Math.round(fwd.z * 100) / 100] });
-    m.sound(h.fin ? 'kick' : 'swing', o, 0.6, 25);
+    m.sound(h.sfx || (h.fin ? 'kick' : 'swing'), o, 0.6, 25);
     // the impact frame: everyone in front of you within reach takes the hit
     k.pending.push({ t: h.at, fn: () => {
       const p = m.body.pos;
@@ -82,9 +84,9 @@ export class MeleeCombo {
       for (const e of m.ents.values()) {
         if (e === m.local || !e.alive) continue;
         const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
-        if (d > M1.range || Math.abs(e.pos.y - p.y) > 2) continue;
-        if (d > 0.4 && (dx * fwd.x + dz * fwd.z) / d < M1.cone) continue;
-        const at = tmp.set(e.pos.x - fwd.x * 0.3, e.pos.y + (h.fin ? 1.0 : 1.35), e.pos.z - fwd.z * 0.3);
+        if (d > this.D.range || Math.abs(e.pos.y - p.y) > 2) continue;
+        if (d > 0.4 && (dx * fwd.x + dz * fwd.z) / d < this.D.cone) continue;
+        const at = tmp.set(e.pos.x - fwd.x * 0.3, e.pos.y + (h.atY || (h.fin ? 1.0 : 1.35)), e.pos.z - fwd.z * 0.3);
         m.reportHit(e, h.dmg, h.fin ? 'm1f' : 'm1', { stun: h.stun, kb: [fwd.x * h.kb, h.up, fwd.z * h.kb], at: at.clone() });
         m.castAbility({ ab: 'm1hit', s: this.style, i: idx, v: e.n, p: [at.x, at.y, at.z], d: [fwd.x, fwd.z] });
         hits++;

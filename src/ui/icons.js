@@ -46,3 +46,10 @@ ICONS.domain = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="no
 Object.assign(ABILITY_ICON, { flick: ICONS.flick, blue: ICONS.blue, red: ICONS.red, redSplash: ICONS.red, purple: ICONS.purple, domain: ICONS.domain, void: ICONS.domain });
 ICONS.fist = '<svg viewBox="0 0 24 24"><path d="M6 9.5a2 2 0 0 1 2-2h1.2V6.6a1.6 1.6 0 0 1 3.2 0V7.5h.6V6.9a1.6 1.6 0 0 1 3.2 0v.7a1.6 1.6 0 0 1 2.8 1v4.6c0 3.8-2.6 6.3-6.3 6.3H11c-2.8 0-5-2.2-5-5z"/><path d="M1.5 10h3v1.4h-3zM1 13.2h3.6v1.4H1zM1.5 16.4h3v1.4h-3z" opacity=".6"/></svg>';
 Object.assign(ABILITY_ICON, { m1: ICONS.fist, m1f: ICONS.fist });
+// Kine Slayer (Inverted Spear of Heaven)
+ICONS.spear = '<svg viewBox="0 0 24 24"><path d="M19.8 2.2l-1.4 4.6 1.8.6-2.6 1.4-.6 2.2-1.5-.4-6.9 6.9 1.2 1.2-1.4 1.4-1.2-1.2-2.6 2.6-1.6-1.6 2.6-2.6-1.2-1.2 1.4-1.4 1.2 1.2 6.9-6.9-.4-1.5 2.2-.6 1.4-2.6.6 1.8z"/></svg>';
+ICONS.flash = '<svg viewBox="0 0 24 24"><path d="M2 11h9v2H2z" opacity=".35"/><path d="M5 7h8v1.6H5zM5 15.4h8V17H5z" opacity=".55"/><path d="M14 4l8 8-8 8-1.4-1.4 5.6-5.6H9v-2h9.2l-5.6-5.6z"/></svg>';
+ICONS.skyfall = '<svg viewBox="0 0 24 24"><path d="M11 2h2v12.5l3-3 1.4 1.4L12 18.3l-5.4-5.4L8 11.5l3 3z"/><path d="M2 21c2.4-1.6 5-2.4 10-2.4s7.6.8 10 2.4z"/></svg>';
+ICONS.nullify = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.6 4.2l14.2 14.2-1.4 1.4L4.2 5.6z"/><path d="M2 12l6-1.2v2.4zM22 12l-6 1.2v-2.4z" opacity=".6"/></svg>';
+ICONS.sever = '<svg viewBox="0 0 24 24"><path d="M3 4.4L4.4 3l16.6 16.6-1.4 1.4z"/><path d="M19.6 3L21 4.4 4.4 21 3 19.6z" opacity=".75"/><path d="M11 1h2v22h-2z" opacity=".45"/><path d="M1 11h22v2H1z" opacity=".3"/></svg>';
+Object.assign(ABILITY_ICON, { flash: ICONS.flash, skyfall: ICONS.skyfall, slam: ICONS.skyfall, nullify: ICONS.nullify, sever: ICONS.sever, severFin: ICONS.sever });

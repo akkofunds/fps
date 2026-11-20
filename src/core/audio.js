@@ -297,6 +297,20 @@ Object.assign(SFX, {
   punchHeavy: [1.0, (oc, o) => { click(oc, o, 0, 1, 1600); thump(oc, o, 0, 140, 34, 0.45, 1); noise(oc, o, { dur: 0.6, type: 'lowpass', f: [6000, 900, 150], env: [[0.002, 1], [0.1, 0.5], [0.6, 0]], seed: 645 }); whoosh(oc, o, 0.02, 0.4, 2400, 400, 0.6, 647); }, { reverb: 0.3, tau: 0.45, drive: 3, level: 0.95 }],
 });
 
+// Kine Slayer: steel and air. Thin, fast blade whooshes, a metallic ring on contact, and the
+// heavy displacement of something moving faster than it should
+Object.assign(SFX, {
+  slash: [0.35, (oc, o) => { whoosh(oc, o, 0, 0.16, 1400, 7200, 0.9, 701); tone(oc, o, { dur: 0.12, f: [5200, 3800], type: 'sine', env: [[0.002, 0.06], [0.12, 0]] }); }, { level: 0.55 }],
+  slashHit: [0.5, (oc, o) => { click(oc, o, 0, 1, 5200); tone(oc, o, { dur: 0.35, f: [3100, 2950], type: 'sine', env: [[0.002, 0.18], [0.35, 0]] }); noise(oc, o, { dur: 0.16, type: 'highpass', f: [2600, 1200], env: [[0.002, 0.8], [0.16, 0]], seed: 703 }); thump(oc, o, 0, 160, 70, 0.12, 0.7); }, { reverb: 0.15, tau: 0.25, drive: 1.8, level: 0.75 }],
+  slashHeavy: [1.0, (oc, o) => { click(oc, o, 0, 1, 4000); tone(oc, o, { dur: 0.7, f: [2400, 2300], type: 'sine', env: [[0.002, 0.25], [0.7, 0]] }); thump(oc, o, 0, 130, 32, 0.4, 1); noise(oc, o, { dur: 0.5, type: 'lowpass', f: [7000, 800, 150], env: [[0.002, 1], [0.1, 0.4], [0.5, 0]], seed: 705 }); whoosh(oc, o, 0, 0.3, 3000, 600, 0.6, 707); }, { reverb: 0.3, tau: 0.45, drive: 2.6, level: 0.95 }],
+  blink: [0.5, (oc, o) => { whoosh(oc, o, 0, 0.22, 400, 9000, 1, 709); click(oc, o, 0, 0.5, 3000); thump(oc, o, 0, 90, 40, 0.15, 0.5); }, { reverb: 0.1, tau: 0.2, level: 0.7 }],
+  leapUp: [0.6, (oc, o) => { thump(oc, o, 0, 110, 40, 0.25, 0.9); noise(oc, o, { dur: 0.4, type: 'lowpass', f: [2500, 300], env: [[0.002, 0.7], [0.4, 0]], seed: 711 }); whoosh(oc, o, 0.03, 0.45, 300, 2400, 0.7, 713); }, { reverb: 0.2, tau: 0.35, drive: 1.6, level: 0.8 }],
+  dive: [0.5, (oc, o) => { whoosh(oc, o, 0, 0.5, 6000, 500, 1, 715); }, { level: 0.65 }],
+  slam: [1.4, (oc, o) => { thump(oc, o, 0, 90, 26, 0.7, 1); click(oc, o, 0, 1, 2000); noise(oc, o, { dur: 1.1, type: 'lowpass', f: [5000, 600, 90], env: [[0.002, 1], [0.15, 0.5], [1.1, 0]], seed: 717 }); }, { reverb: 0.45, tau: 0.7, drive: 3, level: 1 }],
+  nullify: [1.0, (oc, o) => { tone(oc, o, { dur: 0.9, f: [880, 30], type: 'sawtooth', env: [[0.002, 0.2], [0.9, 0]] }); tone(oc, o, { dur: 0.9, f: [1320, 45], type: 'square', env: [[0.002, 0.08], [0.9, 0]] }); click(oc, o, 0, 1, 4200); noise(oc, o, { dur: 0.3, type: 'highpass', f: [5000, 1500], env: [[0.002, 0.6], [0.3, 0]], seed: 719 }); }, { reverb: 0.35, tau: 0.5, drive: 2, level: 0.85 }],
+  sever: [1.6, (oc, o) => { noise(oc, o, { dur: 1.2, f: [300, 9000], Q: 2, env: [[0.02, 0.2], [1.0, 0.6], [1.2, 0]], seed: 721 }); tone(oc, o, { dur: 1.2, f: [60, 40], type: 'sawtooth', env: [[0.05, 0.15], [1.2, 0]] }); }, { reverb: 0.3, tau: 0.5, level: 0.8 }],
+});
+
 // Sorcerer (Limitless): glassy, clean, cold — and very heavy where it counts
 Object.assign(SFX, {
   flick: [0.35, (oc, o) => { click(oc, o, 0, 0.5, 5000); tone(oc, o, { dur: 0.18, f: [2600, 1400], type: 'sine', env: [[0.002, 0.35], [0.18, 0]] }); whoosh(oc, o, 0, 0.2, 2500, 8000, 0.4, 601); }, { reverb: 0.15, tau: 0.25, level: 0.55 }],

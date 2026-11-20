@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import './arcs.js';
 
 // M1 combo VFX: a trail that follows the striking fist/foot through the swing (frost on Shoto's left
 // fist, fire on his right, both spiralling round the kick; blue-white cursed energy for the Sorcerer),
@@ -20,58 +21,74 @@ function elem(style, i, k = 0) {
   return i === 1 ? 'fire' : 'ice';
 }
 
+// per element: crescent core / edge colours (HDR so the core blooms)
+// (arcs blend normally, so colours clamp at 1: keep the ratios saturated, just past 1 for bloom)
+const ARC = {
+  ice: [[0.75, 1.3, 1.75], [0.08, 0.45, 1.05]],
+  fire: [[1.6, 0.95, 0.3], [1.0, 0.22, 0.02]],
+  cursed: [[0.8, 1.2, 1.85], [0.08, 0.28, 1.1]],
+  white: [[1.55, 1.58, 1.7], [0.55, 0.6, 0.75]],
+};
+const UP = new THREE.Vector3(0, 1, 0);
+
 Object.assign(Fx.prototype, {
-  // getP(out) → current fist / foot position; dir: flat strike direction
-  punchSwing(getP, dir, style, i) {
-    const dur = i === 3 ? 0.3 : 0.18;
+  // getP(out) → current fist / foot position; dir: flat strike direction; o: the striker's feet
+  punchSwing(getP, dir, style, i, o) {
+    const fin = i === 3, dur = fin ? 0.3 : 0.18;
     const p = new THREE.Vector3(), prev = new THREE.Vector3();
     let t = 0, first = true;
+    // a thin particle trail riding the fist / foot itself
     this.effects.push({ update: (dt) => {
       t += dt;
       getP(p);
       if (first) { prev.copy(p); first = false; }
-      // a ribbon of particles along the path the fist took this frame
-      const n = i === 3 ? 6 : 4;
-      for (let k = 0; k < n; k++) {
-        const u = k / n, c = C[elem(style, i, k)];
-        this.fire.emit(prev.x + (p.x - prev.x) * u, prev.y + (p.y - prev.y) * u, prev.z + (p.z - prev.z) * u, (R() - 0.5) * 0.6, (R() - 0.5) * 0.6 + (c === C.fire ? 0.6 : 0), (R() - 0.5) * 0.6, 0.14 + R() * 0.1, i === 3 ? 0.22 : 0.15, 0.02, c[0], c[1], 3, c === C.fire ? 1 : -0.5);
+      for (let k = 0; k < 3; k++) {
+        const u = k / 3, c = C[elem(style, i, k)];
+        this.fire.emit(prev.x + (p.x - prev.x) * u, prev.y + (p.y - prev.y) * u, prev.z + (p.z - prev.z) * u, 0, 0, 0, 0.1, fin ? 0.12 : 0.08, 0.01, c[0], c[1], 0, 0);
       }
       prev.copy(p);
       return t < dur;
     } });
-    // a crescent "smear" of light across the front at the strike
-    const c = C[elem(style, i)];
-    setTimeout(() => {
-      getP(p);
-      const side = new THREE.Vector3(-dir.z, 0, dir.x), arc = i === 2 ? 1.3 : i === 3 ? 1.6 : 0.7;
-      for (let k = 0; k < 14; k++) {
-        const a = (k / 13 - 0.5) * arc;
-        const x = p.x + side.x * Math.sin(a) * 0.6 + dir.x * Math.cos(a) * 0.35, z = p.z + side.z * Math.sin(a) * 0.6 + dir.z * Math.cos(a) * 0.35;
-        this.fire.emit(x, p.y + (i === 3 ? Math.sin(a) * 0.4 : 0), z, dir.x * 3, 0, dir.z * 3, 0.12, 0.16, 0.03, c[0], c[1], 6, 0);
-      }
-    }, (i === 3 ? 0.15 : 0.06) * 1000);
+    if (!o) return;
+    // the crescent of the strike itself, in the plane the limb travels through
+    const F = new THREE.Vector3(dir.x, 0, dir.z).normalize(), Rt = new THREE.Vector3(-F.z, 0, F.x);
+    const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(UP, y).addScaledVector(F, z);
+    const col = ARC[style === 'cursed' ? 'cursed' : elem(style, i)];
+    const look = { core: col[0], edge: col[1], ink: 0.3 };
+    if (i === 0) this.crescent(at(1.0, 1.38, -0.1), Rt.clone().negate(), F, 1.3, 1.0, { ...look, w: 0.34, dur: 0.22, delay: 0.015 });
+    else if (i === 1) this.crescent(at(-1.0, 1.38, -0.1), Rt.clone(), F, 1.3, 1.0, { ...look, w: 0.36, dur: 0.22, delay: 0.02 });
+    else if (i === 2) {
+      this.crescent(at(0, 1.35, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 1.0, 2.4, { ...look, w: 0.46, dur: 0.26, delay: 0.05 });
+      this.crescent(at(0, 1.28, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 1.15, 2.0, { ...look, w: 0.12, dur: 0.22, ink: 0.6, alpha: 0.7, delay: 0.07 });
+    } else {
+      // roundhouse: a wide crescent from his right side round the front; Shoto's is fire and ice
+      const c2 = style === 'cursed' ? ARC.cursed : ARC.ice, c1 = style === 'cursed' ? ARC.white : ARC.fire;
+      const from = Rt.clone().addScaledVector(UP, -0.35).addScaledVector(F, -0.3);
+      this.crescent(at(0, 1.25, 0.15), from, F, 1.3, 3.1, { core: c1[0], edge: c1[1], ink: 0.35, w: 0.62, dur: 0.32, delay: 0.08 });
+      this.crescent(at(0, 1.18, 0.15), from, F, 1.5, 2.7, { core: c2[0], edge: c2[1], ink: 0.5, w: 0.22, dur: 0.3, alpha: 0.85, delay: 0.1 });
+    }
   },
 
   punchImpact(p, dir, style, heavy) {
-    const n = heavy ? 60 : 26, el = elem(style, heavy ? 3 : 0);
-    for (let k = 0; k < n; k++) {
+    const el = elem(style, heavy ? 3 : 0);
+    const tint = style === 'cursed' ? ARC.cursed : ARC[el];
+    // a dome of air-pressure arcs flaring out of the hit (no flat rings)
+    this.airBurst(p, dir, heavy, tint);
+    // sparks of the element, sprayed out the far side
+    for (let k = 0; k < (heavy ? 30 : 14); k++) {
       const c = C[elem(style, heavy ? 3 : (k % 3 ? 0 : 1), k)];
       const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = (heavy ? 7 : 4) + R() * (heavy ? 9 : 5);
-      // biased along the strike so the burst sprays out of the far side
-      this.fire.emit(p.x, p.y, p.z, Math.cos(a) * sq * sp + dir.x * sp * 0.8, u * sp * 0.7, Math.sin(a) * sq * sp + dir.z * sp * 0.8, 0.16 + R() * 0.16, heavy ? 0.24 : 0.16, 0.03, c[0], c[1], 5, 0);
+      this.fire.emit(p.x, p.y, p.z, Math.cos(a) * sq * sp + dir.x * sp, u * sp * 0.6, Math.sin(a) * sq * sp + dir.z * sp, 0.14 + R() * 0.14, heavy ? 0.14 : 0.1, 0.02, c[0], c[1], 5, 0);
     }
-    // speed lines: long thin streaks shooting straight out of the impact
-    for (let k = 0; k < (heavy ? 14 : 7); k++) {
-      const a = Math.atan2(dir.z, dir.x) + (R() - 0.5) * 1.6, v = (heavy ? 22 : 14) + R() * 8, y = (R() - 0.5) * 5;
-      this.fire.emit(p.x, p.y, p.z, Math.cos(a) * v, y, Math.sin(a) * v, 0.09, 0.09, 0.02, C.white[0], C.white[1], 2, 0);
+    // speed lines straight out of the impact
+    for (let k = 0; k < (heavy ? 12 : 6); k++) {
+      const a = Math.atan2(dir.z, dir.x) + (R() - 0.5) * 1.2, v = (heavy ? 24 : 15) + R() * 8, y = (R() - 0.5) * 4;
+      this.fire.emit(p.x, p.y, p.z, Math.cos(a) * v, y, Math.sin(a) * v, 0.08, 0.07, 0.02, C.white[0], C.white[1], 2, 0);
     }
-    this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.08, heavy ? 1.6 : 0.8, heavy ? 2.6 : 1.3, C.white[0], C[el][0], 0, 0);
-    this.ring(p, heavy ? 3.2 : 1.4, heavy ? 0.32 : 0.2, new THREE.Color(...C[el][0].slice(0, 3)));
+    // a short white flash at the contact point
+    this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.06, heavy ? 1.0 : 0.5, heavy ? 1.6 : 0.8, C.white[0], C[el][0], 0, 0);
     this.light(p, heavy ? 22 : 9, heavy ? 10 : 5, heavy ? 0.2 : 0.1, style === 'cursed' ? 0x6fb8ff : el === 'fire' ? 0xff7a2a : 0x9fd8ff);
-    if (heavy) {
-      this.ring(p, 1.8, 0.24, new THREE.Color(3.2, 3.2, 3.4));
-      for (let k = 0; k < 10; k++) { const a = R() * 6.283; this.smoke.emit(p.x, p.y - 0.8, p.z, Math.cos(a) * 4 + dir.x * 5, 0.5 + R(), Math.sin(a) * 4 + dir.z * 5, 0.6 + R() * 0.3, 0.4, 1.4, DUST0, DUST1, 2.4, 0.1); }
-    }
+    if (heavy) for (let k = 0; k < 12; k++) { const a = R() * 6.283; this.smoke.emit(p.x, p.y - 0.9, p.z, Math.cos(a) * 4 + dir.x * 6, 0.4 + R(), Math.sin(a) * 4 + dir.z * 6, 0.6 + R() * 0.3, 0.4, 1.6, DUST0, DUST1, 2.4, 0.1); }
   },
 
   // dizzy stars circling a stunned player's head (call every frame while stunned)
