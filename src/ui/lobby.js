@@ -15,7 +15,7 @@ const MODE_DESC = {
   ffa: 'Free-For-All quickplay: jump straight into a match on Sunvale and fight. No scoreboard, no kill limit, no timer — drop in, drop out, up to 8 mages.',
   duel: 'Duel: 1v1 on Sunvale. 3 lives each — lose your last one and you lose. Scoreboard on. Warm up on the map while we find your opponent.',
   custom: 'Custom: a private match for your party. Pick the kill limit and time limit, invite friends with their Name#1234 tag, then start.',
-  practice: 'Practice: a solo range on Sunvale with training dummies. Learn Pyro\'s combos — dash-cancel your casts, roll out of air dashes, and land the Meteor.',
+  practice: 'Practice: a solo range on Sunvale with training dummies. Learn your mage: string your M1s, land every ability, try your ultimate.',
 };
 const MAGES = [
   { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },
@@ -191,6 +191,21 @@ export class Lobby {
         box.appendChild(c);
       }
     });
+    // the compact party strip on the Play screen (framed slots, you in the middle)
+    const ps = $('partyStrip');
+    if (ps) {
+      ps.textContent = '';
+      ps.appendChild(el('div', 'ps-lbl', 'PARTY'));
+      for (const m of [others[0], others[2], me, others[1], others[3]]) {
+        const isMe = m === me;
+        const s = el('div', 'party-slot' + (isMe ? ' me' : '') + (m ? '' : ' empty'));
+        s.appendChild(el('b', '', m ? (m.name || '?').trim().charAt(0).toUpperCase() : '+'));
+        s.appendChild(el('span', '', m ? (isMe ? 'YOU' : m.name) : 'INVITE'));
+        if (m) { s.title = `${m.name}#${m.tag || ''}`; if (pm.inParty && pm.party.leader === m.id) s.appendChild(el('i', 'crown', '♛')); }
+        else s.onclick = () => { Audio.play('ui'); if ($('social').classList) $('social').classList.add('open'); $('inviteInput').focus(); };
+        ps.appendChild(s);
+      }
+    }
     $('partyCount').textContent = `${members.length}/${MODES.ffa.size}`;
     this._heroName();
     this._startLabel();
@@ -310,7 +325,23 @@ export class Lobby {
       else t.onclick = () => this.selectMage(m.id);
       ro.appendChild(t);
     }
+    const row = $('mageRow');
+    if (row) {
+      row.textContent = '';
+      for (const m of MAGES) {
+        const usable = this.canUse(m.id);
+        if (!m.open && row.childElementCount >= 6) continue;
+        const t = el('div', 'mage-tile' + (usable ? '' : ' locked') + (m.id === this.mage ? ' sel' : ''));
+        t.innerHTML = m.icon;
+        t.title = m.name;
+        if (!m.open) t.appendChild(el('span', 'soon', 'SOON'));
+        else if (!usable) { t.appendChild(el('span', 'soon', 'ADMIN')); t.onclick = () => toast(`${m.name} is admin-only.`); }
+        else t.onclick = () => this.selectMage(m.id);
+        row.appendChild(t);
+      }
+    }
     const D = mageOf(this.mage);
+    if ($('pickName')) { $('pickName').textContent = D.name; $('pickRole').textContent = D.role; }
     const d = $('mageDetail');
     d.textContent = '';
     d.appendChild(el('div', 'md-role', `// ${D.role}`));
