@@ -28,8 +28,12 @@ export class Body {
     this.lungeT = 0; this.lungeDir = new THREE.Vector3(); this.lungeSpeed = 0; // ability lunges (Devil's Foot)
     this.boostT = 0; // Infernal Step speed boost
     this.slowT = 0; this.slowK = 1; // slowed by enemy abilities
+    // per-character movement perks (the Kine Slayer's Heavenly Restriction)
+    this.perk = { speed: 1, airJumps: 1, dashMax: MOVE.dashCharges, dashRate: 1 };
+    this.airJumps = 0;
   }
-  teleport(x, y, z, yaw) { this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = 0; this.grounded = true; this.dashT = this.rollT = this.lungeT = this.boostT = this.slowT = 0; this.airDashed = false; this.leaping = false; this.doubleJumped = false; }
+  setPerk(p) { Object.assign(this.perk, p || {}); this.dashCharges = this.perk.dashMax; }
+  teleport(x, y, z, yaw) { this.pos.set(x, y, z); this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = 0; this.grounded = true; this.dashT = this.rollT = this.lungeT = this.boostT = this.slowT = 0; this.airDashed = false; this.leaping = false; this.doubleJumped = false; this.airJumps = 0; }
   lunge(dir, speed, time) { this.lungeDir.copy(dir).setY(0).normalize(); this.lungeSpeed = speed; this.lungeT = time; this.dashT = 0; this.rollT = 0; }
 }
 
@@ -41,8 +45,8 @@ const hv = new THREE.Vector3();
 export function stepMovement(b, cmd, dt, world, ev) {
   const g = MOVE.gravity * BAL.gravity;
   // dash charges
-  if (b.dashCharges < MOVE.dashCharges) {
-    b.dashRecharge += dt;
+  if (b.dashCharges < b.perk.dashMax) {
+    b.dashRecharge += dt * b.perk.dashRate;
     if (b.dashRecharge >= MOVE.dashRecharge * (BAL.noCooldowns ? 0.02 : BAL.cd)) { b.dashRecharge = 0; b.dashCharges++; }
   }
   b.locked = Math.max(0, b.locked - dt);
@@ -62,7 +66,7 @@ export function stepMovement(b, cmd, dt, world, ev) {
   if (b.rollT > 0 && b.rollT < MOVE.rollTime * 0.55 && (cmd.dashPressed || b.jumpBuf > 0)) b.rollT = 0;
   if (cmd.dashPressed && b.dashCharges > 0 && b.dashT <= 0 && b.rollT <= 0) {
     b.dashCharges--;
-    if (b.dashCharges < MOVE.dashCharges && b.dashRecharge <= 0) b.dashRecharge = 0.0001;
+    if (b.dashCharges < b.perk.dashMax && b.dashRecharge <= 0) b.dashRecharge = 0.0001;
     b.dashT = MOVE.dashTime;
     if (wish.lengthSq() > 0.01) b.dashDir.copy(wish).normalize(); else b.dashDir.set(sy, 0, cy);
     if (!b.grounded) b.airDashed = true;
@@ -74,7 +78,7 @@ export function stepMovement(b, cmd, dt, world, ev) {
 
   const water = world.inWater(b.pos.x, b.pos.z);
   b.water = water;
-  const maxSpeed = MOVE.run * BAL.speed * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * b.slow * (b.boostT > 0 ? 1.45 : 1) * (b.slowT > 0 ? b.slowK : 1);
+  const maxSpeed = MOVE.run * BAL.speed * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * b.slow * (b.boostT > 0 ? 1.45 : 1) * (b.slowT > 0 ? b.slowK : 1) * b.perk.speed;
 
   if (b.lungeT > 0) {
     b.lungeT -= dt;
@@ -117,9 +121,9 @@ export function stepMovement(b, cmd, dt, world, ev) {
       b.vel.y = MOVE.jump * (water > 0.4 ? 0.8 : 1);
       b.grounded = false; b.coyote = 0; b.jumpBuf = 0;
       ev('jump', {});
-    } else if (b.jumpBuf > 0 && !b.grounded && !b.doubleJumped && b.locked <= 0) {
-      b.doubleJumped = true; b.jumpBuf = 0;
-      b.vel.y = MOVE.jump * 0.95;
+    } else if (b.jumpBuf > 0 && !b.grounded && b.airJumps < b.perk.airJumps && b.locked <= 0) {
+      b.doubleJumped = true; b.jumpBuf = 0; b.airJumps++;
+      b.vel.y = MOVE.jump * (b.airJumps > 1 ? 0.88 : 0.95);
       if (wish.lengthSq() > 0.01) {
         const hs = Math.max(Math.hypot(b.vel.x, b.vel.z), maxSpeed * 0.9);
         b.vel.x = wish.x * hs; b.vel.z = wish.z * hs;
@@ -160,7 +164,7 @@ export function stepMovement(b, cmd, dt, world, ev) {
         const lx = b.rollDir.x * cy - b.rollDir.z * sy, lz = b.rollDir.x * sy + b.rollDir.z * cy;
         ev('roll', { dir: Math.atan2(lx, lz) });
       }
-      b.airDashed = false; b.leaping = false; b.doubleJumped = false;
+      b.airDashed = false; b.leaping = false; b.doubleJumped = false; b.airJumps = 0;
     }
     b.pos.y = ground; b.vel.y = Math.max(0, b.vel.y); b.grounded = true;
   } else if (wasGrounded && b.vel.y <= 0 && b.pos.y - ground < 0.42 && b.dashT <= 0) {

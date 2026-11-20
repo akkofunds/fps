@@ -929,3 +929,107 @@ export const LAUNCHED = compileClip([
   { t: 0.5, ease: 'smooth', hip: [0, 0, 0], b: LAUNCH_ARCH },
   { t: 0.85, ease: 'linear', hip: [0, 0, 0], b: { ...LAUNCH_ARCH, upperArmL: [-130, 0, 50], upperArmR: [-124, 0, 52] } },
 ]);
+
+// ================================================================== Kine Slayer (spear in the right hand, sword grip:
+// the blade comes out of the thumb side of the fist)
+// stance: low and loose, weight forward, the spear held low by the right hip, left hand open in front
+const KS_FEET = { L: [0.16, 0, 0.2, -14], R: [-0.16, 0, -0.16, 24] };
+const KS_STEP = { L: [0.16, 0, 0.36, -14], R: [-0.16, 0, -0.1, 24] };
+const KS_GUARD = {
+  hips: [6, 10, 0], spine: [10, -4, 0], chest: [4, -6, 0], neck: [-4, 4, 0], head: [-8, 6, 0],
+  upperArmL: [-46, 0, -6], foreArmL: [-84, 0, 0], handL: [-6, 0, 0],
+  upperArmR: [-10, 0, 22], foreArmR: [-62, 0, 0], handR: [0, 0, 0],
+};
+// A: forehand diagonal (high right → low left)
+const KS_A_WIND = { ...KS_GUARD, hips: [4, -10, 0], spine: [4, -14, 0], chest: [0, -18, 0], neck: [0, 14, 0], head: [-6, 16, 0], upperArmR: [-140, 0, 44], foreArmR: [-70, 0, 0], handR: [20, 0, 0] };
+const KS_A_CUT = { ...KS_GUARD, hips: [10, 18, 0], spine: [16, 18, 0], chest: [8, 22, 0], neck: [0, -18, 0], head: [-8, -20, 0], upperArmR: [-62, 0, -34], foreArmR: [-12, 0, 0], handR: [-30, 0, 0], upperArmL: [-20, 0, 30], foreArmL: [-50, 0, 0] };
+export const KS_A = compileClip([
+  { t: 0, hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+  { t: 0.05, ease: 'out', hip: [0, -0.09, -0.02], ik: KS_FEET, b: KS_A_WIND },
+  { t: 0.085, ease: 'in', hip: [0, -0.12, 0.08], ik: KS_STEP, b: KS_A_CUT },
+  { t: 0.16, ease: 'out', hip: [0, -0.13, 0.08], ik: KS_STEP, b: { ...KS_A_CUT, chest: [9, 28, 0], upperArmR: [-46, 0, -44], foreArmR: [-18, 0, 0] } },
+  { t: 0.36, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);
+// B: backhand, flat across (left → right)
+const KS_B_WIND = { ...KS_GUARD, hips: [6, 18, 0], spine: [8, 18, 0], chest: [4, 24, 0], neck: [0, -18, 0], head: [-6, -20, 0], upperArmR: [-80, 0, -48], foreArmR: [-112, 0, 0], handR: [10, 0, 0], upperArmL: [-30, 0, 20], foreArmL: [-60, 0, 0] };
+const KS_B_CUT = { ...KS_GUARD, hips: [8, -16, 0], spine: [10, -18, 0], chest: [6, -24, 0], neck: [0, 20, 0], head: [-8, 22, 0], upperArmR: [-92, 0, 56], foreArmR: [-6, 0, 0], handR: [0, 45, 0], upperArmL: [-40, 0, -10], foreArmL: [-90, 0, 0] };
+export const KS_B = compileClip([
+  { t: 0, hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+  { t: 0.05, ease: 'out', hip: [0, -0.1, 0], ik: KS_FEET, b: KS_B_WIND },
+  { t: 0.085, ease: 'in', hip: [0, -0.12, 0.07], ik: KS_STEP, b: KS_B_CUT },
+  { t: 0.15, ease: 'out', hip: [0, -0.12, 0.07], ik: KS_STEP, b: { ...KS_B_CUT, chest: [6, -30, 0], upperArmR: [-88, 0, 72] } },
+  { t: 0.36, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);
+// C: rising cut from low left up past the right shoulder, the body rising with it
+const KS_C_WIND = { ...KS_GUARD, hips: [12, 16, 0], spine: [20, 16, 0], chest: [8, 20, 0], neck: [-10, -16, 0], head: [-14, -18, 0], upperArmR: [-26, 0, -40], foreArmR: [-40, 0, 0], handR: [20, 0, 0] };
+const KS_C_CUT = { ...KS_GUARD, hips: [-2, -14, 0], spine: [-6, -16, 0], chest: [-4, -20, 0], neck: [6, 16, 0], head: [2, 18, 0], upperArmR: [-158, 0, 30], foreArmR: [-8, 0, 0], handR: [-20, 0, 0], upperArmL: [-10, 0, 40], foreArmL: [-40, 0, 0] };
+export const KS_C = compileClip([
+  { t: 0, hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+  { t: 0.06, ease: 'out', hip: [0, -0.2, 0], ik: KS_FEET, b: KS_C_WIND },
+  { t: 0.1, ease: 'in', hip: [0, -0.04, 0.06], ik: KS_STEP, b: KS_C_CUT },
+  { t: 0.18, ease: 'out', hip: [0, -0.02, 0.06], ik: KS_STEP, b: { ...KS_C_CUT, upperArmR: [-168, 0, 36] } },
+  { t: 0.42, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);
+// D (finisher) / Inverted Spear: a deep lunging thrust, the wrist bent so the blade points straight ahead
+const KS_LUNGE = { L: [0.16, 0, 0.62, -10], R: [-0.16, 0, -0.32, 30] };
+const KS_D_WIND = { ...KS_GUARD, hips: [4, -14, 0], spine: [6, -14, 0], chest: [2, -18, 0], neck: [0, 14, 0], head: [-6, 16, 0], upperArmR: [16, 0, 20], foreArmR: [-110, 0, 0], handR: [0, 50, 0] };
+const KS_D_THRUST = { hips: [14, 22, 0], spine: [16, 16, 0], chest: [8, 20, 0], upperChest: [0, 8, 0], neck: [-12, -20, 0], head: [-14, -22, 0], upperArmR: [-86, 0, 2], foreArmR: [-2, 0, 0], handR: [0, -80, 0], upperArmL: [20, 0, 30], foreArmL: [-30, 0, 0] };
+export const KS_D = compileClip([
+  { t: 0, hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+  { t: 0.07, ease: 'out', hip: [0, -0.12, -0.04], ik: KS_FEET, b: KS_D_WIND },
+  { t: 0.13, ease: 'in', hip: [0, -0.26, 0.22], ik: KS_LUNGE, b: KS_D_THRUST },
+  { t: 0.26, ease: 'linear', hip: [0, -0.26, 0.22], ik: KS_LUNGE, b: { ...KS_D_THRUST, spine: [18, 15, 0] } },
+  { t: 0.56, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);
+export const KS_THRUST = compileClip([
+  { t: 0, hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+  { t: 0.11, ease: 'out', hip: [0, -0.14, -0.06], ik: KS_FEET, b: KS_D_WIND },
+  { t: 0.17, ease: 'in', hip: [0, -0.28, 0.24], ik: KS_LUNGE, b: KS_D_THRUST },
+  { t: 0.42, ease: 'linear', hip: [0, -0.28, 0.24], ik: KS_LUNGE, b: { ...KS_D_THRUST, spine: [19, 15, 0] } },
+  { t: 0.7, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);
+// Flash Step: bent almost flat over the ground, spear trailing low behind
+const KS_RUSH = {
+  hips: [34, 0, 0], spine: [20, 0, 0], chest: [8, 0, 0], neck: [-24, 0, 0], head: [-26, 0, 0],
+  upperArmR: [50, 0, 26], foreArmR: [-24, 0, 0], handR: [0, 0, 0], upperArmL: [46, 0, 24], foreArmL: [-20, 0, 0],
+  upperLegL: [-66, 0, 4], lowerLegL: [60, 0, 0], upperLegR: [10, 0, 4], lowerLegR: [70, 0, 0], footR: [30, 0, 0],
+};
+export const KS_FLASH = compileClip([
+  { t: 0, hip: [0, -0.1, 0], b: KS_RUSH },
+  { t: 0.2, ease: 'linear', hip: [0, -0.12, 0], b: { ...KS_RUSH, hips: [36, 0, 0] } },
+  { t: 0.42, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);
+// Skyfall: crouch and spring, knees up through the climb
+const KS_TUCK = {
+  hips: [-10, 0, 0], spine: [6, 0, 0], chest: [4, 0, 0], neck: [-6, 0, 0], head: [-10, 0, 0],
+  upperLegL: [-80, 0, 6], lowerLegL: [110, 0, 0], footL: [20, 0, 0], upperLegR: [-60, 0, 6], lowerLegR: [120, 0, 0], footR: [20, 0, 0],
+  upperArmR: [-120, 0, 30], foreArmR: [-40, 0, 0], upperArmL: [-60, 0, 40], foreArmL: [-50, 0, 0],
+};
+export const KS_LEAP = compileClip([
+  { t: 0, hip: [0, -0.3, 0], ik: { L: [0.2, 0, 0.12, 0], R: [-0.2, 0, -0.1, 10] }, b: { ...KS_GUARD, hips: [20, 0, 0], spine: [20, 0, 0], upperArmR: [30, 0, 30], upperArmL: [30, 0, 30] } },
+  { t: 0.1, ease: 'out', hip: [0, 0.05, 0], b: { hips: [-6, 0, 0], spine: [-4, 0, 0], upperLegL: [-10, 0, 4], lowerLegL: [10, 0, 0], upperLegR: [6, 0, 4], lowerLegR: [20, 0, 0], footL: [-30, 0, 0], footR: [-30, 0, 0], upperArmR: [-150, 0, 20], upperArmL: [-140, 0, 24] } },
+  { t: 0.32, ease: 'smooth', hip: [0, 0.05, 0], b: KS_TUCK },
+  { t: 0.6, ease: 'linear', hip: [0, 0.05, 0], b: KS_TUCK },
+]);
+// the dive: pitched forward spear-first, legs together behind
+const KS_DIVE_POSE = {
+  hips: [62, 0, 0], spine: [12, 0, 0], chest: [6, 0, 0], neck: [-26, 0, 0], head: [-30, 0, 0],
+  upperArmR: [-150, 0, 6], foreArmR: [-10, 0, 0], handR: [0, 80, 0], upperArmL: [-40, 0, 40], foreArmL: [-60, 0, 0],
+  upperLegL: [-4, 0, 2], lowerLegL: [24, 0, 0], footL: [40, 0, 0], upperLegR: [10, 0, 2], lowerLegR: [40, 0, 0], footR: [40, 0, 0],
+};
+export const KS_DIVE = compileClip([
+  { t: 0, hip: [0, 0.05, 0], b: KS_TUCK },
+  { t: 0.14, ease: 'out', hip: [0, 0.1, 0], b: KS_DIVE_POSE },
+  { t: 1.5, ease: 'linear', hip: [0, 0.1, 0], b: KS_DIVE_POSE },
+]);
+// landing: driven into a deep crouch, spear stabbed into the ground in front
+const KS_LAND_POSE = {
+  hips: [26, 0, 0], spine: [26, 0, 0], chest: [10, 0, 0], neck: [-24, 0, 0], head: [-24, 0, 0],
+  upperArmR: [-56, 0, 6], foreArmR: [-10, 0, 0], handR: [0, 84, 0], upperArmL: [-20, 0, 50], foreArmL: [-30, 0, 0],
+};
+const KS_WIDE = { L: [0.26, 0, 0.18, -10], R: [-0.26, 0, -0.22, 20] };
+export const KS_LAND = compileClip([
+  { t: 0, hip: [0, -0.42, 0], ik: KS_WIDE, b: KS_LAND_POSE },
+  { t: 0.3, ease: 'linear', hip: [0, -0.4, 0], ik: KS_WIDE, b: { ...KS_LAND_POSE, spine: [24, 0, 0] } },
+  { t: 0.62, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
+]);

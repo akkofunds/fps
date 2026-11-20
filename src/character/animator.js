@@ -53,6 +53,16 @@ const ACTIONS = {
   m1b: { clip: C.M1_B, in: 0.025, out: 0.12, aimOff: true },
   m1c: { clip: C.M1_C, in: 0.025, out: 0.12, aimOff: true },
   m1d: { clip: C.M1_D, in: 0.03, out: 0.18, aimOff: true },
+  // Kine Slayer
+  ksA: { clip: C.KS_A, in: 0.025, out: 0.12, aimOff: true },
+  ksB: { clip: C.KS_B, in: 0.025, out: 0.12, aimOff: true },
+  ksC: { clip: C.KS_C, in: 0.025, out: 0.12, aimOff: true },
+  ksD: { clip: C.KS_D, in: 0.03, out: 0.16, aimOff: true },
+  ksThrust: { clip: C.KS_THRUST, in: 0.04, out: 0.16, aimOff: true },
+  ksFlash: { clip: C.KS_FLASH, in: 0.03, out: 0.12, aimOff: true },
+  ksLeap: { clip: C.KS_LEAP, in: 0.04, out: 0.15, aimOff: true },
+  ksDive: { clip: C.KS_DIVE, in: 0.08, out: 0.1, aimOff: true },
+  ksLand: { clip: C.KS_LAND, in: 0.02, out: 0.18, aimOff: true },
   // getting comboed: alternating staggers, and the finisher's launch
   staggerA: { clip: C.STAGGER_A, in: 0.02, out: 0.14, aimOff: true },
   staggerB: { clip: C.STAGGER_B, in: 0.02, out: 0.14, aimOff: true },

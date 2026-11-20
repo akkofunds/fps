@@ -39,7 +39,7 @@ export class Hud {
       d.appendChild(k);
       const cdv = el('div', 'cdv hidden'); d.appendChild(cdv);
       let pips = null, pct = null;
-      if (id === 'dash') { pips = el('div', 'pips'); for (let i = 0; i < MOVE.dashCharges; i++) pips.appendChild(el('i')); d.appendChild(pips); }
+      if (id === 'dash') { pips = el('div', 'pips'); for (let i = 0; i < ((this.match && this.match.body && this.match.body.perk.dashMax) || MOVE.dashCharges); i++) pips.appendChild(el('i')); d.appendChild(pips); }
       if (isUlt) { pct = el('div', 'pct', '0%'); d.appendChild(pct); }
       d.title = (kit.def.abilities.find((a) => a.id === id) || {}).name || id;
       d.dataset.id = id;
@@ -103,7 +103,7 @@ export class Hud {
       dash.last = dk;
       [...dash.pips.children].forEach((p, i) => p.classList.toggle('on', i < b.dashCharges));
       dash.d.classList.toggle('cd', b.dashCharges <= 0); dash.d.classList.toggle('ready', b.dashCharges > 0);
-      const rem = b.dashCharges < MOVE.dashCharges ? 1 - b.dashRecharge / MOVE.dashRecharge : 0;
+      const rem = b.dashCharges < b.perk.dashMax ? 1 - b.dashRecharge / MOVE.dashRecharge : 0;
       dash.d.querySelector('.sweep').style.setProperty('--p', `${b.dashCharges <= 0 ? rem * 100 : 0}%`);
       dash.cdv.classList.toggle('hidden', b.dashCharges > 0); dash.cdv.textContent = Math.ceil(rem * MOVE.dashRecharge);
     }

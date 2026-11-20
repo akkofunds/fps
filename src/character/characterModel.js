@@ -168,6 +168,18 @@ export class MageInstance {
     return this;
   }
 
+  // a point along a hand-held weapon (k = 0 at the butt, 1 at the blade tip), from the model's
+  // `weapon` extras; mages without one fall back to the right palm
+  weaponTip(out, k = 1) {
+    if (this._weapon === undefined) {
+      this._weapon = null;
+      this.model.traverse((o) => { if (o.userData && o.userData.weapon) this._weapon = { tip: new THREE.Vector3().fromArray(o.userData.weapon.tip), butt: new THREE.Vector3().fromArray(o.userData.weapon.butt) }; });
+    }
+    if (!this._weapon) return this.palmWorld('R', out);
+    out.copy(this._weapon.butt).lerp(this._weapon.tip, k);
+    return this.handR.localToWorld(out);
+  }
+
   // tip of the staff (orb end) — falls back to the right palm for mages without a staff
   staffTip(out) {
     if (!this.rig.hasProp || !this.rig.ends.prop) return this.palmWorld('R', out);
