@@ -2,7 +2,8 @@
 //
 // OWNER: signs in with the password + dog's name. Those unlock (decrypt) the owner's signing key,
 //   which is embedded here encrypted (PBKDF2 310k → AES-GCM), so the password itself is never in
-//   the code. The unlocked key is remembered on that device, so the owner signs in once.
+//   the code. The unlocked key is kept only for the current browser tab session (sign in again
+//   after closing the tab).
 // ADMINS: the owner keeps a list of player tokens (stored as SHA-256 hashes) and signs it. Every
 //   game caches the newest correctly-signed list and passes it on to other players over PeerJS
 //   (see adminDirectory.js). Nobody but the owner can make a list the games will accept.
@@ -19,6 +20,9 @@ const OWNER_KEY = 'magebreak.ownerKey';
 const subtle = globalThis.crypto && globalThis.crypto.subtle;
 
 const read = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
+// the owner's unlocked key lives only for this browser tab session: close the tab and you sign in again
+const readS = (k) => { try { return JSON.parse(sessionStorage.getItem(k) || 'null'); } catch { return null; } };
+const writeS = (k, v) => { try { if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
 const write = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignore */ } };
 const ub64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const b64 = (b) => btoa(String.fromCharCode(...new Uint8Array(b)));
@@ -85,7 +89,7 @@ export async function adoptList(L) {
 
 // ---------------------------------------------------------------- owner
 async function ownerKey() {
-  const k = read(OWNER_KEY);
+  const k = readS(OWNER_KEY);
   if (!k) return null;
   try { return await subtle.importKey('pkcs8', ub64(k), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']); } catch { return null; }
 }
@@ -95,13 +99,13 @@ export async function ownerSignIn(password, pet) {
     const base = await subtle.importKey('raw', new TextEncoder().encode(password + '\n' + String(pet).trim().toLowerCase()), 'PBKDF2', false, ['deriveKey']);
     const aes = await subtle.deriveKey({ name: 'PBKDF2', salt: ub64(OWNER.salt), iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
     const pkcs8 = await subtle.decrypt({ name: 'AES-GCM', iv: ub64(OWNER.iv) }, aes, ub64(OWNER.data));
-    write(OWNER_KEY, b64(pkcs8));
+    writeS(OWNER_KEY, b64(pkcs8));
     ownerOk = await keyMatchesOwner();
     changed();
     return ownerOk;
   } catch { return false; }
 }
-export function ownerSignOut() { write(OWNER_KEY, null); ownerOk = false; changed(); }
+export function ownerSignOut() { writeS(OWNER_KEY, null); ownerOk = false; changed(); }
 // the stored key really is the owner's: it signs a challenge that the owner's public key accepts
 async function keyMatchesOwner() {
   try {
@@ -136,7 +140,8 @@ export async function setGlobalCfg(patch) { return publish(adminList(), { ...glo
 export async function initAdmin() {
   if (!subtle) return;
   ownerOk = await keyMatchesOwner();
-  if (!ownerOk && read(OWNER_KEY)) write(OWNER_KEY, null); // not the real key: forget it
+  if (!ownerOk && readS(OWNER_KEY)) writeS(OWNER_KEY, null); // not the real key: forget it
+  write(OWNER_KEY, null); // sign-ins used to be remembered on the device for good: no longer
   const t = myToken();
   myHash = await tokenHash(t);
   write('magebreak.tokenHash', { t, h: myHash });
