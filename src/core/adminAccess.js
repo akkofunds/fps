@@ -11,7 +11,7 @@ const OWNER = {"pub":{"kty":"EC","crv":"P-256","x":"gNS9Dm5NTMDX6H5Jw1WZO2CW1CoF
 
 // Admin lists signed before this moment are ignored everywhere: the list was reset (nobody is an
 // admin until the owner adds people again). Bump to reset it again.
-const LIST_EPOCH = 1795182819183;
+const LIST_EPOCH = 1795184087324;
 
 const TOKEN_KEY = 'magebreak.token';
 const LIST_KEY = 'magebreak.adminList';
@@ -43,7 +43,7 @@ export async function tokenHash(t) { return hex(await subtle.digest('SHA-256', n
 // ---------------------------------------------------------------- state + change events
 // this device's token hash (cached so the check works synchronously at startup)
 let myHash = (() => { const c = read('magebreak.tokenHash'); try { return c && c.t === localStorage.getItem(TOKEN_KEY) ? c.h : null; } catch { return null; } })();
-let list = read(LIST_KEY); // re-verified in initAdmin()
+let list = null; // only a list that passed verification (initAdmin) is ever used
 const listeners = new Set();
 export function onAdminChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 const changed = () => { for (const fn of listeners) { try { fn(); } catch (e) { console.warn(e); } } };
