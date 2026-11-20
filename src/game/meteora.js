@@ -14,20 +14,20 @@ export const METEORA = {
   color: '#ff2f4a',
   bio: 'An archmage who devoted her whole life to a single spell. Her staff fires crimson sparks, rains small stars on her enemies and seals the ground with explosive sigils. When the chant finishes, the sky itself catches fire.',
   abilities: [
-    { key: 'LMB', id: 'spark', name: 'Crimson Spark', desc: 'Your staff fires a bolt of crimson flame: 20 damage, 30 on headshots. Every third shot in a string is a Crimson Burst that explodes on impact (24 + splash).' },
+    { key: 'LMB', id: 'spark', name: 'Crimson Spark', desc: 'Your staff fires a bolt of crimson flame: 15 damage, 22 on headshots. Every third shot in a string is a Crimson Burst that explodes on impact (20 + splash).' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land.' },
     { key: 'E', id: 'starfall', name: 'Starfall', cd: 8, desc: 'Raise your staff and call down a barrage of 5 burning stars that rain across the target area one after another.' },
-    { key: 'C', id: 'ray', name: 'Scarlet Ray', cd: 10, desc: 'Plant your feet and channel: magic circles spin up in front of your staff, then a devastating beam fires to your crosshair, piercing every enemy along its path (58 damage).' },
+    { key: 'C', id: 'ray', name: 'Scarlet Ray', cd: 10, desc: 'Plant your feet and channel: magic circles spin up in front of your staff, then a devastating beam fires to your crosshair, piercing every enemy along its path (50 damage).' },
     { key: 'V', id: 'blink', name: 'Blink', cd: 9, desc: 'Teleport up to 10 m in the direction you are moving. You leave a crimson afterimage behind that explodes a moment later.' },
-    { key: 'X', id: 'nova', name: 'Crimson Nova', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Plant your staff and chant: seven magic circles stack up over the target, a beam drives down and a catastrophic explosion devastates everything within 24 m (up to 140 damage, then falling stars and a shockwave — it never kills from full health).' },
+    { key: 'X', id: 'nova', name: 'Crimson Nova', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Plant your staff and chant: seven magic circles stack up over the target, a beam drives down and a catastrophic explosion devastates everything within 24 m (up to 98 damage, then falling stars and a shockwave — it never kills from full health).' },
   ],
 };
 
 // real time, no cutscene: same pace as Shoto's Absolute Zero-Burn (2.35 s from cast to boom)
-export const NOVA = { radius: 24, channel: 2.35, maxDmg: 104, minDmg: 55, range: 85, frags: 14, fragDmg: 16, shockDmg: 20 };
-export const RAY = { channel: 1.3, range: 90, width: 1.3, dmg: 58 };
-export const STARFALL = { count: 5, spread: 4.2, radius: 2.5, dmg: 18, minDmg: 8, first: 0.55, gap: 0.16 };
-const COOLDOWN = { spark: 0.4, starfall: 8, sigil: 11, ray: 10, blink: 9 };
+export const NOVA = { radius: 24, channel: 2.35, maxDmg: 98, minDmg: 50, range: 85, frags: 14, fragDmg: 16, shockDmg: 20 };
+export const RAY = { channel: 1.3, range: 90, width: 1.3, dmg: 50 };
+export const STARFALL = { count: 5, spread: 4.2, radius: 2.5, dmg: 14, minDmg: 6, first: 0.55, gap: 0.16 };
+const COOLDOWN = { spark: 0.42, starfall: 8, sigil: 11, ray: 10, blink: 9 };
 // bolt-type fire rates are not shortened below 60% even with admin cooldown tweaks
 const cdOf = (base) => (BAL.noCooldowns ? (base < 1 ? base * 0.6 : 0) : base * (base < 1 ? Math.max(0.6, BAL.cd) : BAL.cd));
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();

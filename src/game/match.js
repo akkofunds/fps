@@ -630,7 +630,7 @@ export class Match {
         this.sound('blink', b, 0.8, 30);
         this.fx.blinkEcho(a, 0.65, (c) => {
           this.sound('explode', c, 0.8, 35);
-          if (local) this.areaDamage(c, 3.2, 42, 18, 'blink', { kb: 6, up: 5 });
+          if (local) this.areaDamage(c, 3.2, 30, 12, 'blink', { kb: 6, up: 5 });
         });
         if (!local) e.snaps.length = 0;
         break;

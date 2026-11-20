@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <meta name="theme-color" content="#0f1923" />
+  <meta name="theme-color" content="#04070d" />
   <title>Magebreak</title>
   <meta name="description" content="Magebreak — an elemental third-person arena brawler. Free-for-all matchmaking, customs and practice in your browser." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Cinzel:wght@500;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2c2 6 9 9 9 17a9 9 0 0 1-18 0c0-5 3-7 4-11 1 3 3 4 3 4 0-4 1-7 2-10z' fill='%23ff5a1f'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -38,6 +38,10 @@
 
     <!-- PLAY -->
     <section class="tab" id="tabPlay">
+      <div class="party-strip" id="partyStrip"></div>
+      <div class="mb-plate mb-title">CHOOSE YOUR MAGE</div>
+      <div class="mage-row" id="mageRow"></div>
+      <div class="pick"><div class="pick-name" id="pickName"></div><div class="pick-role" id="pickRole"></div></div>
       <div class="mode-tabs" id="modeTabs">
         <button class="mode-tab active" data-mode="ffa">FREE-FOR-ALL</button>
         <button class="mode-tab" data-mode="duel">DUEL</button>
@@ -165,8 +169,8 @@
         <div class="tok-row"><input id="sToken" readonly spellcheck="false" /><button type="button" class="btn-side" id="btnTokenShow">SHOW</button><button type="button" class="btn-side" id="btnTokenCopy">COPY</button></div>
       </div>
       <div class="keys">
-        <div><b>WASD</b> Move</div><div><b>SPACE</b> Jump</div><div><b>Q</b> Dash</div><div><b>LMB</b> Ember Bolt</div>
-        <div><b>E</b> Blaze Orb</div><div><b>C</b> Firewall</div><div><b>V</b> Flame Leap</div><div><b>X</b> Meteor (ult)</div>
+        <div><b>WASD</b> Move</div><div><b>SPACE</b> Jump (again in the air)</div><div><b>Q</b> Dash</div><div><b>LMB</b> Basic attack (M1)</div>
+        <div><b>E</b> Ability 1</div><div><b>C</b> Ability 2</div><div><b>V</b> Ability 3</div><div><b>X</b> Ultimate</div>
         <div><b>RMB</b> Focus aim</div><div><b>SHIFT</b> Shift-lock on/off</div><div><b>TAB</b> Scoreboard</div><div><b>ENTER</b> Chat</div><div><b>ESC</b> Menu</div>
       </div>
       <button class="btn-wide primary" id="btnSettingsClose">DONE</button>

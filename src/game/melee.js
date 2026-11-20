@@ -17,7 +17,9 @@ export const M1 = {
   endlag: 0.85,    // after the finisher
   range: 2.9,      // reach (metres, from your feet to theirs)
   cone: 0.4,       // dot(facing, to-target) at least this
-  seek: 6,         // targets this close get lunged onto
+  seek: 3.0,       // targets this close (and in front) get a short step-in
+  seekCone: 0.82,  // …only if they're nearly straight ahead
+  lungeMax: 11,    // step-in speed cap (m/s): closes a gap, never drags you across the map
 };
 
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
@@ -46,7 +48,7 @@ export class MeleeCombo {
       const dx = e.pos.x - p.x, dz = e.pos.z - p.z, d = Math.hypot(dx, dz);
       if (d > maxD || Math.abs(e.pos.y - p.y) > 2.2) continue;
       const dot = d > 0.01 ? (dx * fwd.x + dz * fwd.z) / d : 1;
-      if (dot < this.D.cone) continue;
+      if (dot < (this.D.seekCone || this.D.cone)) continue;
       const s = dot * 2 - d / maxD;
       if (s > bestS) { bestS = s; best = e; }
     }
@@ -68,7 +70,7 @@ export class MeleeCombo {
       fwd.set(dx / d, 0, dz / d);
       // stop about an arm's length away (the lunge carries a little momentum past its end)
       const stop = this.D.stop || 1.45;
-      if (d > stop + 0.05) b.lunge(fwd, Math.min(this.D.lungeMax || 22, (d - stop) / 0.12), 0.12);
+      if (d > stop + 0.05) b.lunge(fwd, Math.min(this.D.lungeMax || 11, (d - stop) / 0.12), 0.12);
     } else b.lunge(fwd, h.fin ? 9 : 5, 0.1);
     b.slow = 0.35;
     k.pending.push({ t: h.fin ? 0.5 : 0.32, fn: () => { b.slow = 1; } });

@@ -15,33 +15,33 @@ export const KINE = {
   model: 'models/kineslayer.glb',
   color: '#d5dbe3',
   // Heavenly Restriction: runs faster, a third jump in the air, three dash charges that refill faster
-  perk: { speed: 1.15, airJumps: 2, dashMax: 3, dashRate: 1.35 },
+  perk: { speed: 1.08, airJumps: 2, dashMax: 3, dashRate: 1.1 },
   bio: 'Born with zero cursed energy, he was paid back in flesh: a body so fast, strong and sharp-sensed that sorcerers never see him coming. He carries the Inverted Spear of Heaven, a blade that cancels any technique it touches, and he never stops moving.',
   abilities: [
-    { key: 'LMB', id: 'm1', name: 'Spear Strikes', desc: 'M1: a 4-hit string with the Inverted Spear: forehand slash, backhand slash, rising cut, then a lunging thrust that launches. Longer reach than fists, every hit stuns, and each swing lunges you onto the target.' },
-    { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 15% faster, have THREE dash charges that refill faster, and can jump twice in the air. Burst in the direction you are moving with Q.' },
-    { key: 'E', id: 'flash', name: 'Flash Step', cd: 6, desc: 'Move faster than the eye can follow: blink 12 m toward your crosshair, cutting every enemy you pass through (24 damage, a short stun).' },
-    { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 9, desc: 'Launch yourself high into the air, then dive spear-first onto the spot under your crosshair: the impact hits everyone around it (34 damage), stuns them and throws them up.' },
+    { key: 'LMB', id: 'm1', name: 'Spear Strikes', desc: 'M1: a 4-hit string with the Inverted Spear: forehand slash, backhand slash, rising cut, then a lunging thrust that launches. Longer reach than fists, every hit stuns, and each swing steps you in if they are right in front of you.' },
+    { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 8% faster, have THREE dash charges, and can jump twice in the air. Burst in the direction you are moving with Q.' },
+    { key: 'E', id: 'flash', name: 'Flash Step', cd: 7, desc: 'Move faster than the eye can follow: blink 12 m toward your crosshair, cutting every enemy you pass through (24 damage, a short stun).' },
+    { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 9, desc: 'Launch yourself high into the air, then dive spear-first onto the spot you aim at: the impact hits everyone around it (34 damage), stuns them and throws them up.' },
     { key: 'V', id: 'nullify', name: 'Inverted Spear', cd: 12, desc: 'A lunging thrust with the Inverted Spear of Heaven (40 damage). The first enemy it pierces has their technique nullified: whatever ability they were winding up is cancelled.' },
-    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Lock onto the enemy nearest your crosshair (up to 24 m) and vanish: five cuts from five directions in under a second, then a thrust that launches them (94 damage in total). No target in range: a long severing dash.' },
+    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Lock onto the enemy under your crosshair (up to 16 m) and vanish: five cuts from five directions in under a second, then a thrust that launches them (94 damage in total). No target in range: a long severing dash.' },
   ],
 };
 
 export const SPEAR_M1 = {
   hits: [
-    { anim: 'ksA', at: 0.08, dmg: 10, stun: 0.55, kb: 2.4, up: 0, sfx: 'slash' },
+    { anim: 'ksA', at: 0.08, dmg: 9, stun: 0.55, kb: 2.4, up: 0, sfx: 'slash' },
     { anim: 'ksB', at: 0.08, dmg: 10, stun: 0.55, kb: 2.4, up: 0, sfx: 'slash' },
-    { anim: 'ksC', at: 0.1, dmg: 11, stun: 0.6, kb: 2.8, up: 0, sfx: 'slash' },
-    { anim: 'ksD', at: 0.13, dmg: 16, stun: 0.9, kb: 15, up: 6.5, sfx: 'slash', fin: true, atY: 1.2 },
+    { anim: 'ksC', at: 0.1, dmg: 10, stun: 0.6, kb: 2.8, up: 0, sfx: 'slash' },
+    { anim: 'ksD', at: 0.13, dmg: 14, stun: 0.9, kb: 15, up: 6.5, sfx: 'slash', fin: true, atY: 1.2 },
   ],
-  gap: 0.27, window: 1.0, endlag: 0.75, range: 3.3, cone: 0.35, seek: 7, stop: 1.75, lungeMax: 26,
+  gap: 0.3, window: 1.0, endlag: 0.85, range: 3.1, cone: 0.4, seek: 3.3, seekCone: 0.82, stop: 1.75, lungeMax: 11,
 };
 export const FLASH = { dist: 12, time: 0.2, hitR: 1.6, dmg: 24, stun: 0.35 };
 export const SKYFALL = { up: 15, fwd: 7, apex: 0.5, range: 18, dive: 40, radius: 3.8, dmg: 34, stun: 0.6 };
 export const NULLIFY = { charge: 0.12, dist: 8, time: 0.18, hitR: 1.5, dmg: 40, stun: 0.5 };
-export const SEVER = { range: 24, cone: 0.55, cuts: 5, gap: 0.15, cutDmg: 12, finDmg: 34, radius: 2.4, stun: 0.6, missDist: 16, missDmg: 40 };
+export const SEVER = { range: 16, cone: 0.93, cuts: 5, gap: 0.15, cutDmg: 12, finDmg: 34, radius: 2.4, stun: 0.6, missDist: 16, missDmg: 40 };
 
-const COOLDOWN = { flash: 6, skyfall: 9, nullify: 12 };
+const COOLDOWN = { flash: 7, skyfall: 9, nullify: 12 };
 const cdOf = (base) => (BAL.noCooldowns ? 0 : base * BAL.cd);
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
@@ -185,19 +185,8 @@ export class KineSlayerKit {
         // aim assist: an enemy under the crosshair, or standing near where it points, is the target
         let snap = m.aimEnt && m.aimEnt.alive && Math.hypot(m.aimEnt.pos.x - me.x, m.aimEnt.pos.z - me.z) <= SKYFALL.range + 2 ? m.aimEnt : null;
         if (!snap) {
-          let bd = 6;
-          for (const e of this._enemies()) { const dd = Math.hypot(e.pos.x - tx, e.pos.z - tz); if (dd < bd && Math.hypot(e.pos.x - me.x, e.pos.z - me.z) <= SKYFALL.range + 2) { bd = dd; snap = e; } }
-        }
-        if (!snap) {
-          // nobody near the crosshair point: the closest enemy roughly in front of you
-          const f = this._flatAim(new THREE.Vector3());
-          let bs = 0.85;
-          for (const e of this._enemies()) {
-            const dx = e.pos.x - me.x, dz = e.pos.z - me.z, dd = Math.hypot(dx, dz) || 1;
-            if (dd > SKYFALL.range + 2) continue;
-            const sc = (dx * f.x + dz * f.z) / dd - dd / SKYFALL.range * 0.1;
-            if (sc > bs) { bs = sc; snap = e; }
-          }
+          let bd = 2.5;
+          for (const e of this._enemies()) { const dd = Math.hypot(e.pos.x - tx, e.pos.z - tz); if (dd < bd) { bd = dd; snap = e; } }
         }
         if (snap) { tx = snap.pos.x; tz = snap.pos.z; }
         const ty = m.world.groundAt(tx, tz, me.y + 2);

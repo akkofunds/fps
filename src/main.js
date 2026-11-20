@@ -1,5 +1,8 @@
 import './ui/styles.css';
 import './ui/extra.css';
+import './ui/theme.css';
+import { installOrnaments } from './ui/ornaments.js';
+installOrnaments();
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
