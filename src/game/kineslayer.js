@@ -233,15 +233,18 @@ export class KineSlayerKit {
     if (this.ult < ULT_COST) { m.app.hud.denied('sever'); return; }
     if (this.busy > 0) return;
     this.ult = 0; this.ultReadyAnnounced = false;
-    // the enemy closest to the crosshair, within range
-    const f = m.cam.fwd, cam = m.camera.position;
-    let tgt = null, best = SEVER.cone;
-    for (const e of this._enemies()) {
-      const dx = e.pos.x - b.pos.x, dz = e.pos.z - b.pos.z;
-      if (Math.hypot(dx, dz) > SEVER.range) continue;
-      tmp.set(e.pos.x - cam.x, e.pos.y + 1 - cam.y, e.pos.z - cam.z).normalize();
-      const s = tmp.dot(f);
-      if (s > best) { best = s; tgt = e; }
+    // the enemy under the crosshair, else the one closest to where you face, within range
+    const inRange = (e) => e && e.alive && e !== m.local && Math.hypot(e.pos.x - b.pos.x, e.pos.z - b.pos.z) <= SEVER.range && Math.abs(e.pos.y - b.pos.y) < 6;
+    let tgt = inRange(m.aimEnt) ? m.aimEnt : null;
+    if (!tgt) {
+      const f = this._flatAim(tmp2);
+      let best = SEVER.cone;
+      for (const e of this._enemies()) {
+        if (!inRange(e)) continue;
+        const dx = e.pos.x - b.pos.x, dz = e.pos.z - b.pos.z, d = Math.hypot(dx, dz) || 1;
+        const s = (dx * f.x + dz * f.z) / d - d / SEVER.range * 0.25;
+        if (s > best) { best = s; tgt = e; }
+      }
     }
     m.castAbility({ ab: 'severStart', o: b.pos.toArray(), v: tgt ? tgt.n : -1 });
     if (!tgt) {

@@ -45,7 +45,8 @@ Object.assign(Fx.prototype, {
       if (this.slashPool.length >= 24) s = this.slashPool.reduce((p, q) => (p.userData.t / p.userData.life > q.userData.t / q.userData.life ? p : q));
       else {
         const geo = new THREE.PlaneGeometry(1, 1);
-        const mat = new THREE.MeshBasicMaterial({ map: streakTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+        // normal blending: additive white over sunlit grass turns yellow-green; this stays clean white
+        const mat = new THREE.MeshBasicMaterial({ map: streakTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false });
         s = new THREE.Group();
         const q1 = new THREE.Mesh(geo, mat), q2 = new THREE.Mesh(geo, mat);
         q2.rotation.x = Math.PI / 2;
@@ -60,7 +61,7 @@ Object.assign(Fx.prototype, {
     _m.copy(_b).sub(_a).normalize();
     s.quaternion.setFromUnitVectors(_x, _m);
     s.userData.len = len; s.userData.w = width; s.userData.t = 0; s.userData.life = life;
-    s.userData.mat.color.setRGB(...(color || [3.4, 3.4, 3.7]));
+    s.userData.mat.color.setRGB(...(color || [2.2, 2.2, 2.4]));
     s.scale.set(0.01, width, width);
     s.visible = true;
     if (!this._slashTick) {
