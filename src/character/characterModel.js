@@ -14,13 +14,19 @@ export function loadMageModel(url) {
   // cache-bust with the models' content hash (a stale cached model would pair old meshes with new code)
   if (typeof __MODELS_VER__ !== 'undefined' && !url.includes('?')) url += '?v=' + __MODELS_VER__;
   if (!cache.has(url)) {
-    cache.set(url, new Promise((resolve, reject) => {
-      new GLTFLoader().load(url, async (g) => {
+    const once = (u) => new Promise((resolve, reject) => {
+      new GLTFLoader().load(u, async (g) => {
         prepareMaterials(g.scene);
         try { await buildLods(g.scene); } catch (e) { console.warn('LOD build failed', e); }
         resolve(g.scene);
       }, undefined, reject);
-    }));
+    });
+    // a dropped connection mid-download shouldn't cost the model for the whole session: retry with
+    // a fresh request (bypassing a bad cached response), and never cache a failure
+    const p = once(url)
+      .catch(() => new Promise((r) => setTimeout(r, 600)).then(() => once(url + (url.includes('?') ? '&' : '?') + 'r=' + Date.now())))
+      .catch((e) => { cache.delete(url); throw e; });
+    cache.set(url, p);
   }
   return cache.get(url);
 }

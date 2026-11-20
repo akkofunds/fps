@@ -38,7 +38,12 @@ export class LobbyScene {
   async setMage(id) {
     const md = mageOf(id);
     this.mageId = md.id;
-    const tmpl = await loadMageModel(md.model);
+    let tmpl;
+    try { tmpl = await loadMageModel(md.model); } catch (e) {
+      // never leave the lobby without a character: show a stand-in if this model won't load
+      console.error('lobby model', md.model, e);
+      tmpl = await loadMageModel(mageOf('pyro').model);
+    }
     if (this.mageId !== md.id) return; // a newer pick won
     const vis = this.inst ? this.inst.root.visible : true;
     if (this.inst) this.scene.remove(this.inst.root);

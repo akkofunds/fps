@@ -104,7 +104,12 @@ export class Match {
     this.proj = new Projectiles(this);
     this.templates = {};
     // every mage's model (players can drop in mid-match with any of them)
-    for (const md of MAGE_LIST) this.templates[md.id] = await loadMageModel(md.model);
+    // (a model that can't be loaded never stops the match: that mage borrows a model that did load)
+    const loaded = await Promise.allSettled(MAGE_LIST.map((md) => loadMageModel(md.model)));
+    loaded.forEach((r, i) => { if (r.status === 'fulfilled') this.templates[MAGE_LIST[i].id] = r.value; else console.error('model', MAGE_LIST[i].model, r.reason); });
+    const anyT = this.templates.pyro || Object.values(this.templates)[0];
+    if (!anyT) throw new Error('no character models could be loaded');
+    for (const md of MAGE_LIST) if (!this.templates[md.id]) this.templates[md.id] = anyT;
     this.voidFx = new UnlimitedVoid(this.map);
     this.domain = null;
     this._warmupShaders();
