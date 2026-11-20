@@ -15,7 +15,7 @@ export const SORCERER = {
   color: '#8fd8ff',
   bio: 'The strongest sorcerer alive. Limitless bends space around him: Blue drags everything into a single point, Red blows it apart, and the two together become Hollow Purple, imaginary mass that erases whatever it passes through. When he opens his domain, there is nowhere left to run.',
   abilities: [
-    { key: 'LMB', id: 'flick', name: 'Cursed Strikes', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick) charged with cursed energy. Every hit stuns so the next one connects, each swing steps you in if they're right in front of you, and the kick launches them.' },
+    { key: 'LMB', id: 'flick', name: 'Cursed Strikes', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick) charged with cursed energy. Every hit stuns so the next one connects, each swing steps you in if they are right in front of you, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Blink Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Press jump again in the air to double jump.' },
     { key: 'E', id: 'blue', name: 'Lapse: Blue', cd: 9, desc: 'Create a point of attraction where you aim. Everything nearby is dragged into it and ground down, then it collapses.' },
     { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (30 + splash).' },

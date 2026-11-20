@@ -17,7 +17,7 @@ export const SHOTO = {
   color: '#7fd4ff',
   bio: 'Ice from his right hand, fire from his left. Shoto locks enemies in place with jagged ice, then hits them with heat so sudden the frozen air explodes.',
   abilities: [
-    { key: 'LMB', id: 'bolt', name: 'Frost & Flame Combo', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick). Frost on the left fist, fire on the right. Every hit stuns so the next one connects, each swing steps you in if they're right in front of you, and the kick launches them.' },
+    { key: 'LMB', id: 'bolt', name: 'Frost & Flame Combo', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick). Frost on the left fist, fire on the right. Every hit stuns so the next one connects, each swing steps you in if they are right in front of you, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Flare Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Dash in the air and you roll when you land. Press jump again in the air to double jump.' },
     { key: 'E', id: 'freeze', name: 'Flashfreeze Heatwave', cd: 10, desc: 'Stomp: jagged ice erupts from your foot and races along the ground to the target, freezing everyone there in place. Then a fire punch rolls a massive wave of flame out over it: frozen enemies shatter in a pressure explosion for heavy bonus damage.' },
     { key: 'C', id: 'lance', name: 'Hellfire Lance', cd: 8, desc: 'Compress white-hot flame into a narrow beam from your fingertip: a long-range sniper shot to exactly where you aim (46 damage, 60 on headshots). Scorches the ground beneath it.' },

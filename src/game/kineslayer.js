@@ -18,7 +18,7 @@ export const KINE = {
   perk: { speed: 1.08, airJumps: 2, dashMax: 3, dashRate: 1.1 },
   bio: 'Born with zero cursed energy, he was paid back in flesh: a body so fast, strong and sharp-sensed that sorcerers never see him coming. He carries the Inverted Spear of Heaven, a blade that cancels any technique it touches, and he never stops moving.',
   abilities: [
-    { key: 'LMB', id: 'm1', name: 'Spear Strikes', desc: 'M1: a 4-hit string with the Inverted Spear: forehand slash, backhand slash, rising cut, then a lunging thrust that launches. Longer reach than fists, every hit stuns, and each swing steps you in if they're right in front of you.' },
+    { key: 'LMB', id: 'm1', name: 'Spear Strikes', desc: 'M1: a 4-hit string with the Inverted Spear: forehand slash, backhand slash, rising cut, then a lunging thrust that launches. Longer reach than fists, every hit stuns, and each swing steps you in if they are right in front of you.' },
     { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 8% faster, have THREE dash charges, and can jump twice in the air. Burst in the direction you are moving with Q.' },
     { key: 'E', id: 'flash', name: 'Flash Step', cd: 7, desc: 'Move faster than the eye can follow: blink 12 m toward your crosshair, cutting every enemy you pass through (24 damage, a short stun).' },
     { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 9, desc: 'Launch yourself high into the air, then dive spear-first onto the spot you aim at: the impact hits everyone around it (34 damage), stuns them and throws them up.' },
