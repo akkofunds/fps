@@ -295,12 +295,12 @@ export class Match {
       case 'm1': {
         const i = Number(d.i) || 0, fin = i === 3, dir = tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
         if (d.s === 'spear') {
-          this.fx.slashSwing((k, out) => e.view.weaponTip(out, k), dir.clone(), i);
+          this.fx.slashSwing((k, out) => e.view.weaponTip(out, k), dir.clone(), i, Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : e.pos.clone());
           if (!local) this.sound('slash', e.pos, 0.5, 22);
           break;
         }
         const getP = fin ? (out) => e.view.rig.bones[20].getWorldPosition(out) : (out) => e.view.palmWorld(i === 1 ? 'R' : 'L', out);
-        this.fx.punchSwing(getP, dir.clone(), d.s, i);
+        this.fx.punchSwing(getP, dir.clone(), d.s, i, Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : e.pos.clone());
         if (!local) this.sound(fin ? 'kick' : 'swing', e.pos, 0.5, 22);
         break;
       }

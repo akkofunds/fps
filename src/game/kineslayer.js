@@ -185,8 +185,19 @@ export class KineSlayerKit {
         // aim assist: an enemy under the crosshair, or standing near where it points, is the target
         let snap = m.aimEnt && m.aimEnt.alive && Math.hypot(m.aimEnt.pos.x - me.x, m.aimEnt.pos.z - me.z) <= SKYFALL.range + 2 ? m.aimEnt : null;
         if (!snap) {
-          let bd = 4.5;
+          let bd = 6;
           for (const e of this._enemies()) { const dd = Math.hypot(e.pos.x - tx, e.pos.z - tz); if (dd < bd && Math.hypot(e.pos.x - me.x, e.pos.z - me.z) <= SKYFALL.range + 2) { bd = dd; snap = e; } }
+        }
+        if (!snap) {
+          // nobody near the crosshair point: the closest enemy roughly in front of you
+          const f = this._flatAim(new THREE.Vector3());
+          let bs = 0.85;
+          for (const e of this._enemies()) {
+            const dx = e.pos.x - me.x, dz = e.pos.z - me.z, dd = Math.hypot(dx, dz) || 1;
+            if (dd > SKYFALL.range + 2) continue;
+            const sc = (dx * f.x + dz * f.z) / dd - dd / SKYFALL.range * 0.1;
+            if (sc > bs) { bs = sc; snap = e; }
+          }
         }
         if (snap) { tx = snap.pos.x; tz = snap.pos.z; }
         const ty = m.world.groundAt(tx, tz, me.y + 2);

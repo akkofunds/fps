@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import './arcs.js';
 
 // Kine Slayer VFX: no cursed energy, so nothing glows with power. Everything here is steel, air and
 // impact: blade trails that follow the spear's edge, thin anime slash lines, wind streaks behind a
@@ -84,63 +85,68 @@ Object.assign(Fx.prototype, {
   },
 
   // ---------------------------------------------------------------- M1: blade trail along the spear
-  // getSeg(k, out): a point along the spear (0 = butt, 1 = tip)
-  slashSwing(getSeg, dir, i) {
+  // getSeg(k, out): a point along the spear (0 = butt, 1 = tip); o: his feet
+  slashSwing(getSeg, dir, i, o) {
     const fin = i === 3, dur = fin ? 0.26 : 0.2;
     const pa = new THREE.Vector3(), pb = new THREE.Vector3(), la = new THREE.Vector3(), lb = new THREE.Vector3();
     let t = 0, first = true;
+    // a fine smear of the edge itself, between last frame's blade and this frame's
     this.effects.push({ update: (dt) => {
       t += dt;
-      getSeg(0.35, pa); getSeg(1.08, pb);
+      getSeg(0.45, pa); getSeg(1.05, pb);
       if (first) { la.copy(pa); lb.copy(pb); first = false; }
-      // a sheet of particles between last frame's blade and this frame's: a smear of the edge
-      const n = fin ? 10 : 8;
-      for (let k = 0; k < n; k++) {
+      for (let k = 0; k < 5; k++) {
         const u = R(), w = R();
         const x = (la.x + (lb.x - la.x) * u) * (1 - w) + (pa.x + (pb.x - pa.x) * u) * w;
         const y = (la.y + (lb.y - la.y) * u) * (1 - w) + (pa.y + (pb.y - pa.y) * u) * w;
         const z = (la.z + (lb.z - la.z) * u) * (1 - w) + (pa.z + (pb.z - pa.z) * u) * w;
-        const edge = u > 0.75;
-        this.fire.emit(x, y, z, (R() - 0.5) * 0.3, (R() - 0.5) * 0.3, (R() - 0.5) * 0.3, edge ? 0.14 : 0.1, edge ? 0.07 : 0.05, 0.01, edge ? EDGE : STEEL, edge ? EDGE_E : STEEL_E, 4, 0);
+        this.fire.emit(x, y, z, 0, 0, 0, 0.08, 0.05, 0.01, EDGE, EDGE_E, 0, 0);
       }
       la.copy(pa); lb.copy(pb);
       return t < dur;
     } });
-    // the slash line along the arc of the cut, just as it lands
-    setTimeout(() => {
-      getSeg(1.05, pb);
-      const side = new THREE.Vector3(-dir.z, 0, dir.x);
-      const tilt = [0.55, -0.45, -0.9, 0][i];
-      const half = fin ? 0 : 0.95;
-      if (fin) {
-        // the thrust: a straight streak along the spear's line
-        this.slashLine(pb.clone().addScaledVector(dir, -0.8), pb.clone().addScaledVector(dir, 1.6), 0.16, 0.24);
-      } else {
-        const a = pb.clone().addScaledVector(side, -half).add(new THREE.Vector3(0, -tilt * half, 0));
-        const b = pb.clone().addScaledVector(side, half).add(new THREE.Vector3(0, tilt * half, 0));
-        this.slashLine(a, b, 0.1, 0.22);
-      }
-    }, (fin ? 0.12 : 0.07) * 1000);
+    if (!o) return;
+    // the crescent of the cut, in the plane the blade swings through
+    const F = new THREE.Vector3(dir.x, 0, dir.z).normalize(), Rt = new THREE.Vector3(-F.z, 0, F.x), U = new THREE.Vector3(0, 1, 0);
+    const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(U, y).addScaledVector(F, z);
+    const look = { core: [2.7, 2.8, 3.0], edge: [0.42, 0.48, 0.6], ink: 0.6 };
+    const dark = { core: [0.35, 0.38, 0.45], edge: [0.05, 0.05, 0.07], ink: 0, alpha: 0.7 };
+    if (i === 0) {        // forehand: high right, over the front, down to the left
+      const from = Rt.clone().multiplyScalar(0.65).addScaledVector(U, 0.75);
+      this.crescent(at(0, 1.3, 0.25), from, F, 1.3, 3.2, { ...look, w: 0.46, dur: 0.24, delay: 0.04 });
+      this.crescent(at(0, 1.3, 0.25), from, F, 1.55, 2.9, { ...dark, w: 0.14, dur: 0.24, delay: 0.06 });
+    } else if (i === 1) { // backhand: flat, left to right
+      this.crescent(at(0, 1.15, 0.2), Rt.clone().negate().addScaledVector(F, -0.2), F, 1.4, 3.1, { ...look, w: 0.42, dur: 0.24, delay: 0.04 });
+      this.crescent(at(0, 1.22, 0.2), Rt.clone().negate().addScaledVector(F, -0.2), F, 1.7, 2.8, { ...dark, w: 0.12, dur: 0.24, delay: 0.06 });
+    } else if (i === 2) { // rising: low left up past the right shoulder
+      const from = Rt.clone().multiplyScalar(-0.5).addScaledVector(U, -0.8);
+      this.crescent(at(0, 1.2, 0.2), from, F, 1.3, 3.3, { ...look, w: 0.46, dur: 0.26, delay: 0.06 });
+      this.crescent(at(0, 1.2, 0.2), from, F, 1.6, 3.0, { ...dark, w: 0.14, dur: 0.26, delay: 0.08 });
+    } else {              // the thrust: a straight streak, air twisting round the spear
+      const tip = at(0, 1.25, 1.9);
+      setTimeout(() => this.slashLine(at(0, 1.25, 0.3), at(0, 1.25, 3.4), 0.18, 0.24), 0.1 * 1000);
+      for (let k = 0; k < 3; k++) this.arc({ c: tip.clone().addScaledVector(F, -0.5 + k * 0.45), e1: U, e2: Rt, r: 0.32 + k * 0.08, angle: 5.2, w: 0.12, spiral: 1.6, twist: 0.4, dur: 0.24, head: 0.4, grow: 0.8, core: look.core, edge: look.edge, ink: 0.5, delay: 0.1 + k * 0.025 });
+    }
   },
 
   slashImpact(p, dir, heavy) {
-    // a bright X of cuts across the target
-    const side = new THREE.Vector3(-dir.z, 0, dir.x);
-    const s = heavy ? 1.3 : 0.75;
-    const ang = R() * Math.PI;
+    // two crescents cutting across the target (an X of blade light), then displaced air
+    const F = new THREE.Vector3(dir.x, 0, dir.z).normalize(), Rt = new THREE.Vector3(-F.z, 0, F.x), U = new THREE.Vector3(0, 1, 0);
+    const a0 = R() * Math.PI;
     for (let k = 0; k < (heavy ? 3 : 2); k++) {
-      const a = ang + k * (Math.PI / (heavy ? 3 : 2)) + (R() - 0.5) * 0.3;
-      const off = side.clone().multiplyScalar(Math.cos(a) * s).add(new THREE.Vector3(0, Math.sin(a) * s, 0));
-      this.slashLine(p.clone().sub(off), p.clone().add(off), heavy ? 0.13 : 0.08, heavy ? 0.32 : 0.22);
+      const a = a0 + k * Math.PI / (heavy ? 3 : 2);
+      const ax = Rt.clone().multiplyScalar(Math.cos(a)).addScaledVector(U, Math.sin(a));
+      const r = heavy ? 1.1 : 0.75;
+      // a shallow arc whose middle passes through the target, bowing away from the attacker
+      this.arc({ c: p.clone().addScaledVector(F, -r * 0.9), e1: ax.clone().negate().multiplyScalar(1).addScaledVector(F, 0.0), e2: F, r: r * 1.3, angle: Math.PI, w: heavy ? 0.24 : 0.16, dur: heavy ? 0.28 : 0.2, head: 0.25, grow: 0.25, core: [2.8, 2.9, 3.1], edge: [0.4, 0.45, 0.6], ink: 0.6, delay: k * 0.03 });
     }
+    this.airBurst(p, dir, heavy, null);
     // sparks off the steel: fast, thin, a little gravity
-    for (let k = 0; k < (heavy ? 46 : 20); k++) {
+    for (let k = 0; k < (heavy ? 34 : 16); k++) {
       const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = (heavy ? 8 : 5) + R() * 8;
       this.fire.emit(p.x, p.y, p.z, Math.cos(a) * sq * sp + dir.x * sp * 0.6, u * sp * 0.6 + 1.5, Math.sin(a) * sq * sp + dir.z * sp * 0.6, 0.12 + R() * 0.16, 0.05, 0.01, EDGE, STEEL_E, 2.5, -9);
     }
-    // a blunt pressure puff
-    this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.07, heavy ? 1.2 : 0.6, heavy ? 2.2 : 1.1, [2.6, 2.7, 3.0, 1], STEEL_E, 0, 0);
-    this.ring(p, heavy ? 2.6 : 1.2, heavy ? 0.28 : 0.18, new THREE.Color(2.6, 2.7, 3.0));
+    this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.06, heavy ? 0.9 : 0.45, heavy ? 1.6 : 0.8, [2.6, 2.7, 3.0, 1], STEEL_E, 0, 0);
     this.light(p, heavy ? 16 : 7, heavy ? 9 : 5, heavy ? 0.16 : 0.08, 0xdfe8ff);
     if (heavy) for (let k = 0; k < 8; k++) { const a = R() * 6.283; this.smoke.emit(p.x, p.y - 0.8, p.z, Math.cos(a) * 3 + dir.x * 5, 0.5 + R(), Math.sin(a) * 3 + dir.z * 5, 0.6 + R() * 0.3, 0.4, 1.4, DUST0, DUST1, 2.4, 0.1); }
   },
@@ -163,7 +169,6 @@ Object.assign(Fx.prototype, {
         this.smoke.emit(p.x, p.y + 0.1, p.z, Math.cos(a2) * 2.4 + d.x * k * 3, 0.4 + R() * 0.6, Math.sin(a2) * 2.4 + d.z * k * 3, 0.5 + R() * 0.3, 0.35, 1.2, DUST0, DUST1, 2.6, 0.1);
       }
     }
-    this.ring({ x: o.x, y: o.y, z: o.z }, big ? 2.2 : 1.4, 0.22, new THREE.Color(1.6, 1.7, 1.9));
   },
 
   // ---------------------------------------------------------------- C: Skyfall
@@ -198,8 +203,7 @@ Object.assign(Fx.prototype, {
       this.slashLine(new THREE.Vector3(c.x, c.y + 0.08, c.z), new THREE.Vector3(c.x + Math.cos(a) * l, c.y + 0.08, c.z + Math.sin(a) * l), 0.14, 0.4, [2.4, 2.4, 2.6]);
     }
     this.fire.emit(c.x, c.y + 0.6, c.z, 0, 0, 0, 0.1, 2.2, 4.4, [2.6, 2.6, 2.8, 1], STEEL_E, 0, 0);
-    this.ring(c, 4.2, 0.4, new THREE.Color(2.4, 2.4, 2.6));
-    this.ring(c, 2.4, 0.26, new THREE.Color(3, 3, 3.2));
+    this.ring(c, 4.2, 0.4, new THREE.Color(1.6, 1.6, 1.7));
     this.light(c, 20, 12, 0.2, 0xe8eeff);
     this.scorch(c.x, c.z, 2.6, 8);
   },
@@ -231,8 +235,7 @@ Object.assign(Fx.prototype, {
         const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = 6 + R() * 8;
         this.fire.emit(p.x, p.y, p.z, Math.cos(a) * sq * sp, u * sp, Math.sin(a) * sq * sp, 0.3 + R() * 0.2, 0.07, 0.03, EDGE, [0.5, 0.6, 1.0, 0], 2, -6);
       }
-      this.ring(p, 2.6, 0.3, new THREE.Color(1.6, 1.8, 3.0));
-      this.ring(p, 1.4, 0.2, new THREE.Color(3, 3, 3.3));
+      this.airBurst(p, dir, true, [[1.4, 1.8, 3.6], [0.1, 0.15, 0.6]]);
       this.light(p, 14, 8, 0.15, 0xb8c8ff);
     }, 110);
   },
@@ -244,7 +247,6 @@ Object.assign(Fx.prototype, {
     if (fin) {
       this.slashLine(p.clone().addScaledVector(dir, -2.4), p.clone().addScaledVector(dir, 3.6), 0.34, 0.5);
       this.slashImpact(p, dir, true);
-      this.ring(p, 5, 0.45, new THREE.Color(2.8, 2.8, 3.1));
     } else this.slashImpact(p, dir, false);
   },
   severStart(o) {
@@ -252,6 +254,5 @@ Object.assign(Fx.prototype, {
       const a = R() * 6.283, sp = 3 + R() * 4;
       this.smoke.emit(o.x, o.y + 0.1, o.z, Math.cos(a) * sp, 0.4 + R(), Math.sin(a) * sp, 0.5 + R() * 0.3, 0.35, 1.3, DUST0, DUST1, 2.6, 0.1);
     }
-    this.ring(o, 2.2, 0.25, new THREE.Color(2, 2, 2.2));
   },
 });
