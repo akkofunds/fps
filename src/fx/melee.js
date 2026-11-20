@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
 import './arcs.js';
+import { SLASH_PAL } from './slashdisc.js';
 
 // M1 combo VFX: a trail that follows the striking fist/foot through the swing (frost on Shoto's left
 // fist, fire on his right, both spiralling round the kick; blue-white cursed energy for the Sorcerer),
@@ -64,6 +65,9 @@ Object.assign(Fx.prototype, {
       // roundhouse: a wide crescent from his right side round the front; Shoto's is fire and ice
       const c2 = style === 'cursed' ? ARC.cursed : ARC.ice, c1 = style === 'cursed' ? ARC.white : ARC.fire;
       const from = Rt.clone().addScaledVector(UP, -0.35).addScaledVector(F, -0.3);
+      this.slashDisc(at(0, 1.25, 0.2), from, F, 3.0, SLASH_PAL[style === 'cursed' ? 'cursed' : 'fire'], { spin: 5, life: 0.32, shards: 8, delay: 0.09 });
+      if (style !== 'cursed') this.slashDisc(at(0, 1.15, 0.2), from, F, 3.5, SLASH_PAL.ice, { spin: 4, life: 0.32, delay: 0.11 });
+      this.windSwirl(at(0, 0, 0.5), 3.0, { life: 0.6 });
       this.crescent(at(0, 1.25, 0.15), from, F, 1.3, 3.1, { core: c1[0], edge: c1[1], ink: 0.35, w: 0.62, dur: 0.32, delay: 0.08 });
       this.crescent(at(0, 1.18, 0.15), from, F, 1.5, 2.7, { core: c2[0], edge: c2[1], ink: 0.5, w: 0.22, dur: 0.3, alpha: 0.85, delay: 0.1 });
     }
@@ -74,6 +78,9 @@ Object.assign(Fx.prototype, {
     const tint = style === 'cursed' ? ARC.cursed : ARC[el];
     // a dome of air-pressure arcs flaring out of the hit (no flat rings)
     this.airBurst(p, dir, heavy, tint);
+    // a jagged crescent flash across the hit, spinning off (in the element's colours)
+    const D = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+    this.slashDisc(p.clone(), new THREE.Vector3(0, 1, 0), new THREE.Vector3(-D.z, 0, D.x), heavy ? 2.0 : 1.2, SLASH_PAL[style === 'cursed' ? 'cursed' : el === 'fire' ? 'fire' : 'ice'], { spin: 11, life: 0.22, shards: heavy ? 8 : 3 });
     this.impactStar(p, heavy ? 1.7 : 0.9, style === 'cursed' ? [1.1, 1.4, 1.9] : el === 'fire' ? [1.8, 1.3, 0.8] : [1.2, 1.5, 1.9]);
     // sparks of the element, sprayed out the far side
     for (let k = 0; k < (heavy ? 30 : 14); k++) {
@@ -90,6 +97,14 @@ Object.assign(Fx.prototype, {
     this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.06, heavy ? 1.0 : 0.5, heavy ? 1.6 : 0.8, C.white[0], C[el][0], 0, 0);
     this.light(p, heavy ? 22 : 9, heavy ? 10 : 5, heavy ? 0.2 : 0.1, style === 'cursed' ? 0x6fb8ff : el === 'fire' ? 0xff7a2a : 0x9fd8ff);
     if (heavy) for (let k = 0; k < 12; k++) { const a = R() * 6.283; this.smoke.emit(p.x, p.y - 0.9, p.z, Math.cos(a) * 4 + dir.x * 6, 0.4 + R(), Math.sin(a) * 4 + dir.z * 6, 0.6 + R() * 0.3, 0.4, 1.6, DUST0, DUST1, 2.4, 0.1); }
+  },
+
+  // stun-immune (budget spent): faint white glints rising off the body
+  immuneGlint(p, t) {
+    if (R() > 0.45) return;
+    const a = R() * 6.283, r = 0.35 + R() * 0.15;
+    this.fire.emit(p.x + Math.cos(a) * r, p.y + 0.2 + R() * 1.5, p.z + Math.sin(a) * r, 0, 1.2 + R(), 0, 0.35, 0.05, 0.02, [2.2, 2.3, 2.6, 0.9], [0.8, 0.9, 1.2, 0], 0, 0);
+    void t;
   },
 
   // dizzy stars circling a stunned player's head (call every frame while stunned)

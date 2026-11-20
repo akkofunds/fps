@@ -1111,7 +1111,7 @@ export class Match {
         // battlegrounds hitstun: the victim can't move or attack until it wears off
         const e = this.ents.get(msg.n);
         if (!e) return;
-        const s = Math.max(0, Math.min(1.2, Number(msg.s) || 0));
+        const s = Math.max(0, Math.min(2.2, Number(msg.s) || 0));
         e.stunT = Math.max(e.stunT || 0, s);
         if (e === this.local) {
           this.stunT = Math.max(this.stunT || 0, s); this.body.locked = Math.max(this.body.locked, s); this.body.dashT = 0;
@@ -1124,6 +1124,14 @@ export class Match {
             toast('TECHNIQUE NULLIFIED', 1600);
           }
         }
+        break;
+      }
+      case 'stunImm': {
+        // stun budget spent: they can't be stunned again for a moment (white glints, and a cue for them)
+        const e = this.ents.get(msg.n);
+        if (!e) return;
+        e.immT = Math.max(e.immT || 0, Math.min(4, Number(msg.s) || 0));
+        if (e === this.local) this.app.hud.banner('STUN BREAK', 'GET OUT!', 1.0);
         break;
       }
       case 'slow': {
@@ -1461,6 +1469,8 @@ export class Match {
         if (e.kickT > 0) { e.kickT -= dt; this.fx.kickTrail(v.rig.bones[20].getWorldPosition(tmpV), e.vel); }
         if (e.boostT > 0) { e.boostT -= dt; this.fx.boostFlames(v.rig.bones[16].getWorldPosition(tmpV)); this.fx.boostFlames(v.rig.bones[20].getWorldPosition(tmpV)); }
         if (e.stunT > 0) { e.stunT -= dt; if (v.root.visible) this.fx.stunStars(v.head.getWorldPosition(tmpV).add(tmpV2.set(0, 0.32, 0)), this.time); }
+        else if (e.immT > 0 && v.root.visible) this.fx.immuneGlint(e.pos, this.time);
+        if (e.immT > 0) e.immT -= dt;
         if (e.slowT > 0) { e.slowT -= dt; if (!(e.iceT > 0) && !this.inEnemyDomain(e)) this.fx.slowFx(e.pos); }
         if (e.iceT > 0) e.iceT -= dt;
       }
