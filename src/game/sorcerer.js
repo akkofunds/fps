@@ -15,11 +15,11 @@ export const SORCERER = {
   color: '#8fd8ff',
   bio: 'The strongest sorcerer alive. Limitless bends space around him: Blue drags everything into a single point, Red blows it apart, and the two together become Hollow Purple, imaginary mass that erases whatever it passes through. When he opens his domain, there is nowhere left to run.',
   abilities: [
-    { key: 'LMB', id: 'flick', name: 'Cursed Strikes', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick) charged with cursed energy. Every hit stuns so the next one connects, each swing lunges you onto the target, and the kick launches them.' },
+    { key: 'LMB', id: 'flick', name: 'Cursed Strikes', desc: 'M1: a 4-hit melee string (jab, cross, hook, flying kick) charged with cursed energy. Every hit stuns so the next one connects, each swing steps you in if they're right in front of you, and the kick launches them.' },
     { key: 'Q', id: 'dash', name: 'Blink Step', desc: 'Burst a short distance in the direction you are moving. 2 charges. Press jump again in the air to double jump.' },
     { key: 'E', id: 'blue', name: 'Lapse: Blue', cd: 9, desc: 'Create a point of attraction where you aim. Everything nearby is dragged into it and ground down, then it collapses.' },
-    { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (34 + splash).' },
-    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 18, desc: 'The full Hollow Purple: focus, draw out Blue and Red in each hand, bring them together into imaginary mass and release it, a huge sphere that tears straight through everything in its path (72 damage). A long, planted cast.' },
+    { key: 'C', id: 'red', name: 'Reversal: Red', cd: 8, desc: 'Condense repulsion at your fingertip and fire it: a shot that detonates on impact and blasts everyone around it away (30 + splash).' },
+    { key: 'V', id: 'purple', name: 'Hollow Purple', cd: 18, desc: 'The full Hollow Purple: focus, draw out Blue and Red in each hand, bring them together into imaginary mass and release it, a huge sphere that tears straight through everything in its path (64 damage). A long, planted cast.' },
     { key: 'X', id: 'domain', name: 'Domain Expansion: Unlimited Void', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Expand your domain. Everyone caught inside is trapped in the void: frozen for a moment, then slowed and dealing 25% less damage for 7 s, while your cooldowns run 50% faster.' },
   ],
 };
@@ -30,7 +30,7 @@ export const RED = { charge: 0.36, radius: 3.8, splash: 20, minSplash: 8, kb: 15
 // the model's own Hollow Purple animation at its real speed (source 6.5 s → 13.1 s): Blue and Red
 // appear at the hands at 4.5 s (source 11.0), converge, the purple mass grows, release at 6.4 s;
 // it travels at the source's speed (~16 m/s)
-export const PURPLE = { charge: 6.4, orbsAt: 4.5, front: 1.5, height: 1.35, spread: 0.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 72 };
+export const PURPLE = { charge: 6.4, orbsAt: 4.5, front: 1.5, height: 1.35, spread: 0.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 64 };
 export const VOID = { cine: 5.6, radius: 30, dur: 7, enemyDmg: 0.75, enemySlow: 0.7, cdBoost: 1.5, stun: 1.0, dmg: 8 };
 
 const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 18 };

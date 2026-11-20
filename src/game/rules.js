@@ -4,7 +4,7 @@ import { VOID } from './sorcerer.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { novaFrag: 20, novaShock: 24, novaBurn: 8, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 62, freeze: 16, heatwave: 50, lance: 72, uppercut: 34, zero: 18, zeroBoom: 100, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 30, sparkBig: 40, starfall: 22, sigil: 80, blink: 45, nova: 110, flick: 26, blue: 18, red: 42, redSplash: 22, purple: 76, void: 10, m1: 14, m1f: 20, flash: 26, slam: 36, nullify: 42, sever: 14, severFin: 42 };
+const MAX_HIT = { novaFrag: 20, novaShock: 24, novaBurn: 8, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 54, freeze: 14, heatwave: 40, lance: 62, uppercut: 30, zero: 18, zeroBoom: 100, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 24, sparkBig: 30, starfall: 16, sigil: 80, blink: 32, nova: 100, flick: 26, blue: 18, red: 38, redSplash: 22, purple: 68, void: 10, m1: 12, m1f: 16, flash: 26, slam: 36, nullify: 42, sever: 14, severFin: 42 };
 // every piece of an ultimate (blast, fragments, shockwave, burning crater, freeze) adds up to at
 // most this share of max HP per victim: ultimates hit hard but never kill from full health
 const ULT_ABS = new Set(['nova', 'novaFrag', 'novaShock', 'novaBurn', 'zero', 'zeroBoom', 'adolla', 'adollaPath', 'meteor', 'void', 'sever', 'severFin']);

@@ -32,10 +32,10 @@ function segSeg(p1, q1, p2, q2) {
 export const PROJ = {
   bolt: { speed: 58, grav: 0, radius: 0.07, life: 1.3, dmg: 18, head: 1.5 },
   orb: { speed: 33, grav: 7, radius: 0.38, life: 3, dmg: 20, head: 1 },
-  spark: { speed: 46, grav: 0, radius: 0.08, life: 1.6, dmg: 20, head: 1.5 },
+  spark: { speed: 46, grav: 0, radius: 0.08, life: 1.6, dmg: 15, head: 1.45 },
   flick: { speed: 72, grav: 0, radius: 0.07, life: 1.1, dmg: 16, head: 1.5 },
-  red: { speed: 52, grav: 0, radius: 0.22, life: 1.1, dmg: 34, head: 1.2 },
-  sparkBig: { speed: 40, grav: 0, radius: 0.16, life: 1.7, dmg: 24, head: 1.3 },
+  red: { speed: 52, grav: 0, radius: 0.22, life: 1.1, dmg: 30, head: 1.2 },
+  sparkBig: { speed: 40, grav: 0, radius: 0.16, life: 1.7, dmg: 20, head: 1.25 },
   ember: { speed: 50, grav: 2, radius: 0.1, life: 0.62, dmg: 9, head: 1 },
   shard: { speed: 62, grav: 0, radius: 0.07, life: 1.2, dmg: 16, head: 1.5 },
   blast: { speed: 46, grav: 0, radius: 0.14, life: 1.2, dmg: 26, head: 1.3 },
@@ -153,7 +153,7 @@ export class Projectiles {
       m.sound('explode', pos, 0.55, 30);
       if (p.local) {
         if (target) m.reportHit(target, Math.round(p.def.dmg * (head ? p.def.head : 1)), 'sparkBig', { head, at: pos, burn: [4, 2] });
-        m.areaDamage(pos, 2.8, 14, 6, 'sparkBig', { skip: target, kb: 5 });
+        m.areaDamage(pos, 2.8, 10, 4, 'sparkBig', { skip: target, kb: 5 });
       }
     } else if (p.kind === 'spark') {
       m.fx.sparkBurst(pos, 2.2);
