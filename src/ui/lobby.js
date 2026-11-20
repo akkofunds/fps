@@ -1,7 +1,7 @@
 import { $, el, show, toast } from './dom.js';
 import { ICONS, ABILITY_ICON } from './icons.js';
 import { isAdmin } from './admin.js';
-import { isPublicMage, globalCfg } from '../core/adminAccess.js';
+import { isPublicMage, globalCfg, isOwner as isOwnerNow } from '../core/adminAccess.js';
 import { myToken, maskToken } from '../core/adminAccess.js';
 import { MAGES as MAGE_DEFS, mageOf } from '../game/mages.js';
 import { parseTag, sanitizeName, randomTag, saveIdentity, loadRecent } from '../core/storage.js';
@@ -398,7 +398,12 @@ export class Lobby {
   showAdminBadge(open) { const b = $('adminBadge'); b.classList.remove('hidden'); b.onclick = open; }
   hideAdminBadge() { $('adminBadge').classList.add('hidden'); }
 
-  openSettings() { Audio.play('ui'); show('settings', true); }
+  openSettings() {
+    Audio.play('ui');
+    const st = $('sAdminStatus');
+    if (st) st.textContent = isOwnerNow() ? 'OWNER' : isAdmin() ? 'ADMIN' : 'PLAYER';
+    show('settings', true);
+  }
   closeModals() { show('settings', false); }
 }
 
