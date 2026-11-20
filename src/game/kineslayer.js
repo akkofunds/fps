@@ -20,10 +20,10 @@ export const KINE = {
   abilities: [
     { key: 'LMB', id: 'm1', name: 'Spear Strikes', desc: 'M1: a 4-hit string with the Inverted Spear: forehand slash, backhand slash, rising cut, then a lunging thrust that launches. Longer reach than fists, every hit stuns, and each swing steps you in if they are right in front of you.' },
     { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 8% faster, have THREE dash charges, and can jump twice in the air. Burst in the direction you are moving with Q.' },
-    { key: 'E', id: 'flash', name: 'Flash Step', cd: 7, desc: 'Move faster than the eye can follow: blink 12 m toward your crosshair, cutting every enemy you pass through (24 damage, a short stun).' },
+    { key: 'E', id: 'flash', name: 'Flash Step', cd: 7, desc: 'Move faster than the eye can follow: blink 12 m toward your crosshair. Everyone you pass through only realises they were cut a beat later (24 damage, a short stun).' },
     { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 9, desc: 'Launch yourself high into the air, then dive spear-first onto the spot you aim at: the impact hits everyone around it (34 damage), stuns them and throws them up.' },
-    { key: 'V', id: 'nullify', name: 'Inverted Spear', cd: 12, desc: 'A lunging thrust with the Inverted Spear of Heaven (40 damage). The first enemy it pierces has their technique nullified: whatever ability they were winding up is cancelled.' },
-    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Lock onto the enemy under your crosshair (up to 16 m) and vanish: five cuts from five directions in under a second, then a thrust that launches them (94 damage in total). No target in range: a long severing dash.' },
+    { key: 'V', id: 'nullify', name: 'Inverted Spear', cd: 12, desc: 'A lunging thrust with the Inverted Spear of Heaven (28 damage) that nullifies the first enemy it pierces, cancelling whatever ability they were winding up, then a spinning backhand rips it out (12 more, launches).' },
+    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Lock onto the enemy under your crosshair (up to 16 m) and vanish. Six cuts from six sides, faster than the eye can follow, a frozen beat… then every cut lands at once and launches them (94 damage in total). You end back where you started. No target in reach: a long severing dash.' },
   ],
 };
 
@@ -38,8 +38,9 @@ export const SPEAR_M1 = {
 };
 export const FLASH = { dist: 12, time: 0.2, hitR: 1.6, dmg: 24, stun: 0.35 };
 export const SKYFALL = { up: 15, fwd: 7, apex: 0.5, range: 18, dive: 40, radius: 3.8, dmg: 34, stun: 0.6 };
-export const NULLIFY = { charge: 0.12, dist: 8, time: 0.18, hitR: 1.5, dmg: 40, stun: 0.5 };
-export const SEVER = { range: 16, cone: 0.93, cuts: 5, gap: 0.15, cutDmg: 12, finDmg: 34, radius: 2.4, stun: 0.6, missDist: 16, missDmg: 40 };
+export const NULLIFY = { charge: 0.12, dist: 8, time: 0.18, hitR: 1.5, dmg: 28, follow: 12, stun: 0.6 };
+export const SEVER = { range: 16, cone: 0.93, cuts: 6, gap: 0.13, cutDmg: 9, finDmg: 40, radius: 2.6, stun: 0.7, hold: 0.32, missDist: 16, missDmg: 40 };
+export const FLASH_REVEAL = 0.24; // the cut lands a beat after he has already passed
 
 const COOLDOWN = { flash: 7, skyfall: 9, nullify: 12 };
 const cdOf = (base) => (BAL.noCooldowns ? 0 : base * BAL.cd);
@@ -60,7 +61,7 @@ export class KineSlayerKit {
     this.sky = null;   // Skyfall state
   }
 
-  reset() { for (const k in this.cd) this.cd[k] = 0; this.pending.length = 0; this.busy = 0; this.sweep = null; this.sky = null; }
+  reset() { if (this._severEnd) this._severEnd(); for (const k in this.cd) this.cd[k] = 0; this.pending.length = 0; this.busy = 0; this.sweep = null; this.sky = null; }
   slots() { return [['flash', 'E'], ['skyfall', 'C'], ['nullify', 'V'], ['sever', 'X']]; }
   addUlt(v) {
     this.ult = Math.min(ULT_COST, this.ult + v);
@@ -79,6 +80,7 @@ export class KineSlayerKit {
       if (p.t <= 0) { this.pending.splice(i, 1); if (m.local.alive) p.fn(); }
     }
     if (this.sweep) this._sweepTick(dt);
+    if (this._severEnd) { this.severT -= dt; if (this.severT <= 0 || !m.local.alive) this._severEnd(); }
     if (this.sky) this._skyTick(dt);
     if (!m.local.alive || !m.controlsActive) return;
     const pr = input.pressed;
@@ -126,14 +128,36 @@ export class KineSlayerKit {
       S.hit.add(e.n);
       const at = new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z);
       if (S.kind === 'flash') {
-        m.reportHit(e, FLASH.dmg, 'flash', { stun: FLASH.stun, kb: [S.dir.x * 3, 2, S.dir.z * 3], at });
-        m.castAbility({ ab: 'ksHit', p: at.toArray(), d: [S.dir.x, S.dir.z], h: 0, v: e.n });
+        // nothing happens yet: they only realise they were cut once he is already past them
+        const dir = [S.dir.x, S.dir.z];
+        m.castAbility({ ab: 'flashMark', p: at.toArray(), d: dir, v: e.n });
+        this.pending.push({ t: FLASH_REVEAL, fn: () => {
+          if (!e.alive) return;
+          const at2 = new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z);
+          m.reportHit(e, FLASH.dmg, 'flash', { stun: FLASH.stun, kb: [dir[0] * 4, 3, dir[1] * 4], at: at2 });
+          m.castAbility({ ab: 'flashReveal', p: at2.toArray(), d: dir, v: e.n });
+          m.fx.shake(0.18); m.view.anim.hitStop(0.06);
+        } });
       } else if (S.kind === 'nullify') {
-        m.reportHit(e, NULLIFY.dmg, 'nullify', { stun: NULLIFY.stun, nul: 1, kb: [S.dir.x * 9, 3, S.dir.z * 9], at });
+        m.reportHit(e, NULLIFY.dmg, 'nullify', { stun: NULLIFY.stun, nul: 1, kb: [S.dir.x * 1.5, 0.5, S.dir.z * 1.5], at });
         m.castAbility({ ab: 'nullHit', p: at.toArray(), d: [S.dir.x, S.dir.z], v: e.n });
-        // the thrust stops in them
+        // the thrust stops in them… then he rips the spear out in a spinning backhand
         b.lungeT = 0; b.vel.x *= 0.1; b.vel.z *= 0.1; S.t = 0;
         m.fx.shake(0.35); m.cam.kick += 0.04;
+        const dir = [S.dir.x, S.dir.z];
+        this.busy = Math.max(this.busy, 0.6);
+        this.pending.push({ t: 0.2, fn: () => {
+          m.playAnim('ksB');
+          m.castAbility({ ab: 'm1', i: 1, s: 'spear', o: b.pos.toArray(), d: dir });
+          m.sound('slash', b.pos, 0.8, 25);
+        } });
+        this.pending.push({ t: 0.28, fn: () => {
+          if (!e.alive) return;
+          const at2 = new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z);
+          m.reportHit(e, NULLIFY.follow, 'nullify', { stun: 0.4, kb: [dir[0] * 12, 6, dir[1] * 12], at: at2 });
+          m.castAbility({ ab: 'ksHit', p: at2.toArray(), d: dir, h: 1, v: e.n });
+          m.fx.shake(0.3);
+        } });
       } else if (S.kind === 'severMiss') {
         m.reportHit(e, SEVER.missDmg, 'severFin', { stun: SEVER.stun, kb: [S.dir.x * 10, 5, S.dir.z * 10], at });
         m.castAbility({ ab: 'ksHit', p: at.toArray(), d: [S.dir.x, S.dir.z], h: 1, v: e.n });
@@ -245,11 +269,13 @@ export class KineSlayerKit {
     let tgt = inRange(m.aimEnt) ? m.aimEnt : null;
     if (!tgt) {
       const f = this._flatAim(tmp2);
-      let best = SEVER.cone;
+      let best = -9;
       for (const e of this._enemies()) {
         if (!inRange(e)) continue;
         const dx = e.pos.x - b.pos.x, dz = e.pos.z - b.pos.z, d = Math.hypot(dx, dz) || 1;
-        const s = (dx * f.x + dz * f.z) / d - d / SEVER.range * 0.25;
+        const dot = (dx * f.x + dz * f.z) / d;
+        if (dot < SEVER.cone) continue;           // has to be (nearly) where you are looking
+        const s = dot - d / SEVER.range * 0.25;   // then the closest of those
         if (s > best) { best = s; tgt = e; }
       }
     }
@@ -264,30 +290,85 @@ export class KineSlayerKit {
       m.castAbility({ ab: 'flash', o: o.toArray(), d: [dir.x, dir.z], l: Math.round(len * 100) / 100, big: 1 });
       return;
     }
-    const total = SEVER.cuts * SEVER.gap + 0.5;
-    this.busy = total; b.locked = total;
+    // the camera stays exactly where it was for the whole technique (no spinning around): he blinks
+    // round the target cutting from every side, everything freezes for a beat, all the cuts land
+    // at once, and he is standing back where he started
+    if (m.cine) return;
+    const start = b.pos.clone(), yaw = m.cam.yaw, pitch = m.cam.pitch;
+    const camPos = m.camera.position.clone(), camQ = m.camera.quaternion.clone(), look = tgt.pos.clone().add(new THREE.Vector3(0, 1, 0));
+    const fx = m.fx, shk = new THREE.Vector3();
+    const total = 0.1 + SEVER.cuts * SEVER.gap + SEVER.hold + 0.45;
+    this.busy = total + 0.1; b.locked = total;
+    m.cine = {
+      t: 0, caster: m.local, sever: true,
+      update(dt) { this.cine.t += dt; },
+      camera() {
+        const k = Math.min(0.35, fx.shakeAmt) * 0.25;
+        this.camera.position.copy(camPos).add(shk.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k));
+        this.camera.quaternion.copy(camQ);
+        return look;
+      },
+      end() {},
+    };
+    this.severT = total + 0.6; // safety: never leave the camera frozen
     const yaw0 = Math.atan2(b.pos.x - tgt.pos.x, b.pos.z - tgt.pos.z);
-    for (let i = 0; i <= SEVER.cuts; i++) {
-      const fin = i === SEVER.cuts;
-      this.pending.push({ t: 0.08 + i * SEVER.gap + (fin ? 0.12 : 0), fn: () => {
+    const ghostCuts = [];
+    for (let i = 0; i < SEVER.cuts; i++) {
+      this.pending.push({ t: 0.1 + i * SEVER.gap, fn: () => {
         if (!tgt.alive) return;
         // blink to a new side of the target and cut through
-        const a = fin ? yaw0 : yaw0 + Math.PI + (i % 2 ? 1 : -1) * (0.9 + i * 0.55);
-        const r = fin ? 1.6 : SEVER.radius;
+        const a = yaw0 + Math.PI + (i % 2 ? 1 : -1) * (0.7 + i * 0.62);
         const from = b.pos.clone();
-        const x = tgt.pos.x + Math.sin(a) * r, z = tgt.pos.z + Math.cos(a) * r;
+        const x = tgt.pos.x + Math.sin(a) * SEVER.radius, z = tgt.pos.z + Math.cos(a) * SEVER.radius;
         const y = m.world.groundAt(x, z, tgt.pos.y + 2);
         const face = Math.atan2(tgt.pos.x - x, tgt.pos.z - z);
         b.teleport(x, Math.max(y, tgt.pos.y), z, face);
-        m.cam.yaw = face; m.faceLockT = 0.3;
-        m.playAnim(fin ? 'ksD' : ['ksA', 'ksB', 'ksC'][i % 3]);
+        m.cam.yaw = face; m.cam.pitch = 0;   // only turns his body: the camera is frozen
+        m.playAnim(['ksA', 'ksB', 'ksC'][i % 3]);
         const dir = [Math.sin(face), Math.cos(face)];
         const at = new THREE.Vector3(tgt.pos.x, tgt.pos.y + 1.2, tgt.pos.z);
-        m.castAbility({ ab: 'severCut', f: from.toArray(), o: [x, b.pos.y, z], p: at.toArray(), d: dir, i, fin: fin ? 1 : 0, v: tgt.n });
-        m.reportHit(tgt, fin ? SEVER.finDmg : SEVER.cutDmg, fin ? 'severFin' : 'sever', fin ? { stun: SEVER.stun, kb: [dir[0] * 16, 8, dir[1] * 16], at } : { stun: SEVER.stun, at });
-        m.fx.shake(fin ? 0.6 : 0.2); m.cam.kick += fin ? 0.06 : 0.015;
-        if (fin) m.app.hud.dashImpact();
+        ghostCuts.push(i);
+        m.castAbility({ ab: 'severCut', f: from.toArray(), o: [x, b.pos.y, z], p: at.toArray(), d: dir, i, fin: 0, v: tgt.n });
+        m.reportHit(tgt, SEVER.cutDmg, 'sever', { stun: SEVER.stun, at });
+        fx.shake(0.15);
       } });
     }
+    // the hold: one last appearance in front of them, a frozen beat… then release
+    const tFin = 0.1 + SEVER.cuts * SEVER.gap;
+    this.pending.push({ t: tFin, fn: () => {
+      if (!tgt.alive) return;
+      const x = tgt.pos.x + Math.sin(yaw0) * 1.7, z = tgt.pos.z + Math.cos(yaw0) * 1.7;
+      const face = Math.atan2(tgt.pos.x - x, tgt.pos.z - z);
+      b.teleport(x, Math.max(m.world.groundAt(x, z, tgt.pos.y + 2), tgt.pos.y), z, face);
+      m.cam.yaw = face;
+      m.playAnim('ksD');
+      m.castAbility({ ab: 'severHold', p: [tgt.pos.x, tgt.pos.y + 1.2, tgt.pos.z], d: [Math.sin(face), Math.cos(face)], v: tgt.n });
+    } });
+    this.pending.push({ t: tFin + SEVER.hold, fn: () => {
+      if (tgt.alive) {
+        const dir = [Math.sin(m.cam.yaw), Math.cos(m.cam.yaw)];
+        const at = new THREE.Vector3(tgt.pos.x, tgt.pos.y + 1.2, tgt.pos.z);
+        m.reportHit(tgt, SEVER.finDmg, 'severFin', { stun: SEVER.stun, kb: [dir[0] * 16, 9, dir[1] * 16], at });
+        m.castAbility({ ab: 'severCut', f: b.pos.toArray(), o: b.pos.toArray(), p: at.toArray(), d: dir, i: SEVER.cuts, fin: 1, v: tgt.n });
+        fx.shake(0.6);
+        m.app.hud.dashImpact();
+      }
+    } });
+    // …and he is back where he was, facing where he faced
+    this.pending.push({ t: total - 0.05, fn: () => this._endSever(start, yaw, pitch) });
+    this._severEnd = () => this._endSever(start, yaw, pitch);
+  }
+
+  _endSever(start, yaw, pitch) {
+    const m = this.m, b = m.body;
+    if (!this._severEnd) return;
+    this._severEnd = null; this.severT = 0;
+    const from = b.pos.clone();
+    if (m.local.alive) {
+      b.teleport(start.x, start.y, start.z, yaw);
+      m.castAbility({ ab: 'severEnd', f: from.toArray(), o: start.toArray() });
+    }
+    m.cam.yaw = yaw; m.cam.pitch = pitch;
+    if (m.cine && m.cine.sever) m._endCine();
   }
 }

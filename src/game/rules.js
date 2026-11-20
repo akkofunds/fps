@@ -9,6 +9,7 @@ const MAX_HIT = { novaFrag: 20, novaShock: 24, novaBurn: 8, bolt: 30, orb: 45, w
 // most this share of max HP per victim: ultimates hit hard but never kill from full health
 const ULT_ABS = new Set(['nova', 'novaFrag', 'novaShock', 'novaBurn', 'zero', 'zeroBoom', 'adolla', 'adollaPath', 'meteor', 'void', 'sever', 'severFin']);
 const ULT_CAP = 0.5, ULT_WINDOW = 14;
+const STUN_CHAIN = 2.2, STUN_IMMUNE = 1.6, STUN_RESET = 0.6;
 
 export class Rules {
   constructor(match) {
@@ -24,6 +25,7 @@ export class Rules {
     this.respawnAt = new Map();
     this.lastDamage = new Map();
     this.lastHit = new Map(); // anti-spam per attacker
+    this.stuns = new Map(); // n → { until, chain, imm } stun budget per target
     this.ultDmg = new Map(); // "attacker>victim" → { t0, sum } ultimate damage dealt in the window
   }
 
@@ -103,6 +105,7 @@ export class Rules {
     const jx = (Math.random() - 0.5) * 1.2, jz = (Math.random() - 0.5) * 1.2;
     this.respawnAt.delete(e.n);
     this.burns.delete(e.n);
+    this.stuns.delete(e.n);
     this.bcast({ t: 'spawn', n: e.n, x: s.x + jx, y: this.m.world.groundAt(s.x + jx, s.z + jz, s.y + 2) + 0.02, z: s.z + jz, yaw: s.yaw });
   }
 
@@ -135,15 +138,38 @@ export class Rules {
       const k = Math.max(0, Math.min(1, Number(msg.slow[0]) || 0)), s = Math.max(0, Math.min(3, Number(msg.slow[1]) || 0));
       if (s > 0) this.bcast({ t: 'slow', n: v.n, k, s });
     }
-    if (v.alive && msg.stun) {
-      const s = Math.max(0, Math.min(1.2, Number(msg.stun) || 0));
-      if (s > 0) this.bcast(msg.nul ? { t: 'stun', n: v.n, s, nul: 1 } : { t: 'stun', n: v.n, s });
-    }
+    if (v.alive && msg.stun) this._stun(v, Math.max(0, Math.min(1.2, Number(msg.stun) || 0)), msg);
     if (v.alive && Array.isArray(msg.kb)) {
       const k = msg.kb.map((x) => Math.max(-16, Math.min(16, Number(x) || 0)));
       if (v.isLocal) this.m.clientHandle({ t: 'kb', n: v.n, v: k });
       else if (!v.dummy) this.m.net.send(v.id, { t: 'kb', n: v.n, v: k });
     }
+  }
+
+  // Stun budget: no infinite stun-locks. One continuous chain can hold a target for at most
+  // STUN_CHAIN seconds (a full M1 string, finisher included); after that, or after any launching
+  // finisher, the target is immune to stun for STUN_IMMUNE seconds once the stun wears off, so
+  // there is always a window to dash out. The chain resets once they have been free for a moment.
+  _stun(v, s, msg) {
+    if (s <= 0) return;
+    const now = this.now;
+    const st = this.stuns.get(v.n) || { until: 0, chain: 0, imm: 0 };
+    if (now < st.imm) return;                                 // immune: the hit lands, the stun doesn't
+    if (now > st.until + STUN_RESET) st.chain = 0;            // they got free: a new chain
+    const until = Math.max(st.until, now + s);
+    let ext = until - Math.max(st.until, now);                // how much longer this keeps them stunned
+    ext = Math.min(ext, Math.max(0, STUN_CHAIN - st.chain));
+    if (ext <= 0.02) { st.imm = Math.max(st.imm, now + STUN_IMMUNE); this.stuns.set(v.n, st); this.bcast({ t: 'stunImm', n: v.n, s: STUN_IMMUNE }); return; }
+    st.chain += ext;
+    st.until = Math.max(st.until, now) + ext;
+    const left = st.until - now;
+    const finisher = /^(m1f|severFin|slam)$/.test(msg.ab) || (Array.isArray(msg.kb) && Number(msg.kb[1]) >= 6);
+    if (st.chain >= STUN_CHAIN - 0.02 || finisher) {
+      st.imm = st.until + STUN_IMMUNE;
+      this.bcast({ t: 'stunImm', n: v.n, s: left + STUN_IMMUNE });
+    }
+    this.stuns.set(v.n, st);
+    this.bcast(msg.nul ? { t: 'stun', n: v.n, s: left, nul: 1 } : { t: 'stun', n: v.n, s: left });
   }
 
   damage(v, dmg, from, ab) {

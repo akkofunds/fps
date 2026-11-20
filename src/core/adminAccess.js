@@ -9,6 +9,10 @@
 //   A listed admin gets Meteora; only the owner gets the admin panel.
 const OWNER = {"pub":{"kty":"EC","crv":"P-256","x":"gNS9Dm5NTMDX6H5Jw1WZO2CW1CoFuRct-RKmEnoPV0E","y":"4JL-nXY_GD_yoIK0pW2K9HRKit1N71Tf7VdaccrDoRE"},"salt":"+RAD01wUYp4yj6PnidYm1g==","iv":"Ojzc6/smtYObujuP","data":"BOjdEtP/5OihgavmbE26M/ARnBGz39B4XAcxJn9CH6l4eJ+G9vhC0TlzCqhtqr+n+0gjuAq5qvubygOSz1DKZnzDuV1x84Te4g1oRoubn8AK/NYHnLYwvj4nFLNq7pj2mVrdMDe7iAwwkgSHoY5g4rs9rKVb//lLApbhjJCXoYFIXmjA/OCUUVR8MR/WiUNfB//ZLczJrQnbhw=="};
 
+// Admin lists signed before this moment are ignored everywhere: the list was reset (nobody is an
+// admin until the owner adds people again). Bump to reset it again.
+const LIST_EPOCH = 1795182819183;
+
 const TOKEN_KEY = 'magebreak.token';
 const LIST_KEY = 'magebreak.adminList';
 const OWNER_KEY = 'magebreak.ownerKey';
@@ -49,14 +53,18 @@ export const isOwner = () => !!read(OWNER_KEY);
 export function isAdmin() { return isOwner() || !!(myHash && list && Array.isArray(list.admins) && list.admins.some((a) => a.h === myHash)); }
 export const adminList = () => (list ? list.admins.slice() : []);
 export const currentList = () => list;
+// owner-signed global settings carried with the list: characters opened to everyone, announcement
+export const globalCfg = () => cleanCfg(list && list.cfg);
+export const isPublicMage = (id) => globalCfg().open.includes(id);
 
 // ---------------------------------------------------------------- signatures
-const canon = (L) => JSON.stringify({ v: L.v, admins: L.admins.map((a) => [a.h, a.n || '', a.m || '', a.a || 0]) });
+const cleanCfg = (c) => ({ open: Array.isArray(c && c.open) ? c.open.filter((x) => /^[a-z]{2,20}$/.test(x)).slice(0, 12) : [], motd: String((c && c.motd) || '').slice(0, 200) });
+const canon = (L) => JSON.stringify({ v: L.v, admins: L.admins.map((a) => [a.h, a.n || '', a.m || '', a.a || 0]), cfg: cleanCfg(L.cfg) });
 let pubKey = null;
 async function pub() { return pubKey || (pubKey = await subtle.importKey('jwk', OWNER.pub, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])); }
 export async function verifyList(L) {
   try {
-    if (!L || typeof L.v !== 'number' || !Array.isArray(L.admins) || typeof L.sig !== 'string' || L.admins.length > 500) return false;
+    if (!L || typeof L.v !== 'number' || L.v < LIST_EPOCH || !Array.isArray(L.admins) || typeof L.sig !== 'string' || L.admins.length > 500) return false;
     if (!L.admins.every((a) => a && /^[0-9a-f]{64}$/.test(a.h))) return false;
     return await subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, await pub(), ub64(L.sig), new TextEncoder().encode(canon(L)));
   } catch { return false; }
@@ -65,7 +73,7 @@ export async function verifyList(L) {
 export async function adoptList(L) {
   if (!L || (list && L.v <= list.v)) return false;
   if (!(await verifyList(L))) return false;
-  list = { v: L.v, admins: L.admins.map((a) => ({ h: a.h, n: String(a.n || '').slice(0, 24), m: String(a.m || '').slice(0, 30), a: +a.a || 0 })), sig: L.sig };
+  list = { v: L.v, admins: L.admins.map((a) => ({ h: a.h, n: String(a.n || '').slice(0, 24), m: String(a.m || '').slice(0, 30), a: +a.a || 0 })), cfg: cleanCfg(L.cfg), sig: L.sig };
   write(LIST_KEY, list);
   changed();
   return true;
@@ -90,10 +98,10 @@ export async function ownerSignIn(password, pet) {
 }
 export function ownerSignOut() { write(OWNER_KEY, null); changed(); }
 
-async function publish(admins) {
+async function publish(admins, cfg = globalCfg()) {
   const key = await ownerKey();
   if (!key) throw new Error('Owner is not signed in on this device.');
-  const L = { v: Math.max(Date.now(), list ? list.v + 1 : 0), admins };
+  const L = { v: Math.max(Date.now(), list ? list.v + 1 : 0, LIST_EPOCH), admins, cfg: cleanCfg(cfg) };
   L.sig = b64(await subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(canon(L))));
   await adoptList(L);
   return L;
@@ -106,6 +114,8 @@ export async function addAdmin(token, name = '') {
   return publish(rest.concat([{ h, n: String(name).replace(/[^\w #.\-]/g, '').slice(0, 24), m: maskToken(token), a: Date.now() }]));
 }
 export async function removeAdmin(h) { return publish(adminList().filter((a) => a.h !== h)); }
+export async function removeAllAdmins() { return publish([]); }
+export async function setGlobalCfg(patch) { return publish(adminList(), { ...globalCfg(), ...patch }); }
 
 // ---------------------------------------------------------------- boot
 export async function initAdmin() {
@@ -115,6 +125,6 @@ export async function initAdmin() {
   write('magebreak.tokenHash', { t, h: myHash });
   const cached = read(LIST_KEY);
   list = null;
-  if (cached && (await verifyList(cached))) list = cached;
+  if (cached && (await verifyList(cached))) list = cached; else write(LIST_KEY, null);
   changed();
 }
