@@ -109,7 +109,7 @@ Object.assign(Fx.prototype, {
     // the crescent of the cut, in the plane the blade swings through
     const F = new THREE.Vector3(dir.x, 0, dir.z).normalize(), Rt = new THREE.Vector3(-F.z, 0, F.x), U = new THREE.Vector3(0, 1, 0);
     const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(U, y).addScaledVector(F, z);
-    const look = { core: [2.7, 2.8, 3.0], edge: [0.42, 0.48, 0.6], ink: 0.6 };
+    const look = { core: [1.6, 1.65, 1.75], edge: [0.42, 0.48, 0.6], ink: 0.6 };
     const dark = { core: [0.35, 0.38, 0.45], edge: [0.05, 0.05, 0.07], ink: 0, alpha: 0.7 };
     if (i === 0) {        // forehand: high right, over the front, down to the left
       const from = Rt.clone().multiplyScalar(0.65).addScaledVector(U, 0.75);

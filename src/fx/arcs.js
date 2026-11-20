@@ -57,7 +57,7 @@ const FRAG = /* glsl */`
     float streak = 0.55 + 0.45 * h(lane) * (0.6 + 0.4 * sin(u * 40.0 + h(lane + 3.0) * 6.28));
     float core = exp(-d * d * 4.0) * (0.35 + 0.65 * vS);
     vec3 col = mix(uEdge, uCore, clamp(core * 1.4, 0.0, 1.0));
-    float a = smoothstep(1.0, 0.72, d) * (0.18 + 0.82 * pow(vS, 0.7)) * streak;
+    float a = smoothstep(1.0, 0.62, d) * (0.38 + 0.62 * pow(vS, 0.6)) * (0.62 + 0.38 * streak);
     // ink: a dark line just inside the outer edge (and a fainter one inside), comic-style
     float ink = (smoothstep(0.62, 0.78, d) - smoothstep(0.86, 0.98, d)) * uInkAmt * (0.4 + 0.6 * h(lane + 7.0));
     col = mix(col, uInk, clamp(ink * 1.6, 0.0, 1.0));
@@ -155,7 +155,7 @@ Object.assign(Fx.prototype, {
       this.arc({
         c, e1: ax.clone().negate(), e2: d, r, angle: Math.PI, w: r * (ink ? 0.1 : 0.22), dur: (heavy ? 0.34 : 0.24) + R() * 0.08, head: 0.3,
         spiral: 1.15 + R() * 0.25, grow: heavy ? 0.6 : 0.45, twist: (R() - 0.5) * 0.6,
-        core: ink ? [0.08, 0.08, 0.1] : tinted ? tint[0] : [2.3, 2.35, 2.5], edge: ink ? [0.02, 0.02, 0.03] : tinted ? tint[1] : [0.75, 0.8, 0.9],
+        core: ink ? [0.08, 0.08, 0.1] : tinted ? tint[0] : [1.55, 1.58, 1.7], edge: ink ? [0.02, 0.02, 0.03] : tinted ? tint[1] : [0.55, 0.6, 0.75],
         ink: ink ? 0 : 0.45, alpha: ink ? 0.75 : 0.95, delay: R() * 0.03,
       });
       void from; void start;

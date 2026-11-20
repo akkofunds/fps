@@ -22,11 +22,12 @@ function elem(style, i, k = 0) {
 }
 
 // per element: crescent core / edge colours (HDR so the core blooms)
+// (arcs blend normally, so colours clamp at 1: keep the ratios saturated, just past 1 for bloom)
 const ARC = {
-  ice: [[2.0, 2.9, 3.6], [0.25, 0.75, 1.7]],
-  fire: [[3.4, 2.2, 0.7], [1.7, 0.35, 0.05]],
-  cursed: [[1.7, 2.5, 3.8], [0.15, 0.4, 1.7]],
-  white: [[2.4, 2.45, 2.6], [0.7, 0.75, 0.9]],
+  ice: [[0.75, 1.3, 1.75], [0.08, 0.45, 1.05]],
+  fire: [[1.6, 0.95, 0.3], [1.0, 0.22, 0.02]],
+  cursed: [[0.8, 1.2, 1.85], [0.08, 0.28, 1.1]],
+  white: [[1.55, 1.58, 1.7], [0.55, 0.6, 0.75]],
 };
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -54,16 +55,16 @@ Object.assign(Fx.prototype, {
     const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(UP, y).addScaledVector(F, z);
     const col = ARC[style === 'cursed' ? 'cursed' : elem(style, i)];
     const look = { core: col[0], edge: col[1], ink: 0.3 };
-    if (i === 0) this.crescent(at(1.0, 1.38, -0.1), Rt.clone().negate(), F, 1.25, 0.95, { ...look, w: 0.2, dur: 0.2, delay: 0.015 });
-    else if (i === 1) this.crescent(at(-1.0, 1.38, -0.1), Rt.clone(), F, 1.25, 0.95, { ...look, w: 0.22, dur: 0.2, delay: 0.02 });
+    if (i === 0) this.crescent(at(1.0, 1.38, -0.1), Rt.clone().negate(), F, 1.3, 1.0, { ...look, w: 0.34, dur: 0.22, delay: 0.015 });
+    else if (i === 1) this.crescent(at(-1.0, 1.38, -0.1), Rt.clone(), F, 1.3, 1.0, { ...look, w: 0.36, dur: 0.22, delay: 0.02 });
     else if (i === 2) {
-      this.crescent(at(0, 1.35, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 0.95, 2.3, { ...look, w: 0.34, dur: 0.24, delay: 0.05 });
+      this.crescent(at(0, 1.35, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 1.0, 2.4, { ...look, w: 0.46, dur: 0.26, delay: 0.05 });
       this.crescent(at(0, 1.28, 0.1), Rt.clone().negate().addScaledVector(F, -0.25), F, 1.15, 2.0, { ...look, w: 0.12, dur: 0.22, ink: 0.6, alpha: 0.7, delay: 0.07 });
     } else {
       // roundhouse: a wide crescent from his right side round the front; Shoto's is fire and ice
       const c2 = style === 'cursed' ? ARC.cursed : ARC.ice, c1 = style === 'cursed' ? ARC.white : ARC.fire;
       const from = Rt.clone().addScaledVector(UP, -0.35).addScaledVector(F, -0.3);
-      this.crescent(at(0, 1.25, 0.15), from, F, 1.25, 3.0, { core: c1[0], edge: c1[1], ink: 0.35, w: 0.5, dur: 0.3, delay: 0.08 });
+      this.crescent(at(0, 1.25, 0.15), from, F, 1.3, 3.1, { core: c1[0], edge: c1[1], ink: 0.35, w: 0.62, dur: 0.32, delay: 0.08 });
       this.crescent(at(0, 1.18, 0.15), from, F, 1.5, 2.7, { core: c2[0], edge: c2[1], ink: 0.5, w: 0.22, dur: 0.3, alpha: 0.85, delay: 0.1 });
     }
   },

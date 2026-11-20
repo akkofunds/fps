@@ -815,25 +815,25 @@ const FGUARD = {
 // follow-through. Impact frames line up with M1.hits[].at in game/melee.js.
 // 1 — left jab: snaps straight out, shoulder rolls through, the body stays square
 const JAB = {
-  hips: [6, -8, 0], spine: [10, -13, 0], chest: [6, -18, 0], upperChest: [0, -7, 0], neck: [0, 15, 0], head: [-6, 18, 0],
-  upperArmL: [-90, 0, 24], foreArmL: [-2, 0, 0], handL: [-4, 0, 0],
-  upperArmR: [-36, 0, -8], foreArmR: [-126, 0, 0], handR: [-10, 0, 0],
+  hips: [8, -14, 0], spine: [13, -18, 0], chest: [8, -24, 0], upperChest: [0, -10, 0], neck: [2, 20, 0], head: [-4, 24, 0],
+  upperArmL: [-106, 0, 27], foreArmL: [0, 0, 0], handL: [-6, 0, 0],
+  upperArmR: [-40, 0, -10], foreArmR: [-128, 0, 0], handR: [-10, 0, 0],
 };
 export const M1_A = compileClip([
   { t: 0, hip: [0, -0.06, 0], ik: FIGHT, b: FGUARD },
   { t: 0.025, ease: 'out', hip: [0, -0.08, -0.01], ik: FIGHT, b: { ...FGUARD, hips: [5, 12, 0], chest: [4, 2, 0], upperArmL: [-46, 0, -18], foreArmL: [-124, 0, 0] } },
   { t: 0.06, ease: 'in', hip: [0, -0.09, 0.07], ik: FIGHT_STEP, b: JAB },
-  { t: 0.1, ease: 'out', hip: [0, -0.09, 0.06], ik: FIGHT_STEP, b: { ...JAB, chest: [5, -15, 0], upperArmL: [-86, 0, 22], foreArmL: [-14, 0, 0] } },
+  { t: 0.1, ease: 'out', hip: [0, -0.09, 0.06], ik: FIGHT_STEP, b: { ...JAB, chest: [7, -21, 0], upperArmL: [-100, 0, 24], foreArmL: [-12, 0, 0] } },
   { t: 0.17, ease: 'smooth', hip: [0, -0.08, 0.04], ik: FIGHT_STEP, b: { ...FGUARD, hips: [5, -2, 0], upperArmL: [-60, 0, 2], foreArmL: [-90, 0, 0] } },
   { t: 0.32, ease: 'smooth', hip: [0, -0.06, 0], ik: FIGHT, b: FGUARD },
 ]);
 // 2 — right cross: load the back hip, then the hips and back foot turn the whole body into it
 const CROSS = {
-  hips: [8, 22, 0], spine: [11, 18, 0], chest: [7, 24, 0], upperChest: [0, 9, 0], neck: [0, -21, 0], head: [-6, -24, 0],
-  upperArmR: [-92, 0, 32], foreArmR: [-2, 0, 0], handR: [-4, 0, 0],
+  hips: [12, 32, 0], spine: [15, 24, 0], chest: [9, 30, 0], upperChest: [0, 13, 0], neck: [2, -28, 0], head: [-4, -32, 0],
+  upperArmR: [-94, 0, 36], foreArmR: [0, 0, 0], handR: [-6, 0, 0],
   upperArmL: [-44, 0, -12], foreArmL: [-122, 0, 0], handL: [-10, 0, 0],
 };
-const CROSS_STEP = { L: [0.15, 0, 0.32, -12], R: [-0.15, 0, -0.06, 40] };
+const CROSS_STEP = { L: [0.15, 0, 0.36, -12], R: [-0.15, 0.06, -0.04, 58] };
 export const M1_B = compileClip([
   { t: 0, hip: [0, -0.06, 0], ik: FIGHT, b: { ...FGUARD, hips: [4, -6, 0], chest: [3, -10, 0] } },
   { t: 0.03, ease: 'out', hip: [0, -0.1, -0.02], ik: FIGHT, b: { ...FGUARD, hips: [4, -12, 0], spine: [6, -10, 0], chest: [3, -14, 0], upperArmR: [-28, 0, -8], foreArmR: [-132, 0, 0] } },
@@ -845,13 +845,13 @@ export const M1_B = compileClip([
 // 3 — left hook: sink and wind the torso back, then whip the bent arm round on a flat arc and
 // let the shoulders carry on past the target
 const HOOK_WIND = {
-  hips: [6, 16, 0], spine: [7, 18, 0], chest: [3, 20, 0], neck: [0, -16, 0], head: [-4, -18, 0],
-  upperArmL: [-52, 0, 64], foreArmL: [-98, 0, 0], handL: [-6, 0, 0],
+  hips: [8, 22, 0], spine: [10, 24, 0], chest: [4, 28, 0], neck: [0, -22, 0], head: [-4, -24, 0],
+  upperArmL: [-54, 0, 72], foreArmL: [-96, 0, 0], handL: [-6, 0, 0],
   upperArmR: [-36, 0, -8], foreArmR: [-124, 0, 0],
 };
 const HOOK = {
-  hips: [8, -20, 0], spine: [11, -22, 0], chest: [7, -26, 0], upperChest: [0, -9, 0], neck: [0, 24, 0], head: [-6, 26, 0],
-  upperArmL: [-86, 0, 18], foreArmL: [-94, 0, 0], handL: [0, 0, 0],
+  hips: [12, -28, 0], spine: [15, -30, 0], chest: [9, -34, 0], upperChest: [0, -12, 0], neck: [2, 32, 0], head: [-4, 34, 0],
+  upperArmL: [-88, 0, 16], foreArmL: [-92, 0, 0], handL: [0, 0, 0],
   upperArmR: [-38, 0, -8], foreArmR: [-122, 0, 0],
 };
 const HOOK_PIVOT = { L: [0.15, 0, 0.3, -30], R: [-0.15, 0, -0.1, 22] };
@@ -859,7 +859,7 @@ export const M1_C = compileClip([
   { t: 0, hip: [0, -0.06, 0], ik: FIGHT, b: FGUARD },
   { t: 0.075, ease: 'out', hip: [0, -0.12, -0.01], ik: FIGHT, b: HOOK_WIND },
   { t: 0.12, ease: 'in', hip: [0, -0.12, 0.07], ik: HOOK_PIVOT, b: HOOK },
-  { t: 0.17, ease: 'out', hip: [0, -0.12, 0.07], ik: HOOK_PIVOT, b: { ...HOOK, hips: [8, -28, 0], chest: [7, -32, 0], upperArmL: [-82, 0, 6], foreArmL: [-100, 0, 0] } },
+  { t: 0.17, ease: 'out', hip: [0, -0.12, 0.07], ik: HOOK_PIVOT, b: { ...HOOK, hips: [12, -38, 0], chest: [9, -44, 0], upperArmL: [-80, 0, 2], foreArmL: [-102, 0, 0] } },
   { t: 0.27, ease: 'smooth', hip: [0, -0.09, 0.04], ik: HOOK_PIVOT, b: { ...FGUARD, hips: [6, -12, 0], chest: [4, -14, 0] } },
   { t: 0.44, ease: 'smooth', hip: [0, -0.06, 0], ik: FIGHT, b: FGUARD },
 ]);
@@ -867,13 +867,13 @@ export const M1_C = compileClip([
 // turn over and the shin whips through at chest height, then the leg recoils and plants
 const RH_CHAMBER = {
   hips: [0, 40, -10], spine: [-2, -14, 8], chest: [-2, -14, 4], neck: [0, -8, 0], head: [-4, -10, 4],
-  upperLegR: [-78, 0, 34], lowerLegR: [118, 0, 0], footR: [24, 0, 0],
+  upperLegR: [-92, 0, 40], lowerLegR: [124, 0, 0], footR: [24, 0, 0],
   upperLegL: [-8, 0, 2], lowerLegL: [18, 0, 0], footL: [-8, 0, 0],
   upperArmL: [-60, 0, -6], foreArmL: [-112, 0, 0], upperArmR: [-20, 0, 40], foreArmR: [-80, 0, 0],
 };
 const RH_KICK = {
-  hips: [-6, 72, -42], spine: [2, -22, 16], chest: [2, -20, 12], upperChest: [0, -8, 0], neck: [0, -14, 10], head: [-4, -16, 12],
-  upperLegR: [-98, 0, 60], lowerLegR: [6, 0, 0], footR: [-26, 0, 0],
+  hips: [-8, 84, -48], spine: [2, -26, 18], chest: [2, -24, 14], upperChest: [0, -10, 0], neck: [0, -16, 12], head: [-4, -18, 14],
+  upperLegR: [-106, 0, 64], lowerLegR: [2, 0, 0], footR: [-30, 0, 0],
   upperLegL: [-6, 0, 2], lowerLegL: [14, 0, 0], footL: [-6, 0, 0],
   upperArmL: [-50, 0, -16], foreArmL: [-104, 0, 0], upperArmR: [-6, 0, 58], foreArmR: [-34, 0, 0],
 };
@@ -881,7 +881,7 @@ export const M1_D = compileClip([
   { t: 0, hip: [0, -0.06, 0], b: { ...FGUARD, upperLegL: [-18, 0, 4], lowerLegL: [30, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [26, 0, 0] } },
   { t: 0.04, ease: 'out', hip: [0, -0.1, 0], b: { ...FGUARD, hips: [4, -10, 0], chest: [3, -12, 0], upperLegL: [-22, 0, 4], lowerLegL: [40, 0, 0], upperLegR: [-10, 0, 4], lowerLegR: [36, 0, 0] } },
   { t: 0.1, ease: 'out', hip: [0, 0.0, 0.03], b: RH_CHAMBER },
-  { t: 0.16, ease: 'in', hip: [0, 0.02, 0.06], b: RH_KICK },
+  { t: 0.16, ease: 'in', hip: [0, 0.07, 0.08], b: RH_KICK },
   { t: 0.24, ease: 'out', hip: [0, 0.02, 0.06], b: { ...RH_KICK, hips: [-6, 86, -42], upperLegR: [-94, 0, 58], lowerLegR: [14, 0, 0] } },
   { t: 0.36, ease: 'smooth', hip: [0, -0.04, 0.04], b: { ...RH_CHAMBER, hips: [0, 60, -6], upperLegR: [-60, 0, 20], lowerLegR: [100, 0, 0] } },
   { t: 0.52, ease: 'smooth', hip: [0, -0.08, 0.02], b: { ...FGUARD, hips: [6, 20, 0], upperLegL: [-20, 0, 4], lowerLegL: [36, 0, 0], upperLegR: [-14, 0, 4], lowerLegR: [34, 0, 0] } },
