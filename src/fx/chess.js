@@ -294,16 +294,27 @@ export function miniBoard(fx, c, yaw) {
   const S = 0.11, tiles = [];
   const w = new THREE.MeshPhongMaterial({ color: 0xdedfe3, shininess: 60, specular: 0x777777 }), b = new THREE.MeshPhongMaterial({ color: 0x1a1b20, shininess: 80, specular: 0x555a66 });
   const tile = new THREE.BoxGeometry(S, 0.02, S);
-  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const t = new THREE.Mesh(tile, (i + j) % 2 ? b : w); t.position.set((i - 3.5) * S, 0, (j - 3.5) * S); g.add(t); tiles.push(t); }
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const t = new THREE.Mesh(tile, (i + j) % 2 ? w : b); t.position.set((3.5 - i) * S, 0, (j - 3.5) * S); g.add(t); tiles.push(t); }
   const rim = new THREE.Mesh(new THREE.BoxGeometry(S * 8.4, 0.03, S * 8.4), b); rim.position.y = -0.012; g.add(rim);
   const pcs = {};
+  // file i: a-h from his left to his right (x = 3.5 - i); a1 is a dark square
   const put = (kind, white, i, j, h = 0.16) => {
     const m = new THREE.Mesh(pieceGeo(kind), pieceMat(white));
-    m.scale.setScalar(h); m.position.set((i - 3.5) * S, 0.01, (j - 3.5) * S); m.rotation.y = white ? 0 : Math.PI;
+    m.scale.setScalar(h); m.position.set((3.5 - i) * S, 0.01, (j - 3.5) * S); m.rotation.y = white ? 0 : Math.PI;
     g.add(m); return m;
   };
-  pcs.bk = put('king', false, 4, 7, 0.19); put('rook', false, 0, 7); put('pawn', false, 5, 6, 0.12); put('pawn', false, 6, 6, 0.12); put('knight', false, 6, 7); put('bishop', false, 2, 6);
-  pcs.wq = put('queen', true, 4, 2, 0.18); put('king', true, 3, 0, 0.19); put('rook', true, 7, 1); put('knight', true, 5, 4); put('pawn', true, 2, 3, 0.12); put('bishop', true, 1, 4);
+  // a real position (files a-h = i 0-7, ranks 1-8 = j 0-7, white plays up the board toward black):
+  // White Qh4 → Qe7# — the queen is guarded by the knight on f5, covers d8, f8 and d7, f7 is
+  // blocked by black's own pawn, and nothing black can take her or step in between.
+  // Black: Ke8 Ra8 Nb8 Bc8, pawns a7 b7 f7 g7 h7 · White: Kg1 Rf1 Qh4 Nf5 Bc4, pawns a2 b2 f2 g2 h2
+  pcs.bk = put('king', false, 4, 7, 0.19); put('rook', false, 0, 7); put('knight', false, 1, 7); put('bishop', false, 2, 7);
+  for (const i of [0, 1, 5, 6, 7]) put('pawn', false, i, 6, 0.12);
+  pcs.wq = put('queen', true, 7, 3, 0.18); put('king', true, 6, 0, 0.19); put('rook', true, 5, 0); put('knight', true, 5, 4); put('bishop', true, 2, 3);
+  for (const i of [0, 1, 5, 6, 7]) put('pawn', true, i, 1, 0.12);
+  // the mated king's square glows red once it is over
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.96, S * 0.96), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
+  glow.rotation.x = -Math.PI / 2; glow.position.set((3.5 - 4) * S, 0.0125, (7 - 3.5) * S); g.add(glow);
+  pcs.glow = glow;
   g.position.copy(c); g.rotation.y = yaw;
   fx.scene.add(g);
   return {

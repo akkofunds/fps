@@ -1397,9 +1397,11 @@ export class Match {
     while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
     // on the little board, his white queen glides across to stand over their king
     if (M.board && t > 6.75 && t < 7.3) {
-      const k = Math.min(1, (t - 6.75) / 0.45), q = M.board.pcs.wq, S = M.board.S;
-      q.position.set((4 - 3.5) * S, 0.01 + Math.sin(k * Math.PI) * 0.06, ((2 + 4 * k * k * (3 - 2 * k)) - 3.5) * S);
+      // Qh4–e7 (three squares along the diagonal): checkmate
+      const k = Math.min(1, (t - 6.75) / 0.45), e = k * k * (3 - 2 * k), q = M.board.pcs.wq, S = M.board.S;
+      q.position.set((3.5 - (7 - 3 * e)) * S, 0.01 + Math.sin(k * Math.PI) * 0.06, ((3 + 3 * e) - 3.5) * S);
     }
+    if (M.board && t > 7.3) M.board.pcs.glow.material.opacity = Math.min(0.85, (t - 7.3) * 3) * (0.75 + 0.25 * Math.sin(t * 10));
     if (M.board && t > 7.9 && t < 8.6) { const k = Math.min(1, (t - 7.9) / 0.5); M.board.pcs.bk.rotation.z = k * k * Math.PI * 0.5; }
     hud.cineDark(t < 1.9 ? 0.25 : t < 7.25 ? 0.12 : 0.3);
     if (t >= C.dur) this._endCine();
@@ -1464,8 +1466,9 @@ export class Match {
       P.set(o.x + Math.sin(a) * 14, o.y + 7, o.z + Math.cos(a) * 14); L.set(o.x, o.y + 1, o.z); fov = 48;
     } else if (t < 7.6) { // close on the little board: his hand moves the queen
       const b = M.board.g.position, k = ease((t - 6.35) / 1.25);
-      P.set(b.x + f.x * 0.55 + sd.x * (0.5 - k * 0.1), b.y + 0.85 - k * 0.12, b.z + f.z * 0.55 + sd.z * (0.5 - k * 0.1));
-      L.set(b.x - f.x * 0.05, b.y + 0.04, b.z - f.z * 0.05); fov = 40;
+      // over his shoulder, from White's side: the whole board, Black's king on the far rank
+      P.set(b.x - f.x * (0.5 - k * 0.08) - sd.x * 0.32, b.y + 0.72 - k * 0.08, b.z - f.z * (0.5 - k * 0.08) - sd.z * 0.32);
+      L.set(b.x + f.x * 0.14, b.y, b.z + f.z * 0.14); fov = 44;
     } else if (t < 9.6) { // high above the field: every king falls, every enemy falls with it
       const k = ease((t - 7.6) / 2.0);
       const cen = new THREE.Vector3(o.x, o.y, o.z);
