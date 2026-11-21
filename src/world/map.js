@@ -29,7 +29,7 @@ export class GameMap {
     const Q = QUALITY[quality] || QUALITY.high;
     this.quality = quality;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(SKY.fog, 70, 900);
+    this.scene.fog = new THREE.Fog(SKY.fog, 160, 1300);
     this.world = new CollisionWorld();
     this.world.water = { x: LAKE.x, z: LAKE.z, r: LAKE.r + 8, y: WATER_Y };
     this.waterY = WATER_Y;
@@ -50,9 +50,9 @@ export class GameMap {
     s.add(this.sun); s.add(this.sun.target);
 
     this.sky = buildSky(); s.add(this.sky);
-    this.mountains = buildMountains(); s.add(this.mountains);
-    this.vista = buildVista(Q, (x, z) => terrainH(x, z)); s.add(this.vista);
-    this.waterfalls = buildWaterfalls(Q); s.add(this.waterfalls);
+    this.mountains = buildMountains((x, z) => terrainH(x, z)); s.add(this.mountains);
+    this.vista = buildVista(); s.add(this.vista);
+    this.waterfalls = buildWaterfalls(); s.add(this.waterfalls);
     this.Q = Q;
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);

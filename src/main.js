@@ -91,7 +91,7 @@ const RAYS = {
         acc += s * l * dec; dec *= 0.93;
       }
       float near = smoothstep(0.95, 0.0, length((vUv - uSun) * vec2(1.6, 1.0)));
-      gl_FragColor = vec4(base.rgb + acc * uK * near * vec3(1.0, 0.82, 0.62) * 0.09, base.a);
+      gl_FragColor = vec4(base.rgb + acc * uK * near * vec3(1.0, 0.82, 0.62) * 0.055, base.a);
     }`,
 };
 

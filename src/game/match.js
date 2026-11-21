@@ -859,7 +859,7 @@ export class Match {
     if (C.novaFx) C.novaFx.visible = !on;
     for (const o of C.world) o.visible = !on;
     for (const e of this.ents.values()) if (e !== C.caster && e.alive) e.view.root.visible = !on;
-    this.scene.fog.far = on ? 1e5 : 650;
+    this.scene.fog.far = on ? 1e5 : 1300;
   }
 
   _cineUpdate(dt) {

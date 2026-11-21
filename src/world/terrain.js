@@ -47,7 +47,7 @@ const RIVER_W = [[LAKE.x, LAKE.z], [LAKE.x - 10 * S, LAKE.z + 16 * S], ...sc([[-
 export const RIVER_W_PTS = RIVER_W, RIVER_E_PTS = RIVER_E;
 // faint dirt trails worn across the meadow
 export const PATH = sc([[-20, 120], [-12, 70], [-4, 30], [0, 0], [6, -24], [10, -46]]);
-export const PATH2 = sc([[-70, 40], [-36, 22], [0, 0], [40, -6], [78, -2]]);
+export const PATH2 = sc([[-68, 4], [-58, -8], [-45, -20], [-24, -12], [0, 0], [40, -6], [78, -2]]);
 // the small round mesa on the east side
 export const MESA = { x: 64 * S, z: -16 * S, r: 19, h: 7.5 };
 // rolling hills across the meadow (x, z, radius, height): gentle, grassy, kept off the river

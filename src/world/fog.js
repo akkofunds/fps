@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { SUN_DIR, SKY } from './sky.js';
 
 // Atmosphere for every material in the game (patched into three's shared fog chunks):
-//  - distance haze that pools low in the valley and thins with altitude, so the peaks and spires
-//    rise clear out of it (height fog)
-//  - a faint ground mist that hugs the meadow even up close
+//  - light distance haze that thins with altitude
+//  - a mist wall past the valley rim: the far lands fade into low mist (the map's barrier); the
+//    battle area itself stays clear
 //  - in-scattering: looking toward the sun the haze glows gold, away from it it stays lavender
 // World position is rebuilt from the view-space position (cameraPosition + R^T · mv), so custom
 // shader materials that already include the fog chunks get it for free.
@@ -42,9 +42,12 @@ THREE.ShaderChunk.fog_fragment = /* glsl */`
     #else
       float fogFactor = smoothstep( fogNear, fogFar, fd );
     #endif
-    float hgt = exp( - max( vFogWorld.y, 0.0 ) * 0.011 );
-    fogFactor *= mix( 0.42, 1.0, hgt );
-    fogFactor = max( fogFactor, ( 1.0 - exp( - fd * 0.007 ) ) * exp( - max( vFogWorld.y - 0.5, 0.0 ) * 0.3 ) * 0.42 * FOG_MIST );
+    // light aerial perspective only; inside the valley the air stays clear
+    fogFactor *= mix( 1.0, mix( 0.5, 1.0, exp( - max( vFogWorld.y, 0.0 ) * 0.006 ) ), FOG_MIST );
+    // the mist wall: the world fades into low mist past the valley rim (the map's barrier)
+    float wr = length( vFogWorld.xz );
+    float barrier = smoothstep( 235.0, 470.0, wr ) * exp( - max( vFogWorld.y - 45.0, 0.0 ) * 0.012 ) * smoothstep( 40.0, 160.0, fd );
+    fogFactor = max( fogFactor, barrier * 0.75 * FOG_MIST );
     float sunAmt = pow( max( dot( fwd / max( fd, 1e-3 ), ${v3(SUN_DIR)} ), 0.0 ), 5.0 );
     vec3 fc = mix( fogColor, ${v3(new THREE.Vector3(1.25, 0.78, 0.48))}, sunAmt * 0.7 * FOG_MIST );
     gl_FragColor.rgb = mix( gl_FragColor.rgb, fc, clamp( fogFactor, 0.0, 1.0 ) );
