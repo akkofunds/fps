@@ -7,7 +7,7 @@ import { SKY, SUN_DIR } from './sky.js';
 export function buildWater() {
   // one sheet over the whole river system at the water level; the terrain only dips below it in
   // the river channel and the plunge pool, so that is where it shows (others are culled below)
-  const X0 = -250, X1 = 250, Z0 = -110, Z1 = 70, st = 2;
+  const X0 = -540, X1 = 520, Z0 = -260, Z1 = 120, st = 2;
   const nx = (X1 - X0) / st + 1, nz = (Z1 - Z0) / st + 1;
   const pos = [], depth = [], idx = [];
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
