@@ -89,7 +89,9 @@ export function buildMountains() {
       // near: terraced cliff plateaus; far: smooth rolling ridges
       const plate = 70 * (0.55 + 0.6 * n.fbm(nx * 1.4 + 3, nz * 1.4 - 2, 4)) * Math.min(1, u / 0.12);
       const near = terrace(plate, 24, 0.22) * Math.exp(-((u - 0.2) ** 2) / 0.05);
-      const far = (90 + 170 * Math.max(0, n.fbm(nx * 0.7 - 9, nz * 0.7 + 4, 4) + 0.15)) * Math.exp(-((u - 0.68) ** 2) / 0.08);
+      // far: a real mountain range — ridged peaks (sharp crests, deep valleys) up to ~520 m
+      const rg = Math.max(0, 1 - Math.abs(n.fbm(nx * 0.55 - 9, nz * 0.55 + 4, 4) * 2 - 1));
+      const far = (100 + 170 * Math.max(0, n.fbm(nx * 0.4 - 2, nz * 0.4 + 7, 3) + 0.2) + 230 * Math.pow(rg, 2.6)) * Math.exp(-((u - 0.72) ** 2) / 0.09);
       let h = Math.max(near, far * 0.85 + near * 0.3);
       if (r === 0 || r === rings) h = -30;
       pos.push(x, h - 20, z);
@@ -103,7 +105,7 @@ export function buildMountains() {
   g.setIndex(idx); g.computeVertexNormals();
   const P = g.attributes.position, Nn = g.attributes.normal, col = new Float32Array(P.count * 3), c = new THREE.Color();
   const top = new THREE.Color(0.3, 0.55, 0.16), topDark = new THREE.Color(0.14, 0.34, 0.12);
-  const stone = new THREE.Color(0.58, 0.6, 0.6), stoneDark = new THREE.Color(0.36, 0.38, 0.4);
+  const stone = new THREE.Color(0.66, 0.7, 0.76), stoneDark = new THREE.Color(0.46, 0.5, 0.58);
   const haze = new THREE.Color(0.55, 0.7, 0.88), hazeFar = new THREE.Color(0.66, 0.78, 0.93);
   for (let i = 0; i < P.count; i++) {
     const x = P.getX(i), y = P.getY(i), z = P.getZ(i), ny = Nn.getY(i);
@@ -113,9 +115,12 @@ export function buildMountains() {
     const strata = 0.82 + 0.18 * Math.sin(y * 0.9 + n.n2(x / 20, z / 20) * 3);
     const rockK = Math.min(1, Math.max(0, (0.75 - ny) / 0.25));
     c.lerp(new THREE.Color().copy(stoneDark).lerp(stone, strata), rockK);
+    // snow on the high peaks: thick on gentle slopes, streaky on steep faces
+    const snow = Math.min(1, Math.max(0, (y - 330 - n.n2(x / 60, z / 60) * 40) / 50)) * (0.45 + 0.55 * Math.min(1, Math.max(0, (ny - 0.35) / 0.4)));
+    c.lerp(new THREE.Color(0.96, 0.97, 1.0), snow);
     // aerial perspective
     const hz = Math.min(1, Math.max(0, (d - 520) / 900));
-    c.lerp(haze, Math.min(0.85, hz * 1.1));
+    c.lerp(haze, Math.min(0.88, 0.36 + hz * 0.95));
     c.lerp(hazeFar, Math.max(0, (d - 1100) / 400) * 0.6);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }

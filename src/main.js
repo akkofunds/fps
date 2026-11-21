@@ -2,6 +2,7 @@ import './ui/styles.css';
 import './ui/extra.css';
 import './ui/theme.css';
 import './ui/party.css';
+import { SUN_DIR } from './world/sky.js';
 import { installOrnaments } from './ui/ornaments.js';
 installOrnaments();
 import * as THREE from 'three';
@@ -68,6 +69,29 @@ const GRADE = {
       vec2 d = vUv - 0.5;
       c.rgb *= 1.0 - uVig * smoothstep(0.35, 0.85, length(d * vec2(1.1, 1.0)));
       gl_FragColor = vec4(max(c.rgb, 0.0), c.a);
+    }`,
+};
+
+// Crepuscular rays: march from each pixel toward the sun's screen position, gathering only the
+// bright sky; trees, cliffs and spires in front of the sun cut the beams into shafts.
+const RAYS = {
+  uniforms: { tDiffuse: { value: null }, uSun: { value: new THREE.Vector2(0.5, 0.5) }, uK: { value: 0 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uK; varying vec2 vUv;
+    void main(){
+      vec4 base = texture2D(tDiffuse, vUv);
+      if (uK <= 0.001) { gl_FragColor = base; return; }
+      vec2 d = (uSun - vUv) * (0.92 / 24.0);
+      vec2 uv = vUv; float dec = 1.0; vec3 acc = vec3(0.0);
+      for (int i = 0; i < 24; i++) {
+        uv += d;
+        vec3 s = texture2D(tDiffuse, clamp(uv, 0.0, 1.0)).rgb;
+        float l = max(dot(s, vec3(0.2126, 0.7152, 0.0722)) - 0.72, 0.0);
+        acc += s * l * dec; dec *= 0.93;
+      }
+      float near = smoothstep(0.95, 0.0, length((vUv - uSun) * vec2(1.6, 1.0)));
+      gl_FragColor = vec4(base.rgb + acc * uK * near * vec3(1.0, 0.9, 0.74) * 0.16, base.a);
     }`,
 };
 
@@ -192,6 +216,7 @@ class App {
     }
     // bloom is a wide blur: at quarter resolution it looks the same and costs ~1/4 of the fill
     this.bloomDiv = this.settings.quality === 'ultra' ? 2 : 4;
+    if (this.settings.quality !== 'medium') { this.rays = new ShaderPass(RAYS); this.composer.addPass(this.rays); }
     this.bloom = new UnrealBloomPass(new THREE.Vector2(this.width / this.bloomDiv, this.height / this.bloomDiv), 0.55, 0.5, 0.9);
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass(GRADE);
@@ -205,6 +230,15 @@ class App {
     if (this.renderer.shadowMap.enabled && (this._frame++ & 1) === 0) this.renderer.shadowMap.needsUpdate = true;
     if (this.composer && !this.noPost) {
       this.renderPass.scene = scene; this.renderPass.camera = camera;
+      if (this.rays) {
+        // sun on screen? (rays fade out as it leaves the frame or goes behind you)
+        const sp = this._sunP || (this._sunP = new THREE.Vector3());
+        sp.copy(SUN_DIR).multiplyScalar(1000).add(camera.position).project(camera);
+        const fwd = camera.getWorldDirection(this._sunD || (this._sunD = new THREE.Vector3())).dot(SUN_DIR);
+        const on = scene === this.map.scene && !(this.match && this.match.chessWorld && this.match.chessWorld.on) && !(this.match && this.match.voidFx && this.match.voidFx.inside);
+        this.rays.uniforms.uSun.value.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5);
+        this.rays.uniforms.uK.value = on && fwd > 0 ? Math.min(1, fwd * 2) * (1 - Math.min(1, Math.max(0, Math.max(Math.abs(sp.x), Math.abs(sp.y)) - 1) / 0.6)) : 0;
+      }
       if (this.gtao) { this.gtao.scene = scene; this.gtao.camera = camera; }
       this.composer.render();
     }

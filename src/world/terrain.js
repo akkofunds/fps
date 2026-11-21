@@ -50,6 +50,8 @@ export const PATH = sc([[-20, 120], [-12, 70], [-4, 30], [0, 0], [6, -24], [10, 
 export const PATH2 = sc([[-70, 40], [-36, 22], [0, 0], [40, -6], [78, -2]]);
 // the small round mesa on the east side
 export const MESA = { x: 64 * S, z: -16 * S, r: 19, h: 7.5 };
+// rolling hills across the meadow (x, z, radius, height): gentle, grassy, kept off the river
+export const HILLS = [[115, 70, 40, 7], [-100, 92, 36, 6], [55, 168, 44, 8.5], [-62, -58, 30, 4.5], [172, 112, 34, 6], [0, 196, 40, 7], [-128, -36, 30, 5], [80, -60, 26, 3.5], [-40, 120, 24, 4]];
 
 function distToPolyline(x, z, pts) {
   let best = 1e9;
@@ -104,6 +106,11 @@ export function H(x, z) {
   h += MESA.h * smoothstep(MESA.r + 0.8, MESA.r - 0.8, dm) + 0.6 * N.fbm(x / 6, z / 6, 2) * smoothstep(MESA.r, MESA.r - 3, dm);
   // river channel + plunge pool (below the water level; the banks stay above it)
   const rd = riverDist(x, z);
+  // rolling hills (soft-topped, a little lumpy), fading out near the river banks
+  for (const [hx, hz, hr, hh] of HILLS) {
+    const d = Math.hypot(x - hx, z - hz) + N.n2(x / 11 + hx, z / 11) * 4;
+    if (d < hr) { const k = 1 - d / hr; h += hh * k * k * (3 - 2 * k) * smoothstep(8, 30, rd); }
+  }
   const rw = 4.6 + 1.6 * N.n2(x / 20, z / 20);
   const floor = WATER_Y - 0.9;
   const bank = smoothstep(rw + 2.2, rw - 0.4, rd);

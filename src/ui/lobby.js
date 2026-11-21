@@ -19,6 +19,7 @@ const MODE_DESC = {
   practice: 'Practice: a solo range on Sunvale with training dummies. Learn your mage: string your M1s, land every ability, try your ultimate.',
 };
 // watermark size: the longest word of the name just spans the card (cardVw = the card's width in vw)
+// eslint-disable-next-line no-unused-vars
 const wmSize = (name, cardVw) => `min(${(cardVw * 1.45 / Math.max(4, ...name.split(/\s+/).map((w) => w.length))).toFixed(2)}vw, ${Math.round(cardVw * 1.45 * 16 / Math.max(4, ...name.split(/\s+/).map((w) => w.length)))}px)`;
 // fanart for each mage's cards: [image, focus point]
 const ART = {
@@ -235,8 +236,6 @@ export class Lobby {
     c.style.setProperty('--accent', md.color);
     const ban = el('div', 'v-banner');
     if (art) { const img = el('div', 'v-art'); img.style.backgroundImage = `url(${art[0]})`; img.style.backgroundPosition = art[1]; ban.appendChild(img); }
-    const wm = el('div', 'v-wm', md.name); wm.style.fontSize = wmSize(md.name, 13.2); ban.appendChild(wm);
-    ban.appendChild(el('div', 'v-side', md.name));
     ban.appendChild(el('div', 'v-shade'));
     ban.appendChild(el('div', 'v-chev'));
     ban.appendChild(el('div', 'v-diamond'));
@@ -244,7 +243,6 @@ export class Lobby {
     plate.appendChild(el('div', 'v-ready', isMe ? 'READY · YOU' : 'READY'));
     const nm = el('div', 'v-name', m.name); nm.title = `${m.name}#${m.tag || ''}`;
     plate.appendChild(nm);
-    plate.appendChild(el('div', 'v-mage', md.name));
     ban.appendChild(plate);
     c.appendChild(ban);
     c.appendChild(el('i', 'v-notch'));
@@ -373,7 +371,6 @@ export class Lobby {
       art.textContent = '';
       art.style.setProperty('--accent', D.color);
       if (A) { const img = el('div', 'ma-img'); img.style.backgroundImage = `url(${A[0]})`; img.style.backgroundPosition = A[1]; art.appendChild(img); }
-      const wm = el('div', 'ma-wm', D.name); wm.style.fontSize = wmSize(D.name, 15); art.appendChild(wm);
       const b = el('button', 'btn-start ma-select' + (this.browse === this.mage ? ' on' : ''), this.browse === this.mage ? 'EQUIPPED' : usable ? 'SELECT' : 'ADMIN ONLY');
       b.disabled = !usable || this.browse === this.mage;
       b.onclick = () => this.selectMage(this.browse);

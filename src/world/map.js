@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { buildTerrain, groundH, WATER_Y, LAKE, PLAY_RADIUS, MAP_SCALE } from './terrain.js';
+import { buildTerrain, groundH, H as terrainH, WATER_Y, LAKE, PLAY_RADIUS, MAP_SCALE } from './terrain.js';
+import { buildVista } from './scenery.js';
+import { buildAmbient } from './ambient.js';
 import { buildSky, buildMountains, SUN_DIR, SKY } from './sky.js';
 import { buildWater } from './water.js';
 import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
@@ -47,6 +49,7 @@ export class GameMap {
 
     this.sky = buildSky(); s.add(this.sky);
     this.mountains = buildMountains(); s.add(this.mountains);
+    this.vista = buildVista(Q, (x, z) => terrainH(x, z)); s.add(this.vista);
     this.Q = Q;
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
@@ -55,6 +58,7 @@ export class GameMap {
     this.landmarks = buildLandmarks(this.world, Q); s.add(this.landmarks);
     this.props = buildProps(this.world, quality, Q); s.add(this.props);
     const avoid = this.props.userData.avoid;
+    this.ambient = buildAmbient(this.props.userData.groves || [], Q); s.add(this.ambient);
     // the valley is MAP_SCALE x wider: ~MAP_SCALE^2 the ground to cover. Undergrowth is chunked and
     // distance-culled, so more of it costs memory/load time, not frame time (kept a bit under area)
     const AREA = Math.min(4, MAP_SCALE * MAP_SCALE * 0.75);
@@ -77,7 +81,7 @@ export class GameMap {
         const r = 58 + (tries % 4) * 6 + (i % 2) * 12;
         const x = Math.cos(a + tries * 0.05) * r, z = Math.sin(a + tries * 0.05) * r;
         const y = groundH(x, z);
-        if (this.world.inWater(x, z) > 0 || y > 3) continue;
+        if (this.world.inWater(x, z) > 0 || y > 12) continue;
         const p = { x, y: this.world.groundAt(x, z, y + 3), z };
         const test = new THREE.Vector3(x, p.y, z);
         if (this.world.resolve(test, 0.6, 1.8)) continue;
@@ -126,6 +130,8 @@ export class GameMap {
     WIND.uTime.value = this.time; treeTime.value = this.time; STYLE.uTime.value = this.time;
     if (this.village) this.village.userData.update(this.time);
     this.landmarks.userData.update(this.time);
+    this.vista.userData.update(this.time);
+    this.ambient.userData.update(this.time, camera.position);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);
     this.water.material.uniforms.uTime.value = this.time;
