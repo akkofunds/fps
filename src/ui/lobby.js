@@ -238,6 +238,8 @@ export class Lobby {
     const wm = el('div', 'v-wm', md.name); wm.style.fontSize = wmSize(md.name, 13.2); ban.appendChild(wm);
     ban.appendChild(el('div', 'v-side', md.name));
     ban.appendChild(el('div', 'v-shade'));
+    ban.appendChild(el('div', 'v-chev'));
+    ban.appendChild(el('div', 'v-diamond'));
     const plate = el('div', 'v-plate');
     plate.appendChild(el('div', 'v-ready', isMe ? 'READY · YOU' : 'READY'));
     const nm = el('div', 'v-name', m.name); nm.title = `${m.name}#${m.tag || ''}`;
