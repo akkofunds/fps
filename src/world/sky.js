@@ -114,7 +114,7 @@ export function buildMountains() {
   const P = g.attributes.position, Nn = g.attributes.normal, col = new Float32Array(P.count * 3), c = new THREE.Color();
   const top = new THREE.Color(0.3, 0.55, 0.16), topDark = new THREE.Color(0.14, 0.34, 0.12);
   const stone = new THREE.Color(0.7, 0.64, 0.72), stoneDark = new THREE.Color(0.46, 0.42, 0.56);
-  const haze = new THREE.Color(0.66, 0.56, 0.78), hazeFar = new THREE.Color(0.84, 0.62, 0.72);
+  const haze = new THREE.Color(0.7, 0.58, 0.8), hazeFar = new THREE.Color(0.9, 0.66, 0.74);
   for (let i = 0; i < P.count; i++) {
     const x = P.getX(i), y = P.getY(i), z = P.getZ(i), ny = Nn.getY(i);
     const d = Math.hypot(x, z);
@@ -128,7 +128,7 @@ export function buildMountains() {
     c.lerp(new THREE.Color(1.0, 0.86, 0.84), snow);
     // aerial perspective
     const hz = Math.min(1, Math.max(0, (d - 520) / 900));
-    c.lerp(haze, Math.min(0.88, 0.36 + hz * 0.95));
+    c.lerp(haze, Math.min(0.9, 0.52 + hz * 0.9));
     c.lerp(hazeFar, Math.max(0, (d - 1100) / 400) * 0.6);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }

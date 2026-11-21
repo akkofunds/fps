@@ -17,7 +17,7 @@ const HAZE = new THREE.Color(0.76, 0.62, 0.8);
 const _c = new THREE.Color();
 const ni = (g) => (g.index ? g.toNonIndexed() : g);
 
-function hazeK(d) { return Math.min(0.78, smoothstep(220, 1300, d) * 0.85); }
+function hazeK(d) { return Math.min(0.82, 0.12 + smoothstep(220, 1300, d) * 0.85); }
 // bake colours (fn(x, y, z, nx, ny, nz, color) in world space) plus haze from the valley centre
 function paint(g, fn, smooth = true) {
   // weld the shared vertices first so the normals are smooth (rounded rock, not crumpled paper);
