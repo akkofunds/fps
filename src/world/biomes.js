@@ -185,11 +185,10 @@ export function buildBiomes(B, world, Q = {}) {
   wall(B, 96, -4, 1.4, 14, 3.6); wall(B, 104, 6, -0.2, 9, 3); fallenColumn(B, world, 90, 8, 3, 0.4); fallenColumn(B, world, 101, -12, 2.6, 2.4);
   arch(B, world, 28, 98, -0.3, 11, 5.4, true); arch(B, world, 120, -70, 2.1, 10, 5);
   wall(B, -18, -96, 1.2, 10, 3.2);
-  wall(B, -138, 30, -0.3, 12, 3.4);
 
   // low rock ledges (layered walls, flat grassy tops) + their colliders
   const spireParts = [];
-  for (const [ang, d, h, r] of [[0.3, 172, 5, 15], [0.95, 182, 6, 18], [1.88, 176, 5, 16], [2.62, 182, 4.5, 14], [3.0, 200, 6, 16], [-1.9, 105, 3.5, 12]]) {
+  for (const [ang, d, h, r] of [[0.3, 172, 5, 15], [0.95, 182, 6, 18], [1.88, 176, 5, 16], [2.62, 182, 4.5, 14], [-1.9, 105, 3.5, 12]]) {
     const x = Math.cos(ang) * d, z = Math.sin(ang) * d;
     if (!ok(x, z, r)) continue;
     const g0 = groundH(x, z);
