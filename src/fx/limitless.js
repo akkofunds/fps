@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import { GLOSS } from './glossy.js';
 
 // The Sorcerer's Limitless VFX: cursed-energy flicks, Lapse: Blue (a point of attraction that drags
 // particles, dust and light into itself, then collapses), Reversal: Red (repulsion condensing at the
@@ -39,6 +40,46 @@ function orbMaterial(inner, rim, opts = {}) {
   });
 }
 const SPHERE = new THREE.SphereGeometry(1, 32, 24);
+const PLANET = new THREE.SphereGeometry(1, 64, 40);
+
+// Hollow Purple's Red and Blue as the anime draws them: huge planet-like spheres, banded with
+// streaks of dark and bright colour that drift sideways, grainy, a soft lit rim and a dark limb
+function planetMaterial(dark, mid, bright) {
+  return new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false,
+    uniforms: { uT: { value: 0 }, uA: { value: 1 }, uDark: { value: new THREE.Color(...dark) }, uMid: { value: new THREE.Color(...mid) }, uBright: { value: new THREE.Color(...bright) }, uSeed: { value: Math.random() * 10 } },
+    vertexShader: /* glsl */`
+      varying vec3 vN; varying vec3 vV; varying vec3 vP;
+      void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: /* glsl */`
+      uniform float uT, uA, uSeed; uniform vec3 uDark, uMid, uBright; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+      float h(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float n3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y),
+                   mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); }
+      float fbm(vec3 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n3(p); p *= 2.03; a *= 0.5; } return s; }
+      void main(){
+        vec3 p = normalize(vP);
+        // rotate the surface slowly round the vertical axis
+        float c = cos(uT * 0.35), s = sin(uT * 0.35);
+        vec3 q = vec3(c * p.x - s * p.z, p.y, s * p.x + c * p.z);
+        // horizontal bands: stretched noise, warped, so it reads as storm belts
+        float warp = fbm(q * 2.2 + uSeed);
+        float band = fbm(vec3(q.x * 1.3, q.y * 7.0 + warp * 1.6, q.z * 1.3) + uSeed + vec3(uT * 0.25, 0.0, 0.0));
+        float streak = smoothstep(0.55, 0.78, band);
+        float grain = h(floor(vP * 180.0) + floor(uT * 12.0)) * 0.18;
+        vec3 col = mix(uDark, uMid, smoothstep(0.25, 0.6, band));
+        col = mix(col, uBright, streak);
+        col += grain * uMid;
+        float ndv = abs(dot(normalize(vN), normalize(vV)));
+        float limb = smoothstep(0.0, 0.35, ndv);           // dark edge of the sphere
+        float rim = pow(1.0 - ndv, 3.0);                    // thin bright halo just outside it
+        col = col * (0.35 + 0.65 * limb) + uMid * rim * 1.4;
+        float a = (0.9 * smoothstep(0.0, 0.12, ndv) + rim * 0.6) * uA;
+        gl_FragColor = vec4(col, a);
+      }`,
+  });
+}
 
 let GLOW_TEX = null;   // one shared radial-gradient texture (was a new canvas + GPU upload per sprite)
 function glowTex() {
@@ -83,6 +124,7 @@ Object.assign(Fx.prototype, {
     return [
       new THREE.Mesh(SPHERE, orbMaterial([0, 0, 0], [1, 1, 1])),
       new THREE.Mesh(SPHERE, orbMaterial([0, 0, 0], [1, 1, 1], { additive: true })),
+      new THREE.Mesh(PLANET, planetMaterial([0, 0, 0], [1, 1, 1], [1, 1, 1])),
       glowSprite(new THREE.Color(1, 1, 1), 1), torus(new THREE.Color(1, 1, 1), 1, 0.05), flatRing(new THREE.Color(1, 1, 1)),
     ];
   },
@@ -109,6 +151,9 @@ Object.assign(Fx.prototype, {
   // rings spinning round it, electric arcs, everything nearby (particles, dust, light) spiralling
   // into it, rings on the ground collapsing inward — then it implodes.
   blueOrb(c, from, life, pullR, onCollapse) {
+    // glossy blue ribbons whirling into the point the whole time (TearDrop vortex), crack on collapse
+    this.vortex(c, { size: Math.max(0.9, pullR * 0.32), pal: GLOSS.cursed, dur: life + 0.1, core: false, flash: false, debris: false, crack: false, ribbons: 10 });
+    setTimeout(() => { this.groundCrack(c, pullR * 0.9, GLOSS.cursed, 2.4); this.starBurst(c, 4, 0.6, GLOSS.cursed, pullR * 0.4); this.rockChunks(c, 10, 1.2); }, life * 1000);
     const g = new THREE.Group(); g.position.copy(c); this.scene.add(g);
     const core = new THREE.Mesh(SPHERE, orbMaterial([0.0, 0.02, 0.18], [0.5, 1.6, 4.2]));
     const shell = new THREE.Mesh(SPHERE, orbMaterial([0.0, 0.08, 0.5], [0.3, 1.0, 3.4], { additive: true, swirl: 2.5 }));
@@ -220,6 +265,9 @@ Object.assign(Fx.prototype, {
     }
   },
   redBlast(p, radius) {
+    this.vortex(p, { size: Math.max(0.9, radius * 0.35), pal: GLOSS.crimson, dur: 0.55, ribbons: 9 });
+    this.liquidSlash(p.clone(), new THREE.Vector3(R() - 0.5, 0, R() - 0.5), radius * 0.55, GLOSS.crimson, 0.3);
+    this.starBurst(p, 4, 0.55, GLOSS.crimson, radius * 0.5);
     // a white-hot core and a red shell of force slamming outward: everything is thrown away
     const shell = new THREE.Mesh(SPHERE, orbMaterial([0.6, 0.0, 0.0], [4.0, 0.6, 0.4], { additive: true, swirl: 2 }));
     shell.position.copy(p); this.scene.add(shell);
@@ -249,60 +297,70 @@ Object.assign(Fx.prototype, {
   // Blue in the left hand, Red in the right (getL / getR(out) → world): they appear at `start` and
   // grow big, float out in front of him (getMid) spiralling round each other, collide in a flash and
   // mix into one big purple sphere that swells there until `dur` — where Hollow Purple is released
-  purpleCharge(getL, getR, getMid, dur, start = 0, bigR = 1.3) {
-    // (Red is drawn with normal blending: red light ADDED onto green grass turns yellow)
-    const mk = (inner, rim, rc, additive = true) => {
+  // getL / getR: where Blue / Red meet his hands in front, getMid: where they mix,
+  // getBL / getBR: behind his left / right shoulder, where they first appear (as in the anime)
+  purpleCharge(getL, getR, getMid, dur, start = 0, bigR = 1.3, getBL = getL, getBR = getR) {
+    // two planets: deep, banded, grainy, with a lit rim (red drawn with normal blending so it stays red)
+    const mk = (dark, mid, bright, rc) => {
       const g = new THREE.Group(); this.scene.add(g);
-      const m = new THREE.Mesh(SPHERE, orbMaterial(inner, rim, { additive, swirl: 1.8 }));
-      const r = torus(rc, 1.6, 0.06); g.add(m); g.add(r); g.scale.setScalar(0.001);
+      const m = new THREE.Mesh(PLANET, planetMaterial(dark, mid, bright));
+      const r = torus(rc, 1.35, 0.025); r.material.opacity = 0;
+      g.add(m); g.add(r); g.scale.setScalar(0.001);
       return { g, m, r };
     };
-    // saturated, not white: you must SEE one blue and one red before they mix
-    const blue = mk([0.0, 0.08, 0.9], [0.15, 0.6, 2.6], new THREE.Color(0.2, 0.7, 2.6)), red = mk([0.55, 0.0, 0.0], [1.6, 0.05, 0.03], new THREE.Color(1.6, 0.06, 0.03), false);
+    const blue = mk([0.0, 0.03, 0.12], [0.08, 0.5, 1.35], [0.55, 1.55, 2.4], new THREE.Color(0.3, 0.9, 2.6));
+    const red = mk([0.1, 0.0, 0.012], [1.05, 0.03, 0.06], [2.3, 0.45, 0.42], new THREE.Color(1.6, 0.08, 0.05));
     red.r.material.blending = THREE.NormalBlending;
-    const hb = glowSprite(new THREE.Color(0.04, 0.18, 1.3), 2), hr = glowSprite(new THREE.Color(1.0, 0.02, 0.01), 2);
+    const hb = glowSprite(new THREE.Color(0.05, 0.3, 1.2), 2), hr = glowSprite(new THREE.Color(0.9, 0.02, 0.02), 2);
     hr.material.blending = THREE.NormalBlending;
     this.scene.add(hb); this.scene.add(hr);
-    const lb = this.light(new THREE.Vector3(), 0, 9, dur + 0.2, 0x2f6bff), lr = this.light(new THREE.Vector3(), 0, 9, dur + 0.2, 0xff2010);
+    const lb = this.light(new THREE.Vector3(), 0, 11, dur + 0.2, 0x2f6bff), lr = this.light(new THREE.Vector3(), 0, 11, dur + 0.2, 0xff2010);
     // the purple sphere they become
     const purple = new THREE.Group(); purple.visible = false; this.scene.add(purple);
-    const pc = new THREE.Mesh(SPHERE, orbMaterial([0.55, 0.1, 1.4], [1.9, 0.45, 3.8], { swirl: 2.4 }));
+    const pc = new THREE.Mesh(PLANET, planetMaterial([0.1, 0.0, 0.2], [0.75, 0.2, 1.6], [1.9, 0.9, 2.6]));
     const ps = new THREE.Mesh(SPHERE, orbMaterial([0.3, 0.03, 0.8], [1.2, 0.2, 2.8], { additive: true, swirl: 3 }));
     const pr1 = torus(new THREE.Color(2.4, 0.9, 3.8), 1.45, 0.035), pr2 = torus(new THREE.Color(1.4, 0.3, 3.2), 1.75, 0.03);
     purple.add(ps); purple.add(pc); purple.add(pr1); purple.add(pr2);
     const hp = glowSprite(new THREE.Color(0.8, 0.15, 2.0), 3); hp.material.opacity = 0; this.scene.add(hp);
+    const BL = new THREE.Vector3(), BR = new THREE.Vector3(), Q = new THREE.Vector3();
     const L = new THREE.Vector3(), Rr = new THREE.Vector3(), M = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), sd = new THREE.Vector3(), tmpP = new THREE.Vector3();
     const tTravel = dur - 1.25, tHit = dur - 0.6;
+    const tSwing = tTravel - 0.9;   // they leave their place behind him and swing round to the front
     let t = 0, hit = false;
     this.effects.push({ update: (dt) => {
       t += dt;
-      getL(L); getR(Rr); getMid(M);
-      const grow = Math.max(0, Math.min(1, (t - start) / 0.5));
+      getL(L); getR(Rr); getMid(M); getBL(BL); getBR(BR);
+      const grow = Math.max(0, Math.min(1, (t - start) / 0.9));
+      const sw = Math.max(0, Math.min(1, (t - tSwing) / (tTravel - tSwing))), se = sw * sw * (3 - 2 * sw);
       const tr = Math.max(0, Math.min(1, (t - tTravel) / (tHit - tTravel)));
       const e = tr * tr * (3 - 2 * tr);
+      // behind the shoulders → round the outside → in front of each hand (a curve, not a straight line)
+      const swingTo = (from, to, out) => { Q.lerpVectors(from, to, se); const bulge = Math.sin(se * Math.PI) * 0.9; return Q.addScaledVector(out, bulge); };
       // spiral: the two orbit the midpoint on opposite sides while closing in
       sd.subVectors(Rr, L).setY(0); if (sd.lengthSq() < 1e-6) sd.set(1, 0, 0); sd.normalize();
       const fw = tmpP.crossVectors(sd, up).normalize();
       const ang = e * Math.PI * 3, rad = 0.55 * (1 - e);
       const ox = Math.cos(ang) * rad, oy = Math.sin(ang) * rad * 0.6;
-      blue.g.position.lerpVectors(L, M, e).addScaledVector(sd, -ox * e).addScaledVector(up, oy * e).addScaledVector(fw, 0);
-      red.g.position.lerpVectors(Rr, M, e).addScaledVector(sd, ox * e).addScaledVector(up, -oy * e);
-      const s = 0.3 * (1 - Math.pow(1 - grow, 3)) * (1 + e * 0.4);
+      const bStart = swingTo(BL, L, sd.clone().negate()).clone(), rStart = swingTo(BR, Rr, sd).clone();
+      blue.g.position.lerpVectors(bStart, M, e).addScaledVector(sd, -ox * e).addScaledVector(up, oy * e);
+      red.g.position.lerpVectors(rStart, M, e).addScaledVector(sd, ox * e).addScaledVector(up, -oy * e);
+      // huge planets while they hang behind him, smaller as they come to his hands
+      const s = Math.max(0.001, (1 - Math.pow(1 - grow, 3)) * (0.88 - 0.55 * se) * (1 + e * 0.25));
       blue.g.scale.setScalar(Math.max(0.001, s)); red.g.scale.setScalar(Math.max(0.001, s));
-      blue.m.material.uniforms.uT.value = t; red.m.material.uniforms.uT.value = t;
-      blue.r.rotation.x += dt * 8; blue.r.rotation.y += dt * 5; red.r.rotation.x -= dt * 7; red.r.rotation.z += dt * 9;
-      blue.r.material.opacity = red.r.material.opacity = 0.85 * grow;
+      blue.m.material.uniforms.uT.value = t; red.m.material.uniforms.uT.value = t * 1.1;
+      blue.r.rotation.x += dt * 3; blue.r.rotation.y += dt * 2; red.r.rotation.x -= dt * 3; red.r.rotation.z += dt * 2.5;
+      blue.r.material.opacity = red.r.material.opacity = 0.5 * grow * se;
       hb.position.copy(blue.g.position); hr.position.copy(red.g.position);
-      hb.material.opacity = hr.material.opacity = 0.75 * grow;
-      hb.scale.setScalar(2.2 + Math.sin(t * 17) * 0.2); hr.scale.setScalar(2.2 + Math.cos(t * 19) * 0.2);
+      hb.material.opacity = 0.55 * grow; hr.material.opacity = 0.45 * grow;
+      hb.scale.setScalar(s * 4.2 + Math.sin(t * 7) * 0.1); hr.scale.setScalar(s * 4.2 + Math.cos(t * 8) * 0.1);
       lb.position.copy(blue.g.position); lr.position.copy(red.g.position); lb.intensity = lr.intensity = 14 * grow;
       if (grow > 0 && !hit) for (const [o, cA, cB, inward] of [[blue.g.position, BLUE, BLUE2, true], [red.g.position, REDD, REDD2, false]]) {
         for (let i = 0; i < 3; i++) {
-          const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = inward ? 0.9 : 0.25, sp = inward ? -3 : 3;
+          const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = (inward ? 0.9 : 0.25) * Math.max(1, s * 2), sp = inward ? -3 : 3;
           this.fire.emit(o.x + Math.cos(a) * sq * r, o.y + u * r, o.z + Math.sin(a) * sq * r, Math.cos(a) * sq * sp, u * sp, Math.sin(a) * sq * sp, 0.24, 0.1, 0.03, cA, cB, 1, 0);
         }
         // a trail behind each as they swirl in
-        if (tr > 0) this.fire.emit(o.x, o.y, o.z, 0, 0, 0, 0.3, 0.35, 0.05, cA, cB, 0, 0);
+        if (tr > 0 || (sw > 0 && sw < 1)) this.fire.emit(o.x, o.y, o.z, 0, 0, 0, 0.3, 0.35 + s * 0.4, 0.05, cA, cB, 0, 0);
       }
       if (tr > 0.6 && !hit && R() < 0.7) arc(this, M, 0.4 + (1 - tr) * 0.8, PURP, VIOW);
       // the collision: blue and red mix into purple
@@ -312,7 +370,8 @@ Object.assign(Fx.prototype, {
         purple.visible = true;
         for (let i = 0; i < 90; i++) { const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), sp = 5 + R() * 10; this.fire.emit(M.x, M.y, M.z, Math.cos(a) * sq * sp, u * sp, Math.sin(a) * sq * sp, 0.25 + R() * 0.2, 0.3, 0.04, R() < 0.33 ? BLUE : R() < 0.5 ? RED : VIOW, DPURP, 4, 0); }
         this.fire.emit(M.x, M.y, M.z, 0, 0, 0, 0.22, 2.4, 5.2, VIOW, PURP, 0, 0);
-        this.ring(M, 4, 0.4, new THREE.Color(2.4, 0.8, 3.8));
+        if (this.impactStar) this.impactStar(M.clone(), 3.2, [1.6, 1.0, 2.0], 0.22);
+        if (this.airBurst) { this.airBurst(M.clone(), sd.clone(), true, [[1.4, 0.6, 1.9], [0.5, 0.1, 1.0]]); this.airBurst(M.clone(), sd.clone().negate(), true, [[1.4, 0.6, 1.9], [0.5, 0.1, 1.0]]); }
         this.light(M, 60, 24, 0.45, 0xa04cff);
         this.shake(0.4);
         lb.color.setHex(0xa04cff); lr.color.setHex(0xa04cff);
@@ -323,7 +382,7 @@ Object.assign(Fx.prototype, {
         purple.position.copy(M);
         pc.scale.setScalar(rr * 0.72); ps.scale.setScalar(rr * 1.1); pr1.scale.setScalar(rr * 0.8); pr2.scale.setScalar(rr * 0.8);
         pr1.rotation.x += dt * 6; pr1.rotation.y += dt * 4; pr2.rotation.z += dt * 7; pr2.rotation.x -= dt * 3;
-        pc.material.uniforms.uT.value = t; ps.material.uniforms.uT.value = t;
+        pc.material.uniforms.uT.value = t * 2; ps.material.uniforms.uT.value = t;
         hp.position.copy(M); hp.material.opacity = 0.9; hp.scale.setScalar(rr * 5);
         lb.position.copy(M); lb.intensity = 30;
         // everything around is drawn into the swelling mass
@@ -344,6 +403,10 @@ Object.assign(Fx.prototype, {
   },
   // the released imaginary mass: o start, dir unit, travels len metres at speed
   hollowPurple(o, dir, len, speed, radius, startR = 0) {
+    // the launch: a purple vortex torn open at his hands, the clean ring slash round it
+    this.vortex(o, { size: Math.max(1.2, radius * 0.6), pal: GLOSS.purple, dur: 0.75, ribbons: 14, crack: false });
+    this.liquidSlash(o.clone(), dir, Math.max(1.2, radius * 0.7), GLOSS.purple, 0.25);
+    this.starBurst(o, 5, 0.7, GLOSS.purple, radius * 0.9);
     const g = new THREE.Group(); this.scene.add(g);
     const core = new THREE.Mesh(SPHERE, orbMaterial([0.55, 0.1, 1.4], [1.9, 0.45, 3.8], { swirl: 2.4 }));
     const shell = new THREE.Mesh(SPHERE, orbMaterial([0.3, 0.03, 0.8], [1.2, 0.2, 2.8], { additive: true, swirl: 3 }));

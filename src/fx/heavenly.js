@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import { GLOSS } from './glossy.js';
 import './arcs.js';
-import { SLASH_PAL } from './slashdisc.js';
+import { SLASH_PAL, slashTex } from './slashdisc.js';
 
 // Kine Slayer VFX: no cursed energy, so nothing glows with power. Everything here is steel, air and
 // impact: blade trails that follow the spear's edge, thin anime slash lines, wind streaks behind a
@@ -111,12 +112,14 @@ Object.assign(Fx.prototype, {
     const F = new THREE.Vector3(dir.x, 0, dir.z).normalize(), Rt = new THREE.Vector3(-F.z, 0, F.x), U = new THREE.Vector3(0, 1, 0);
     const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(U, y).addScaledVector(F, z);
     const L = SLASH_PAL.crimson;
+    const feet = new THREE.Vector3(o.x, o.y, o.z);
+    void L;
     if (i === 0) {        // forehand: high right, over the front, down to the left
-      this.slashDisc(at(0, 1.3, 0.35), Rt.clone().multiplyScalar(0.65).addScaledVector(U, 0.75), F, 3.0, L, { spin: 4, shards: 6, delay: 0.05 });
-    } else if (i === 1) { // backhand: flat, left to right (a wide spinning swirl, like the reference)
-      this.slashDisc(at(0, 1.1, 0.25), Rt.clone().negate().addScaledVector(F, -0.2), F, 3.3, L, { spin: -4.5, shards: 6, delay: 0.05 });
+      this.ribbonCombo(feet, F, 'd', GLOSS.crimson, 1.25, 0.05);
+    } else if (i === 1) { // backhand: flat, left to right, wrapping round him
+      this.ribbonCombo(feet, F, 'h', GLOSS.crimson, 1.3, 0.05);
     } else if (i === 2) { // rising: low left up past the right shoulder
-      this.slashDisc(at(0, 1.2, 0.3), Rt.clone().multiplyScalar(-0.5).addScaledVector(U, -0.8), F, 3.0, L, { spin: 4, shards: 6, delay: 0.07 });
+      this.ribbonCombo(feet, F, 'u', GLOSS.crimson, 1.25, 0.07);
       this.windSwirl(at(0, 0, 0.4), 2.6, { life: 0.6 });
     } else {              // the thrust: a straight streak, air twisting round the spear
       const tip = at(0, 1.25, 1.9);
@@ -139,7 +142,9 @@ Object.assign(Fx.prototype, {
     }
     this.slashDisc(p.clone(), Rt.clone().multiplyScalar(Math.cos(a0)).addScaledVector(U, Math.sin(a0)), F, heavy ? 2.4 : 1.6, SLASH_PAL.crimson, { spin: 8, life: 0.24, shards: heavy ? 4 : 0 });
     this.airBurst(p, dir, heavy, [[1.65, 0.4, 0.3], [0.85, 0.05, 0.02]]);
-    this.impactStar(p, heavy ? 1.8 : 0.95, [1.8, 1.05, 0.95]);
+    this.impactStar(p, heavy ? 1.0 : 0.55, [1.8, 1.05, 0.95]);
+    this.starBurst(p, heavy ? 3 : 2, heavy ? 0.45 : 0.34, GLOSS.crimson, heavy ? 1.1 : 0.8);
+    if (heavy) this.liquidSlash(p.clone(), dir, 0.9, GLOSS.crimson, 0.35);
     // sparks off the steel: fast, thin, a little gravity
     for (let k = 0; k < (heavy ? 14 : 6); k++) {
       const u = R() * 2 - 1, a = R() * 6.283, sq = Math.sqrt(1 - u * u), sp = (heavy ? 8 : 5) + R() * 8;
@@ -197,6 +202,8 @@ Object.assign(Fx.prototype, {
     this.groundShock(to, 2.2, { dur: 0.45, grow: 0.3, ink: 0.6 });
   },
   skySlam(c) {
+    this.vortex(new THREE.Vector3(c.x, c.y + 0.8, c.z), { size: 1.3, pal: GLOSS.crimson, dur: 0.7, ribbons: 12 });
+    this.liquidSlash(new THREE.Vector3(c.x, c.y + 0.5, c.z), new THREE.Vector3(1, 0, 0), 2.2, GLOSS.crimson, 0.05);
     for (let i = 0; i < 46; i++) {
       const a = R() * 6.283, sp = 4 + R() * 9;
       this.smoke.emit(c.x, c.y + 0.15, c.z, Math.cos(a) * sp, 0.6 + R() * 2.4, Math.sin(a) * sp, 0.7 + R() * 0.5, 0.5, 2.2, DUST0, DUST1, 2.4, 0.4);
@@ -335,6 +342,133 @@ Object.assign(Fx.prototype, {
       const a = R() * 6.283;
       this.smoke.emit(p.x, p.y + 0.1, p.z, Math.cos(a) * 3, 0.4 + R() * 0.6, Math.sin(a) * 3, 0.5 + R() * 0.3, 0.35, 1.3, DUST0, DUST1, 2.6, 0.1);
     }
+  },
+
+  // ---------------------------------------------------------------- E: the thrown spear
+  // a steel shaft with a red-hot edge streak, trailing red sparks; flies straight, sticks, rips back
+  flyingSpear(o, dir, speed) {
+    const g = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.2, 6), new THREE.MeshBasicMaterial({ color: 0x2a2f38 }));
+    shaft.rotation.x = Math.PI / 2; g.add(shaft);
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.45, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 0.5, 0.45) }));
+    blade.rotation.x = Math.PI / 2; blade.position.z = 0.8; g.add(blade);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 1.9), new THREE.MeshBasicMaterial({ map: slashTex('trail'), color: new THREE.Color(1.6, 0.12, 0.08), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    glow.rotation.x = Math.PI / 2; g.add(glow);
+    this.scene.add(g);
+    const S = { st: 'fly', p: o.clone(), d: dir.clone().normalize(), t: 0, dist: 0, getT: null, sp: speed };
+    const look = new THREE.Vector3();
+    const place = () => { g.position.copy(S.p); look.copy(S.p).add(S.d); g.lookAt(look); };
+    place();
+    let dead = false;
+    this.effects.push({ update: (dt) => {
+      if (dead) return false;
+      S.t += dt;
+      if (S.st === 'fly') { const step = S.sp * dt; S.p.addScaledVector(S.d, step); S.dist += step; if (S.dist > 36) S.st = 'stuck'; }
+      else if (S.st === 'back') {
+        const to = S.getT().sub(S.p), d = to.length();
+        if (d > 0.05) { S.d.copy(to).divideScalar(d).negate(); S.p.addScaledVector(to.divideScalar(d), Math.min(d, S.sp * dt)); }
+      }
+      place();
+      if (S.st !== 'stuck') {
+        for (let k = 0; k < 3; k++) this.fire.emit(S.p.x - S.d.x * k * 0.25, S.p.y - S.d.y * k * 0.25, S.p.z - S.d.z * k * 0.25, (R() - 0.5) * 0.4, (R() - 0.5) * 0.4, (R() - 0.5) * 0.4, 0.22, 0.12, 0.02, [1.7, 0.25, 0.15, 1], [0.7, 0.03, 0.02, 0], 2, 0);
+      } else if (R() < 0.3) this.fire.emit(S.p.x, S.p.y, S.p.z, 0, 0.6, 0, 0.4, 0.08, 0.02, [1.5, 0.2, 0.12, 1], [0.6, 0.02, 0.02, 0], 0, 0);
+      return true;
+    } });
+    return {
+      stick: (p) => {
+        S.st = 'stuck'; S.p.copy(p);
+        this.slashLine(p.clone().addScaledVector(S.d, -0.8), p.clone().addScaledVector(S.d, 0.6), 0.12, 0.25, [1.8, 0.5, 0.4]);
+        for (let k = 0; k < 14; k++) { const a = R() * 6.283; this.fire.emit(p.x, p.y, p.z, Math.cos(a) * 4, 1 + R() * 3, Math.sin(a) * 4, 0.25, 0.05, 0.01, [1.8, 0.6, 0.5, 1], [0.6, 0.05, 0.03, 0], 2, -8); }
+      },
+      recall: (getT, sp) => { S.st = 'back'; S.getT = getT; S.sp = sp; },
+      dispose: () => { dead = true; this.scene.remove(g); g.traverse((o2) => { if (o2.geometry) o2.geometry.dispose(); if (o2.material) o2.material.dispose(); }); },
+    };
+  },
+
+  // ---------------------------------------------------------------- V: Severing Whirlwind
+  // rings of red cuts spinning round him, one per tick, and the grey wind left on the ground
+  whirlwind(getPos, n, gap) {
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        const p = getPos();
+        const a = R() * 6.283, e1 = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)), e2 = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a));
+        const tilt = (R() - 0.5) * 0.3;
+        e1.y = tilt; e1.normalize();
+        this.ribbon(new THREE.Vector3(p.x, p.y + 1.0 + (i % 2) * 0.25, p.z), e1, i % 2 ? e2.clone().negate() : e2, 2.6, 5.2, { pal: GLOSS.crimson, w: 0.75, sweep: 0.1, life: 0.36, helix: (i % 2 ? -0.5 : 0.5), grow: 0.25 });
+        this.ribbon(new THREE.Vector3(p.x, p.y + 0.8 + (i % 2) * 0.25, p.z), e1.clone().applyAxisAngle(up, 0.8), i % 2 ? e2.clone().negate().applyAxisAngle(up, 0.8) : e2.clone().applyAxisAngle(up, 0.8), 3.1, 4.2, { pal: GLOSS.crimson, w: 0.3, sweep: 0.12, life: 0.4, delay: 0.04, grow: 0.3 });
+        if (i === n - 1) this.starBurst(new THREE.Vector3(p.x, p.y + 1.2, p.z), 4, 0.5, GLOSS.crimson, 2.4);
+        if (i === 0) this.windSwirl(p, 7.5, { life: n * gap + 0.4 });
+        void up;
+      }, (0.08 + i * gap) * 1000);
+    }
+  },
+
+  // ---------------------------------------------------------------- X: Heavenly Severance
+  // the wind-up: red light pouring into him from all around, the ground under him going dark red
+  severWind(o, dur) {
+    let t = 0;
+    const c = new THREE.Vector3(o.x, o.y + 1.0, o.z);
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      for (let k = 0; k < 10; k++) {
+        const a = R() * 6.283, u = R() * 2 - 1, sq = Math.sqrt(1 - u * u), r = 3 + R() * 3;
+        const x = c.x + Math.cos(a) * sq * r, y = c.y + u * r * 0.6, z = c.z + Math.sin(a) * sq * r;
+        this.fire.emit(x, y, z, (c.x - x) * 2.6, (c.y - y) * 2.6, (c.z - z) * 2.6, 0.38, 0.08, 0.02, [1.7, 0.18, 0.12, 1], [0.7, 0.02, 0.02, 0], 0, 0);
+      }
+      if (R() < 0.35) { const a = R() * 6.283; this.slashLine(c.clone().add(new THREE.Vector3(Math.cos(a) * 1.4, (R() - 0.5) * 1.6, Math.sin(a) * 1.4)), c.clone().add(new THREE.Vector3(Math.cos(a + 0.6) * 1.6, (R() - 0.5) * 1.6, Math.sin(a + 0.6) * 1.6)), 0.04, 0.16, [1.8, 0.4, 0.35]); }
+      return t < dur;
+    } });
+    this.scorch(o.x, o.z, 2.2, 6);
+    this.light(c, 18, 10, dur, 0xff2a1a);
+  },
+  // the release: a giant crescent (flat or upright) racing down the line, 10 m wide, cutting the
+  // ground open behind it
+  severWave(o, dir, vert, len, speed, width) {
+    this.liquidSlash(new THREE.Vector3(o.x, o.y + 1.1, o.z), dir, 1.7, GLOSS.crimson, vert ? 1.6 : 0.1);
+    this.starBurst(new THREE.Vector3(o.x, o.y + 1.3, o.z).addScaledVector(dir, 1.5), 3, 0.6, GLOSS.crimson, 1.4);
+    const up = new THREE.Vector3(0, 1, 0), D = dir.clone().setY(0).normalize();
+    // both crescents face down the line (so the caster sees them face-on as they tear away):
+    // the flat one is a wide, low arch across the field, the upright one a tall crescent on end
+    const S = width * 1.35, side = new THREE.Vector3(-D.z, 0, D.x);
+    const e1 = vert ? up.clone().negate() : side.clone(), e2 = vert ? side.clone() : up.clone();
+    const n = new THREE.Vector3().crossVectors(e1, e2);
+    const P = SLASH_PAL.crimson;
+    const layers = [['blade', P.glow, true, 1.12, 0.7], ['shade', P.ink, false, 1.04, 0.65], ['trail', P.hi, false, 0.97, 0.9], ['blade', P.core, false, 1, 1], ['thin', P.hi, false, 1.05, 1]];
+    const g = new THREE.Group(); this.scene.add(g);
+    const mats = [];
+    layers.forEach(([tx, col, add, sc, al], i) => {
+      const mat = new THREE.MeshBasicMaterial({ map: slashTex(tx), color: new THREE.Color(...col), transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending, fog: false });
+      const q = new THREE.Mesh(new THREE.PlaneGeometry(S * sc, S * sc * 0.42), mat);   // squashed: a long, flat crescent
+      q.position.z = (i - 2) * 0.04; q.renderOrder = 4 + i; g.add(q); mats.push([mat, al]);
+    });
+    g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(e1, e2, n));
+    const base = new THREE.Vector3(o.x, o.y + (vert ? 1.6 : 0.9), o.z);
+    const off = 0;
+    let t = 0, s = 0, lastScar = 0;
+    this.effects.push({ update: (dt) => {
+      t += dt; s = Math.min(len, s + speed * dt);
+      const k = s / len;
+      g.position.copy(base).addScaledVector(D, s - off);
+      const grow = 0.75 + 0.25 * Math.min(1, t / 0.12);
+      g.scale.setScalar(grow);
+      for (const [mat, al] of mats) mat.opacity = al * (k < 0.75 ? 1 : 1 - (k - 0.75) / 0.25);
+      // the front: red sparks, torn-up dust, and (flat cut) the ground split open behind it
+      const fx = base.x + D.x * s, fz = base.z + D.z * s;
+      for (let q = 0; q < 6; q++) { const u = (R() - 0.5) * width * (vert ? 0.2 : 1); this.fire.emit(fx - D.z * u, base.y + (vert ? (R() - 0.3) * 5 : (R() - 0.5) * 0.6), fz + D.x * u, D.x * 6, R() * 2, D.z * 6, 0.25, 0.08, 0.02, [1.8, 0.35, 0.25, 1], [0.6, 0.03, 0.02, 0], 2, 0); }
+      if (s - lastScar > 2.5) {
+        lastScar = s;
+        const gy = o.y;
+        for (let q = 0; q < 5; q++) { const u = (R() - 0.5) * width * 0.8; this.smoke.emit(fx - D.z * u, gy + 0.1, fz + D.x * u, D.x * 2 + (R() - 0.5) * 2, 0.6 + R(), D.z * 2 + (R() - 0.5) * 2, 0.7, 0.45, 1.6, [0.45, 0.4, 0.36, 0.55], [0.5, 0.46, 0.42, 0], 2.4, 0.1); }
+        if (!vert) this.scorch(fx, fz, 0.9, 8);
+      }
+      if (t > len / speed + 0.25) { this.scene.remove(g); g.traverse((q) => { if (q.geometry) q.geometry.dispose(); if (q.material) q.material.dispose(); }); return false; }
+      return true;
+    } });
+    // the moment of release
+    this.impactStar(base.clone().addScaledVector(D, 1.5), 3.6, [1.9, 0.6, 0.5], 0.2);
+    this.slashLine(base.clone().addScaledVector(D, 0.5), base.clone().addScaledVector(D, len), vert ? 0.2 : 0.35, 0.5, [1.9, 0.5, 0.4]);
+    this.light(base, 30, 18, 0.3, 0xff3020);
   },
 
   severStart(o) {

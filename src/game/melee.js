@@ -65,7 +65,7 @@ export class MeleeCombo {
     const fwd = this._facing(new THREE.Vector3());
     // lunge onto the target in front of you (TSB-style), or a short step forward
     const tgt = this._target(fwd, this.D.seek);
-    if (tgt) {
+    if (tgt && Math.hypot(tgt.pos.x - b.pos.x, tgt.pos.z - b.pos.z) > 0.05) {
       const dx = tgt.pos.x - b.pos.x, dz = tgt.pos.z - b.pos.z, d = Math.hypot(dx, dz);
       fwd.set(dx / d, 0, dz / d);
       // stop about an arm's length away (the lunge carries a little momentum past its end)

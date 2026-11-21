@@ -30,7 +30,7 @@ export const RED = { charge: 0.36, radius: 3.8, splash: 20, minSplash: 8, kb: 15
 // the model's own Hollow Purple animation at its real speed (source 6.5 s → 13.1 s): Blue and Red
 // appear at the hands at 4.5 s (source 11.0), converge, the purple mass grows, release at 6.4 s;
 // it travels at the source's speed (~16 m/s)
-export const PURPLE = { charge: 6.4, orbsAt: 4.5, front: 1.5, height: 1.35, spread: 0.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 64 };
+export const PURPLE = { charge: 6.4, orbsAt: 0.5, front: 1.5, height: 1.35, spread: 0.95, back: 0.6, backSpread: 2.15, backH: 1.95, formR: 1.3, speed: 16, len: 70, radius: 3.0, dmg: 64 };
 export const VOID = { cine: 5.6, radius: 30, dur: 7, enemyDmg: 0.75, enemySlow: 0.7, cdBoost: 1.5, stun: 1.0, dmg: 8 };
 
 const COOLDOWN = { flick: FLICK.cd, blue: 9, red: 8, purple: 18 };

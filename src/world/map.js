@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildTerrain, groundH, WATER_Y, LAKE, PLAY_RADIUS } from './terrain.js';
+import { buildTerrain, groundH, WATER_Y, LAKE, PLAY_RADIUS, MAP_SCALE } from './terrain.js';
 import { buildSky, buildMountains, SUN_DIR, SKY } from './sky.js';
 import { buildWater } from './water.js';
 import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
@@ -55,9 +55,12 @@ export class GameMap {
     this.landmarks = buildLandmarks(this.world, Q); s.add(this.landmarks);
     this.props = buildProps(this.world, quality, Q); s.add(this.props);
     const avoid = this.props.userData.avoid;
-    this.grass = buildGrass(Q.grass, avoid, Q); s.add(this.grass);
-    this.flowers = buildFlowers(Q.flowers, avoid, Q); s.add(this.flowers);
-    this.bushes = buildBushes(Q.bushes, this.props.userData.anchors, avoid); s.add(this.bushes);
+    // the valley is MAP_SCALE x wider: ~MAP_SCALE^2 the ground to cover. Undergrowth is chunked and
+    // distance-culled, so more of it costs memory/load time, not frame time (kept a bit under area)
+    const AREA = Math.min(4, MAP_SCALE * MAP_SCALE * 0.75);
+    this.grass = buildGrass(Math.round(Q.grass * AREA), avoid, Q); s.add(this.grass);
+    this.flowers = buildFlowers(Math.round(Q.flowers * AREA), avoid, Q); s.add(this.flowers);
+    this.bushes = buildBushes(Math.round(Q.bushes * AREA), this.props.userData.anchors, avoid); s.add(this.bushes);
     // undergrowth chunks culled by distance every frame
     this.lod = [...this.grass.children.map((m) => [m, Q.grassDist]), ...this.flowers.children.map((m) => [m, Q.grassDist * 0.9]), ...this.bushes.children.map((m) => [m, Q.grassDist * 1.6])];
     this.lodScale = 1; // lowered by the runtime auto-tuner
@@ -71,7 +74,7 @@ export class GameMap {
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + 0.13;
       for (let tries = 0; tries < 12; tries++) {
-        const r = 38 + (tries % 4) * 4 + (i % 2) * 6;
+        const r = 58 + (tries % 4) * 6 + (i % 2) * 12;
         const x = Math.cos(a + tries * 0.05) * r, z = Math.sin(a + tries * 0.05) * r;
         const y = groundH(x, z);
         if (this.world.inWater(x, z) > 0 || y > 3) continue;

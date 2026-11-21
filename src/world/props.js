@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { groundH, groundNormal, LAKE, PLAY_RADIUS, pathDist, riverDist, CLIFF, terrainNoise as N } from './terrain.js';
+import { groundH, groundNormal, LAKE, PLAY_RADIUS, MAP_SCALE as MS, pathDist, riverDist, CLIFF, terrainNoise as N } from './terrain.js';
 import { mulberry32 } from './noise.js';
 import { windPatch } from './vegetation.js';
 import { stylize } from './stylize.js';
@@ -240,8 +240,21 @@ export function buildProps(world, quality = 'high', Q = {}) {
   B.avoid.push(...landmarkFootprints());
 
   // ---------------- trees
+  // spatial hash over B.avoid (thousands of entries on the big map; grass asks ~10^5 times)
+  const AG = 8, grid = new Map();
+  let indexed = 0;
+  const cellKey = (i, j) => (i + 4096) * 8192 + (j + 4096);
+  const index = () => {
+    for (; indexed < B.avoid.length; indexed++) {
+      const a = B.avoid[indexed];
+      const i0 = Math.floor((a.x - a.r) / AG), i1 = Math.floor((a.x + a.r) / AG), j0 = Math.floor((a.z - a.r) / AG), j1 = Math.floor((a.z + a.r) / AG);
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = cellKey(i, j); let c = grid.get(k); if (!c) grid.set(k, c = []); c.push(a); }
+    }
+  };
   const avoidFn = (x, z) => {
-    for (const a of B.avoid) if ((x - a.x) ** 2 + (z - a.z) ** 2 < a.r * a.r) return true;
+    if (indexed < B.avoid.length) index();
+    const c = grid.get(cellKey(Math.floor(x / AG), Math.floor(z / AG)));
+    if (c) for (const a of c) if ((x - a.x) ** 2 + (z - a.z) ** 2 < a.r * a.r) return true;
     return false;
   };
   const kinds = { oak: [oakGeometry(11), oakGeometry(23)], pine: [pineGeometry(5), pineGeometry(8)], birch: [birchGeometry(3)] };
@@ -272,19 +285,19 @@ export function buildProps(world, quality = 'high', Q = {}) {
   };
   // the meadow is open (reference): a few big lone oaks and small clumps near its edges for cover
   const lone = [[58, 34, 1.6], [-62, 22, 1.4], [30, 62, 1.5], [-30, -38, 1.3], [44, -30, 1.35], [-10, 70, 1.3], [70, 6, 1.25], [-74, 44, 1.4]];
-  for (const [x, z, sc] of lone) tryTree(x, z, 'oak', sc, true);
-  const clumps = [[-46, 52], [62, 52], [-58, -16], [20, -44]];
-  for (const [gx, gz] of clumps) for (let i = 0, t = 0; i < 3 && t < 40; t++) if (tryTree(gx + R(-8, 8), gz + R(-8, 8), rnd() < 0.85 ? 'oak' : 'birch', R(0.85, 1.2), true)) i++;
-  for (let i = 0, t = 0; i < 10 && t < 400; t++) {
+  for (const [x, z, sc] of lone) tryTree(x * MS, z * MS, 'oak', sc, true);
+  const clumps = [...[[-46, 52], [62, 52], [-58, -16], [20, -44]].map(([x, z]) => [x * MS, z * MS]), [-90, 70], [100, 90], [-120, -30], [70, -100], [140, 20], [-20, 150], [-150, 110], [30, 110]];
+  for (const [gx, gz] of clumps) for (let i = 0, t = 0; i < 4 && t < 50; t++) if (tryTree(gx + R(-10, 10), gz + R(-10, 10), rnd() < 0.85 ? 'oak' : 'birch', R(0.85, 1.2), true)) i++;
+  for (let i = 0, t = 0; i < 46 && t < 1600; t++) {
     const a = rnd() * 6.28, r = R(40, PLAY_RADIUS - 6);
     if (tryTree(Math.cos(a) * r, Math.sin(a) * r, rnd() < 0.8 ? 'oak' : 'birch', R(0.8, 1.15), true)) i++;
   }
   // trees dotting the cliff tops and the plateaus beyond (dense near the edge, like the reference)
-  const scenery = (Q.scenery || 300) * 2.4;
+  const scenery = (Q.scenery || 300) * 2.4 * 1.9;
   for (let i = 0, t = 0; i < scenery && t < scenery * 10; t++) {
-    const a = rnd() * 6.28, r = 62 + Math.pow(rnd(), 1.7) * 240;
+    const a = rnd() * 6.28, r = 62 * MS + Math.pow(rnd(), 1.7) * 300;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (groundH(x, z) < CLIFF.t1 - 1.5 && r < 150) continue;               // inside the basin: handled above
+    if (groundH(x, z) < CLIFF.t1 - 1.5 && r < 150 * MS) continue;               // inside the basin: handled above
     if (N.fbm(x / 30, z / 30, 2) < -0.2) continue;
     if (tryTree(x, z, rnd() < 0.9 ? 'oak' : 'birch', R(1.0, 1.6), false)) i++;
   }
@@ -299,7 +312,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
     const inBasin = (p) => Math.hypot(p.x, p.z) < PLAY_RADIUS + 14 && groundH(p.x, p.z) < CLIFF.t1 - 1.5;
     const groups = [all.filter(inBasin)];
     const sector = (p) => Math.floor(((Math.atan2(p.z, p.x) + Math.PI) / (Math.PI * 2)) * 8) % 8;
-    for (let ring = 0; ring < 2; ring++) for (let k = 0; k < 8; k++) groups.push(all.filter((p) => !inBasin(p) && (Math.hypot(p.x, p.z) < 170) === (ring === 0) && sector(p) === k));
+    for (let ring = 0; ring < 2; ring++) for (let k = 0; k < 8; k++) groups.push(all.filter((p) => !inBasin(p) && (Math.hypot(p.x, p.z) < 170 * MS) === (ring === 0) && sector(p) === k));
     groups.forEach((list, gi) => {
       const near = gi === 0;
       const def = near ? defNear : gi <= 8 ? kindsFar[kind][v] : kindsVeryFar[kind][v];
@@ -328,20 +341,22 @@ export function buildProps(world, quality = 'high', Q = {}) {
   };
   const okRock = (x, z) => riverDist(x, z) > 5 && groundNormal(x, z, nrmT).y > 0.85;
   // grey boulders scattered over the meadow (reference)
-  for (let i = 0, t = 0; i < 34 && t < 600; t++) { const a = rnd() * 6.28, r = R(10, PLAY_RADIUS - 4), x = Math.cos(a) * r, z = Math.sin(a) * r; if (okRock(x, z)) { addRock(x, z, R(0.5, 1.4), true); i++; } }
+  for (let i = 0, t = 0; i < 150 && t < 3000; t++) { const a = rnd() * 6.28, r = R(10, PLAY_RADIUS - 4), x = Math.cos(a) * r, z = Math.sin(a) * r; if (okRock(x, z)) { addRock(x, z, R(0.5, 1.4), true); i++; } }
   // big cover boulders, each with a smaller one at its foot
   const boulders = [[-24, 6], [14, -26], [34, 10], [-10, 28], [-40, -26], [56, 20], [10, 56], [-58, 14], [36, -52], [-20, 56], [64, -40], [-66, 34]];
-  for (const [x, z] of boulders) if (okRock(x, z)) { addRock(x, z, R(1.6, 2.4), true); addRock(x + R(-2.6, 2.6), z + R(-2.6, 2.6), R(0.5, 0.9), true); }
+  for (const [bx, bz] of boulders) { const x = bx * MS, z = bz * MS; if (!okRock(x, z)) continue; addRock(x, z, R(1.6, 2.4), true); addRock(x + R(-2.6, 2.6), z + R(-2.6, 2.6), R(0.5, 0.9), true); }
   // rubble at the foot of the cliffs
-  for (let i = 0, t = 0; i < 60 && t < 2000; t++) {
-    const a = rnd() * 6.28, r = R(55, 140), x = Math.cos(a) * r, z = Math.sin(a) * r;
+  // extra cover boulders spread over the (bigger) meadow
+  for (let i = 0, t = 0; i < 40 && t < 1500; t++) { const a = rnd() * 6.28, r = R(30, PLAY_RADIUS - 12), x = Math.cos(a) * r, z = Math.sin(a) * r; if (okRock(x, z)) { addRock(x, z, R(1.5, 2.5), true); addRock(x + R(-2.6, 2.6), z + R(-2.6, 2.6), R(0.5, 0.9), true); i++; } }
+  for (let i = 0, t = 0; i < 160 && t < 6000; t++) {
+    const a = rnd() * 6.28, r = R(55 * MS, 140 * MS), x = Math.cos(a) * r, z = Math.sin(a) * r;
     const h0 = groundH(x, z);
     if (h0 > 2 || !okRock(x, z) || groundH(x + Math.cos(a) * 3, z + Math.sin(a) * 3) < h0 + 3) continue;
     addRock(x, z, R(0.8, 2.2), r < PLAY_RADIUS + 12); i++;
   }
   // river stones
-  for (let i = 0, t = 0; i < 40 && t < 1500; t++) {
-    const a = rnd() * 6.28, r = R(20, 160), x = Math.cos(a) * r, z = Math.sin(a) * r;
+  for (let i = 0, t = 0; i < 110 && t < 5000; t++) {
+    const a = rnd() * 6.28, r = R(20, 160 * MS), x = Math.cos(a) * r, z = Math.sin(a) * r;
     const d = riverDist(x, z); if (d < 4.5 || d > 7.5) continue;
     addRock(x, z, R(0.35, 0.8), false); i++;
   }

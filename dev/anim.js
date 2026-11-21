@@ -49,8 +49,8 @@ function sim(inst) {
   if (st === 'djump') { s.grounded = false; s.vel.set(0, 6, 3); for (let k = 0; k < 10; k++) a.update(dtt, s); a.play('doubleJump', { dir: 0 }); }
   if (['kick', 'stomp', 'adolla', 'skate', 'uppercut', 'zeroburn', 'ray', 'freeze'].includes(st)) a.play(st);
   if (['lance', 'freezeCast', 'jabR', 'jabL'].includes(st)) a.play('cast', { anim: st });
-  if (['gBlue', 'gRed', 'boltL'].includes(st)) a.play('cast', { anim: st });
-  if (['purple', 'domain', 'm1a', 'm1b', 'm1c', 'm1d', 'stagger', 'launched', 'ksA', 'ksB', 'ksC', 'ksD', 'ksThrust', 'ksFlash', 'ksLeap', 'ksDive', 'ksLand'].includes(st)) a.play(st);
+  if (['gBlue', 'gRed', 'boltL', 'ksThrow', 'ksCatch', 'mnCmd', 'mnRaise'].includes(st)) a.play('cast', { anim: st });
+  if (['purple', 'domain', 'm1a', 'm1b', 'm1c', 'm1d', 'stagger', 'launched', 'ksA', 'ksB', 'ksC', 'ksD', 'ksThrust', 'ksFlash', 'ksLeap', 'ksDive', 'ksLand', 'ksWhirl', 'ksSever', 'mnChin', 'mnPlace'].includes(st)) a.play(st);
   if (st === 'mbolt2') { a.play('cast', { anim: 'mBolt' }); for (let k = 0; k < 20; k++) a.update(dtt, s); a.play('cast', { anim: 'mBolt' }); }
   if (st === 'hitf') a.play('hit', { dir: 0, dmg: 30 });
   if (st === 'hitl') a.play('hit', { dir: 1.57, dmg: 30 });
