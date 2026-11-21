@@ -341,6 +341,20 @@ export class Hud {
     if (text) el.classList.add('show');
     if (big) el.classList.add('big');
   }
+  // monologue line: a quiet serif typewriter at the bottom of the frame (theme: 'mono' | 'void');
+  // big = a single word slammed huge in the middle. '' clears it.
+  cineMono(text, theme = 'mono', big = false) {
+    const e = this._cineLayer('cineMono');
+    clearTimeout(this._monoT);
+    if (!text) { e.classList.remove('show'); return; }
+    e.className = theme + (big ? ' big' : '');
+    const esc = (c) => (c === ' ' ? ' ' : c.replace(/[&<>]/g, (x) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[x])));
+    const per = big ? 0.06 : Math.min(0.034, 1.1 / Math.max(1, text.length));
+    // letters animate one by one, but each word stays whole when the line wraps
+    let i = 0;
+    e.innerHTML = '<p>' + text.split(' ').map((w) => '<em>' + [...w].map((c) => `<span style="animation-delay:${(i++ * per).toFixed(3)}s">${esc(c)}</span>`).join('') + '</em>').join(`<span style="animation-delay:${(i * per).toFixed(3)}s"> </span>`) + '</p>';
+    void e.offsetWidth; e.classList.add('show');
+  }
   cineDark(k) { if (this.cineEl) this.cineEl.querySelector('.cine-dark').style.opacity = String(k * 0.55); }
   // anime "impact frames": a few stark, high-contrast negative frames with radial speed lines
   // right as the spell lands, then cb() (the white flash)
@@ -440,7 +454,7 @@ export class Hud {
     }
   }
 
-  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); this.cineGrade(''); this.cineGlyph(0); }
+  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); this.cineGrade(''); this.cineGlyph(0); this.cineMono(''); }
 
   // full-screen white flash (nova); 0..1
   flash(k) {
