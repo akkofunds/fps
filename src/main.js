@@ -1,6 +1,7 @@
 import './ui/styles.css';
 import './ui/extra.css';
 import './ui/theme.css';
+import './ui/party.css';
 import { installOrnaments } from './ui/ornaments.js';
 installOrnaments();
 import * as THREE from 'three';
