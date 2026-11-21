@@ -357,6 +357,9 @@ export class Match {
         if (v && v.alive && v.view && v !== e) {
           v.view.anim.play(fin ? 'launched' : 'stagger');
           v.view.anim.hitStop(fin ? 0.12 : 0.07);
+          // impact frame: the victim flat-filled in the striker's colour for a few frames
+          const sil = d.s === 'cursed' ? [0.03, 0.22, 1.0] : d.s === 'spear' ? [0.95, 0.05, 0.05] : (i === 1 || (fin && Math.random() < 0.5)) ? [1.0, 0.45, 0.05] : [0.3, 0.85, 1.0];
+          this.fx.hitSilhouette(v.view, sil, fin ? 0.11 : 0.07);
           if (v === this.local) this.fx.shake(fin ? 0.35 : 0.12);
         }
         break;
@@ -376,7 +379,7 @@ export class Match {
         else { this.fx.slashImpact(p, dir, !!d.h); this.sound(d.h ? 'slashHeavy' : 'slashHit', p, 0.8, 30); }
         if (e.view) e.view.anim.hitStop(nul ? 0.1 : 0.05);
         const v = this.ents.get(d.v);
-        if (v && v.alive && v.view && v !== e) { v.view.anim.play(nul || d.h ? 'launched' : 'stagger'); v.view.anim.hitStop(0.07); if (v === this.local) this.fx.shake(nul ? 0.4 : 0.15); }
+        if (v && v.alive && v.view && v !== e) { v.view.anim.play(nul || d.h ? 'launched' : 'stagger'); v.view.anim.hitStop(0.07); this.fx.hitSilhouette(v.view, nul ? [0.75, 0.85, 1.0] : [0.95, 0.05, 0.05], d.h ? 0.11 : 0.07); if (v === this.local) this.fx.shake(nul ? 0.4 : 0.15); }
         break;
       }
       case 'flashMark': {
@@ -1663,6 +1666,7 @@ export class Match {
     // the map is shared with the lobby: only remove what the match added
     for (const e of this.ents.values()) {
       this.scene.remove(e.view.root);
+      if (e.view.silhouette) e.view.silhouette(null);
       for (const mesh of e.view.meshes) mesh.material.dispose();
     }
     for (const g of this.ghosts || []) { this.scene.remove(g.inst.root); g.mat.dispose(); }

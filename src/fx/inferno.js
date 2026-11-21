@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import { GLOSS } from './glossy.js';
 
 // Pyro's Fire Force kit VFX: Devil's Foot (blazing kick + burning trail), Rapid Ignition (ember
 // fan + 3-stack detonation), Infernal Step (expanding fire shockwave + speed-boost foot flames)
@@ -62,6 +63,7 @@ Object.assign(Fx.prototype, {
     if (R() < 0.5) this.light(foot, 10, 7, 0.08);
   },
   kickImpact(c, dx, dz) {
+    this.starBurst(c, 2, 0.4, GLOSS.fire, 0.8);
     for (let i = 0; i < 70; i++) {
       const a = Math.atan2(dz, dx) + (R() - 0.5) * 1.6, sp = 5 + R() * 11, up = (R() - 0.3) * 8;
       this.fire.emit(c.x, c.y, c.z, Math.cos(a) * sp, up, Math.sin(a) * sp, 0.3 + R() * 0.35, 0.7 + R() * 0.6, 0.1, R() < 0.3 ? WHITE : FLAME, DARK, 3.5, 1);
@@ -151,6 +153,8 @@ Object.assign(Fx.prototype, {
     this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.1, 1.1, 1.4, WHITE, FLAME, 0, 0);
   },
   igniteBoom(c, r) {
+    this.liquidSlash(new THREE.Vector3(c.x, c.y + 0.8, c.z), new THREE.Vector3(R() - 0.5, 0, R() - 0.5), Math.max(1, r * 0.5), GLOSS.fire, 0.15);
+    this.starBurst(new THREE.Vector3(c.x, c.y + 1, c.z), 3, 0.5, GLOSS.fire, r * 0.5);
     for (let i = 0; i < 55; i++) {
       const u = R() * 2 - 1, a = R() * 6.283, s = Math.sqrt(1 - u * u), sp = (5 + R() * 7) * r / 3;
       this.fire.emit(c.x, c.y, c.z, Math.cos(a) * s * sp, u * sp + 2, Math.sin(a) * s * sp, 0.3 + R() * 0.3, 0.6 + R() * 0.6, 0.08, i < 18 ? WHITE : FLAME, DARK, 3.5, 2);
@@ -164,6 +168,7 @@ Object.assign(Fx.prototype, {
 
   // ---------------------------------------------------------------- Infernal Step
   infernalStep(c, radius) {
+    this.vortex(new THREE.Vector3(c.x, c.y + 1, c.z), { size: Math.max(1, radius * 0.4), pal: GLOSS.fire, dur: 0.6, ribbons: 10 });
     let t = 0, last = 0.3;
     const dur = 0.42;
     this.ring(c, radius * 1.15, 0.45, new THREE.Color(4, 1.6, 0.5));

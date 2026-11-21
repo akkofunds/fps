@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import { GLOSS } from './glossy.js';
 import { groundH } from '../world/terrain.js';
 import { mulberry32 } from '../world/noise.js';
 
@@ -188,6 +189,8 @@ Object.assign(Fx.prototype, {
     for (let i = 0; i < 3; i++) this.fire.emit(p.x, p.y, p.z, (R() - 0.5) * 1.6, (R() - 0.5) * 1.6, (R() - 0.5) * 1.6, 0.3 + R() * 0.2, 0.4, 0.06, CRIM, DARKR, 2, 0.4);
   },
   crimsonBurst(p, radius = 2.8) {
+    this.liquidSlash(p.clone(), new THREE.Vector3(R() - 0.5, 0, R() - 0.5), radius * 0.5, GLOSS.scarlet, 0.2);
+    this.starBurst(p, 3, 0.5, GLOSS.scarlet, radius * 0.45);
     this.sparkBurst(p, radius);
     for (let i = 0; i < 22; i++) {
       const a = (i / 22) * 6.283, sp = 7 + R() * 3;
@@ -199,6 +202,7 @@ Object.assign(Fx.prototype, {
   },
 
   sparkBurst(p, radius = 2.2) {
+    this.vortex(p, { size: Math.max(0.8, radius * 0.4), pal: GLOSS.scarlet, dur: 0.5, ribbons: 7, debris: false });
     for (let i = 0; i < 26; i++) {
       const u = R() * 2 - 1, a = R() * 6.283, s = Math.sqrt(1 - u * u), sp = 3 + R() * 5;
       this.fire.emit(p.x, p.y, p.z, Math.cos(a) * s * sp, u * sp + 1, Math.sin(a) * s * sp, 0.25 + R() * 0.25, 0.45, 0.06, i < 8 ? GOLD : CRIM, DARKR, 3, 1);
@@ -405,6 +409,8 @@ Object.assign(Fx.prototype, {
         this.scorch(target.x, target.z, radius * 0.85, 22);
         this.fireField(target, radius * 0.6, 5);
         this.shake(1.6);
+        this.vortex(new THREE.Vector3(target.x, target.y + 3, target.z), { size: Math.max(3, radius * 0.45), pal: GLOSS.scarlet, dur: 1.8, ribbons: 18 });
+        this.liquidSlash(new THREE.Vector3(target.x, target.y + 1.5, target.z), new THREE.Vector3(0, 0, 1), radius * 0.4, GLOSS.scarlet, 0.04);
         if (onFlash) onFlash();
         if (onImpact) onImpact();
         cleanupAt = t + 4.2;

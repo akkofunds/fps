@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import { GLOSS } from './glossy.js';
 
 // The Sorcerer's Limitless VFX: cursed-energy flicks, Lapse: Blue (a point of attraction that drags
 // particles, dust and light into itself, then collapses), Reversal: Red (repulsion condensing at the
@@ -150,6 +151,9 @@ Object.assign(Fx.prototype, {
   // rings spinning round it, electric arcs, everything nearby (particles, dust, light) spiralling
   // into it, rings on the ground collapsing inward — then it implodes.
   blueOrb(c, from, life, pullR, onCollapse) {
+    // glossy blue ribbons whirling into the point the whole time (TearDrop vortex), crack on collapse
+    this.vortex(c, { size: Math.max(0.9, pullR * 0.32), pal: GLOSS.cursed, dur: life + 0.1, core: false, flash: false, debris: false, crack: false, ribbons: 10 });
+    setTimeout(() => { this.groundCrack(c, pullR * 0.9, GLOSS.cursed, 2.4); this.starBurst(c, 4, 0.6, GLOSS.cursed, pullR * 0.4); this.rockChunks(c, 10, 1.2); }, life * 1000);
     const g = new THREE.Group(); g.position.copy(c); this.scene.add(g);
     const core = new THREE.Mesh(SPHERE, orbMaterial([0.0, 0.02, 0.18], [0.5, 1.6, 4.2]));
     const shell = new THREE.Mesh(SPHERE, orbMaterial([0.0, 0.08, 0.5], [0.3, 1.0, 3.4], { additive: true, swirl: 2.5 }));
@@ -261,6 +265,9 @@ Object.assign(Fx.prototype, {
     }
   },
   redBlast(p, radius) {
+    this.vortex(p, { size: Math.max(0.9, radius * 0.35), pal: GLOSS.crimson, dur: 0.55, ribbons: 9 });
+    this.liquidSlash(p.clone(), new THREE.Vector3(R() - 0.5, 0, R() - 0.5), radius * 0.55, GLOSS.crimson, 0.3);
+    this.starBurst(p, 4, 0.55, GLOSS.crimson, radius * 0.5);
     // a white-hot core and a red shell of force slamming outward: everything is thrown away
     const shell = new THREE.Mesh(SPHERE, orbMaterial([0.6, 0.0, 0.0], [4.0, 0.6, 0.4], { additive: true, swirl: 2 }));
     shell.position.copy(p); this.scene.add(shell);
@@ -396,6 +403,10 @@ Object.assign(Fx.prototype, {
   },
   // the released imaginary mass: o start, dir unit, travels len metres at speed
   hollowPurple(o, dir, len, speed, radius, startR = 0) {
+    // the launch: a purple vortex torn open at his hands, the clean ring slash round it
+    this.vortex(o, { size: Math.max(1.2, radius * 0.6), pal: GLOSS.purple, dur: 0.75, ribbons: 14, crack: false });
+    this.liquidSlash(o.clone(), dir, Math.max(1.2, radius * 0.7), GLOSS.purple, 0.25);
+    this.starBurst(o, 5, 0.7, GLOSS.purple, radius * 0.9);
     const g = new THREE.Group(); this.scene.add(g);
     const core = new THREE.Mesh(SPHERE, orbMaterial([0.55, 0.1, 1.4], [1.9, 0.45, 3.8], { swirl: 2.4 }));
     const shell = new THREE.Mesh(SPHERE, orbMaterial([0.3, 0.03, 0.8], [1.2, 0.2, 2.8], { additive: true, swirl: 3 }));
