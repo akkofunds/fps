@@ -25,6 +25,9 @@ const insts = poses.map((b) => {
   m.anim.action.def = { ...m.anim.action.def, clip: compileClip([{ t: 0, b }, { t: 5, b }]) };
   for (let k = 0; k < 60; k++) m.anim.update(1 / 60, s);
   m.root.visible = false;
+  m.root.updateMatrixWorld(true);
+  const pw = m.palmWorld('R', new THREE.Vector3()), tip = m.rig.ends.handR.getWorldPosition(new THREE.Vector3());
+  (window.__palms = window.__palms || []).push([pw.toArray().map((v) => +v.toFixed(3)), tip.toArray().map((v) => +v.toFixed(3))]);
   return m;
 });
 const zy = +(q.get('zy') || 1.25), d = +(q.get('d') || 2.6);

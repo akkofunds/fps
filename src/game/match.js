@@ -10,7 +10,7 @@ import '../fx/frost.js';
 import '../fx/limitless.js';
 import '../fx/melee.js';
 import '../fx/heavenly.js';
-import { ChessWorld, miniBoard } from '../fx/chess.js';
+import { ChessWorld, miniBoard, MONO as MONO_PAL } from '../fx/chess.js';
 import { CHECKMATE, ROOK, QUEEN } from './manipulator.js';
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
@@ -339,8 +339,15 @@ export class Match {
           if (!local) this.sound('slash', e.pos, 0.5, 22);
           break;
         }
+        const o = Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : e.pos.clone();
+        if (d.s === 'chess') { // the Manipulator: right straight, elbow, low kick, palm
+          const getC = i === 2 ? (out) => e.view.rig.bones[20].getWorldPosition(out) : i === 1 ? (out) => e.view.rig.bones[12].getWorldPosition(out) : (out) => e.view.palmWorld('R', out);
+          this.fx.chessSwing(o, new THREE.Vector3(dir.x, 0, dir.z).normalize(), i, getC);
+          if (!local) this.sound(fin ? 'kick' : 'swing', e.pos, 0.5, 22);
+          break;
+        }
         const getP = fin ? (out) => e.view.rig.bones[20].getWorldPosition(out) : (out) => e.view.palmWorld(i === 1 ? 'R' : 'L', out);
-        this.fx.punchSwing(getP, dir.clone(), d.s, i, Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : e.pos.clone());
+        this.fx.punchSwing(getP, dir.clone(), d.s, i, o);
         if (!local) this.sound(fin ? 'kick' : 'swing', e.pos, 0.5, 22);
         break;
       }
@@ -349,6 +356,10 @@ export class Match {
         if (d.s === 'spear') {
           this.fx.slashImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).clone(), i === 3);
           this.sound(i === 3 ? 'slashHeavy' : 'slashHit', p, i === 3 ? 1 : 0.7, 30);
+        } else if (d.s === 'chess') {
+          this.fx.chessHit(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).clone(), i === 3);
+          this.sound(i === 3 ? 'punchHeavy' : 'punchHit', p, i === 3 ? 1 : 0.7, 30);
+          if (i === 3 && (e === this.local || d.v === this.local.n)) this.app.hud.impactFrames();
         } else {
           this.fx.punchImpact(p, tmpV2.set(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1), d.s, i === 3);
           this.sound(i === 3 ? 'punchHeavy' : 'punchHit', p, i === 3 ? 1 : 0.7, 30);
@@ -848,7 +859,7 @@ export class Match {
     if (C.novaFx) C.novaFx.visible = !on;
     for (const o of C.world) o.visible = !on;
     for (const e of this.ents.values()) if (e !== C.caster && e.alive) e.view.root.visible = !on;
-    this.scene.fog.far = on ? 1e5 : 650;
+    this.scene.fog.far = on ? 1e5 : 1300;
   }
 
   _cineUpdate(dt) {
@@ -1348,7 +1359,7 @@ export class Match {
     if (this.cine) this._endCine(); // checkmate overrides anything else on screen
     if (this._mate) this._mateCleanup();
     const victims = [...this.ents.values()].filter((t) => t !== e && t.alive).sort((a, b) => a.pos.distanceToSquared(c) - b.pos.distanceToSquared(c));
-    const board = miniBoard(this.fx, new THREE.Vector3(c.x + f.x * 0.6, c.y + 1.0, c.z + f.z * 0.6), yaw);
+    const board = e.view ? miniBoard(this.fx, e.view.root) : null;
     this._mate = { c, f, side, yaw, caster: e, victims, pieces: [], kings: [], board, local, killed: false };
     if (e.view) e.view.anim.play('mnChin');
     this.cine = { t: 0, dur: CHECKMATE.dur, caster: e, c: c.clone(), o: c.clone(), f, side, cue: 0, local,
@@ -1366,15 +1377,19 @@ export class Match {
       const p = new THREE.Vector3(cx + ox * SQ, 0, cz + oz * SQ);
       if (Math.hypot(p.x - M.c.x, p.z - M.c.z) < 4) return; // never on his own square
       const toV = Math.atan2(vp.x - p.x, vp.z - p.z);
-      const H = this.fx.chessPiece(kinds[i], p, { white: true, h: 4.4 + (kinds[i] === 'queen' ? 0.8 : 0), mode: 'rise', t: 0.5 + i * 0.07, hold: Infinity, yaw: toV });
-      H.home = p; H.vp = vp;
-      M.pieces.push(H);
+      // his pieces fall out of the white sky one after another and slam onto their squares
+      setTimeout(() => {
+        if (this._mate !== M) return;
+        const H = this.fx.chessPiece(kinds[i], p, { white: true, h: 4.4 + (kinds[i] === 'queen' ? 0.8 : 0), mode: 'drop', t: 0.32, hold: Infinity, yaw: toV,
+          onLand: () => { this.fx.dust(new THREE.Vector3(p.x, this.world.groundAt(p.x, p.z, 50), p.z), 1.6); this.fx.groundCrack(new THREE.Vector3(p.x, this.world.groundAt(p.x, p.z, 50) + 0.3, p.z), 2.6, MONO_PAL, 2.5); if (i % 2 === 0) this.sound('clack', p, 1.2, 120); this.fx.shake(0.12); } });
+        H.home = p; H.vp = vp;
+        M.pieces.push(H);
+      }, (k * 0.18 + i * 0.13) * 1000);
     });
     const away = new THREE.Vector3(vp.x - M.c.x, 0, vp.z - M.c.z).normalize();
     const kp = new THREE.Vector3(vp.x + away.x * 2.6, 0, vp.z + away.z * 2.6);
     const king = this.fx.chessPiece('king', kp, { white: false, h: 4.2, mode: 'rise', t: 0.6, hold: Infinity, yaw: Math.atan2(-away.x, -away.z) });
-    king.away = away; M.kings.push(king);
-    void k;
+    king.away = away; king.at = kp; M.kings.push(king);
   }
   _mateCineUpdate(dt) {
     const C = this.cine, M = this._mate, hud = this.app.hud;
@@ -1382,24 +1397,38 @@ export class Match {
     const t = C.t;
     this.chessWorld.update(dt);
     const cues = [
+      // time stops: every enemy freezes mid-motion; a heartbeat, a chess clock
+      [0.02, () => { for (const v of M.victims) if (v.view) v.view.anim.hitStop(CHECKMATE.kill); this.sound('heartbeat', M.c, 1, 400); }],
       [0.15, () => hud.cineSub('Everyone here is a piece on my board.')],
+      [0.6, () => this.sound('tick', M.c, 0.9, 400)],
+      [1.0, () => this.sound('heartbeat', M.c, 1, 400)],
+      [1.4, () => this.sound('tick', M.c, 0.9, 400)],
       [1.75, () => hud.cineSub('')],
-      [1.9, () => { hud.flash(1); hud.cineGrade('mono'); this.chessWorld.start(M.c); M.victims.forEach((v, k) => this._mateSurround(v, k)); this.fx.shake(0.4); this.sound('domain', M.c, 1.3, 160); }],
+      // the field becomes his board: a shockwave across it, tiles lifting into the white sky
+      [1.9, () => { hud.flash(1); hud.cineGrade('mono'); this.chessWorld.start(M.c); M.victims.forEach((v, k) => this._mateSurround(v, k)); this.fx.shake(0.4); this.sound('domain', M.c, 1.3, 160);
+        this.fx.groundShock(new THREE.Vector3(M.c.x, M.c.y + 0.2, M.c.z), 26, { core: [1.4, 1.42, 1.5], edge: [0.2, 0.2, 0.24] }); this.fx.riseTiles(M.c, 60, 70, 8.5); }],
+      [3.6, () => { M.rings = M.victims.filter((v) => v.alive).map((v) => this.fx.checkRing(() => v.pos, 1.5)); }],
       [3.7, () => hud.cineSub('You were never playing against me.')],
       [5.5, () => { hud.cineSub(''); for (const H of M.pieces) H.slideTo(H.vp.clone().add(H.home.clone().sub(H.vp).setY(0).setLength(3.4)), 0.8); this.sound('slam', M.c, 0.8, 200); }],
+      [5.95, () => this.sound('heartbeat', M.c, 1, 400)],
       [6.35, () => { if (M.caster.view) M.caster.view.anim.play('mnPlace'); }],
-      [7.25, () => { hud.cineSub(''); hud.cineCard('CHECKMATE', '詰 み', 'mono'); this.sound('slashHeavy', M.c, 1, 200); }],
-      [7.9, () => { for (const K of M.kings) K.topple(K.away, 0.7); }],
-      [CHECKMATE.kill, () => this._mateKill()],
-      [9.6, () => { hud.cineSub(''); for (const H of [...M.pieces, ...M.kings]) H.sink(0.7); }],
-      [10.55, () => { hud.flash(0.9); this.chessWorld.end(); hud.cineGrade(''); for (const H of [...M.pieces, ...M.kings]) H.dispose(); M.pieces.length = M.kings.length = 0; }],
+      [7.25, () => { hud.cineSub(''); hud.impactFrames(() => hud.cineCard('CHECKMATE', '詰 み', 'mono')); this.sound('slashHeavy', M.c, 1, 200); this.sound('tick', M.c, 1, 400); }],
+      [7.9, () => { for (const K of M.kings) K.topple(K.away, 0.55); }],
+      // their kings hit the board and shatter; his queens fall on every one of them
+      [8.3, () => { for (const K of M.kings) { const p = K.at; this.fx.tileShards(new THREE.Vector3(p.x, this.world.groundAt(p.x, p.z, 50) + 1.2, p.z), K.away, 26, 3.2); K.dispose(); } M.kings.length = 0;
+        for (const v of M.victims) if (v.alive) this.fx.chessPiece('queen', v.pos.clone(), { white: true, h: 5.2, mode: 'drop', t: 0.3, hold: 1.2, yaw: Math.random() * 6.28 }); }],
+      [CHECKMATE.kill, () => { this._mateKill(); if (M.rings) for (const r of M.rings) r.dispose(); }],
+      [9.6, () => { hud.cineSub('It was over before it started.'); for (const H of [...M.pieces, ...M.kings]) H.sink(0.7); if (M.caster.view) M.caster.view.anim.play('mnChin'); }],
+      [10.55, () => { hud.flash(0.9); hud.cineSub(''); this.chessWorld.end(); hud.cineGrade(''); for (const H of [...M.pieces, ...M.kings]) H.dispose(); M.pieces.length = M.kings.length = 0; }],
     ];
     while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
     // on the little board, his white queen glides across to stand over their king
-    if (M.board && t > 6.75 && t < 7.3) {
-      // Qh4–e7 (three squares along the diagonal): checkmate
-      const k = Math.min(1, (t - 6.75) / 0.45), e = k * k * (3 - 2 * k), q = M.board.pcs.wq, S = M.board.S;
-      q.position.set((3.5 - (7 - 3 * e)) * S, 0.01 + Math.sin(k * Math.PI) * 0.06, ((3 + 3 * e) - 3.5) * S);
+    // Qh4–e7#: his fingers close on the queen (0.4 s into his move), lift her, carry her along the
+    // diagonal and set her down (0.8 s); she is in his hand the whole way (MN_PLACE / miniBoard)
+    if (M.board && M.caster.view) {
+      const T0 = 6.35, q = M.board.pcs.wq, u = t - T0;
+      if (u > 0.42 && u < 0.8) M.board.holdAt(M.caster.view.rig.ends.handR.getWorldPosition(this._cv3 || (this._cv3 = new THREE.Vector3())));
+      else if (u >= 0.8 && !M.placed) { q.position.lerp(M.board.pcs.to, Math.min(1, (u - 0.8) / 0.06)); if (u > 0.86) { q.position.copy(M.board.pcs.to); M.placed = true; this.sound('clack', M.c, 1, 30); } }
     }
     if (M.board && t > 7.3) M.board.pcs.glow.material.opacity = Math.min(0.85, (t - 7.3) * 3) * (0.75 + 0.25 * Math.sin(t * 10));
     if (M.board && t > 7.9 && t < 8.6) { const k = Math.min(1, (t - 7.9) / 0.5); M.board.pcs.bk.rotation.z = k * k * Math.PI * 0.5; }
@@ -1417,6 +1446,7 @@ export class Match {
       if (!v.alive) continue;
       const p = new THREE.Vector3(v.pos.x, v.pos.y + 1.2, v.pos.z);
       this.fx.chessImpact(v.pos, 1.4, false);
+      this.fx.tileShards(p, new THREE.Vector3(v.pos.x - M.c.x, 0, v.pos.z - M.c.z).normalize(), 24, 2);
       this.fx.vortex(p, { size: 1.3, pal: { rim: [1.3, 1.3, 1.35], core: [0.85, 0.86, 0.9], deep: [0.04, 0.04, 0.05], star: [1.1, 1.15, 1.4] }, dur: 0.8, ribbons: 10, crack: false });
       if (v.view) this.fx.hitSilhouette(v.view, [0.02, 0.02, 0.025], 0.6);
       if (M.local) this.reportHit(v, 99999, 'checkmate', { at: p });
@@ -1435,6 +1465,7 @@ export class Match {
     if (!M) return;
     this.chessWorld.end();
     for (const H of [...M.pieces, ...M.kings]) H.dispose();
+    if (M.rings) for (const r of M.rings) r.dispose();
     if (M.board) M.board.dispose();
     this._mate = null;
   }
@@ -1447,9 +1478,11 @@ export class Match {
     let fov = 40, roll = 0;
     const vics = M.victims.filter((v) => v.view);
     if (t < 1.9) { // across the little board, low, his chin on his fist (the reference shot)
-      const k = ease(t / 1.9), r = 2.05 - k * 0.3;
-      P.set(o.x + f.x * r + sd.x * 0.42, o.y + 1.3, o.z + f.z * r + sd.z * 0.42);
-      L.set(head.x, head.y - 0.18, head.z); fov = 34 - k * 4;
+      // a dolly zoom: the camera pulls back while the lens closes in, he stays the same size and
+      // the world behind him stretches away
+      const k = ease(t / 1.9), r = 1.7 + k * 1.1;
+      P.set(o.x + f.x * r + sd.x * 0.42 * (r / 1.7), o.y + 1.3, o.z + f.z * r + sd.z * 0.42 * (r / 1.7));
+      L.set(head.x, head.y - 0.18, head.z); fov = 2 * Math.atan(Math.tan(19 * Math.PI / 180) * 1.7 / r) * 180 / Math.PI;
     } else if (t < 3.7) { // the board spreads to the horizon: rising wide behind him
       const k = ease((t - 1.9) / 1.8);
       P.set(o.x - f.x * (4 + 6 * k) + sd.x * (2 + k), o.y + 2 + 9 * k, o.z - f.z * (4 + 6 * k) + sd.z * (2 + k));
@@ -1466,9 +1499,10 @@ export class Match {
       P.set(o.x + Math.sin(a) * 14, o.y + 7, o.z + Math.cos(a) * 14); L.set(o.x, o.y + 1, o.z); fov = 48;
     } else if (t < 7.6) { // close on the little board: his hand moves the queen
       const b = M.board.g.position, k = ease((t - 6.35) / 1.25);
-      // over his shoulder, from White's side: the whole board, Black's king on the far rank
-      P.set(b.x - f.x * (0.5 - k * 0.08) - sd.x * 0.32, b.y + 0.72 - k * 0.08, b.z - f.z * (0.5 - k * 0.08) - sd.z * 0.32);
-      L.set(b.x + f.x * 0.14, b.y, b.z + f.z * 0.14); fov = 44;
+      // from Black's side, low over their pieces (the reference shot): his hand brings the queen
+      // across the board toward the camera, his face behind it
+      P.set(b.x + f.x * (1.25 - k * 0.12) + sd.x * 0.16, b.y + 0.4, b.z + f.z * (1.25 - k * 0.12) + sd.z * 0.16);
+      L.set(b.x - f.x * 0.1, b.y + 0.3, b.z - f.z * 0.1); fov = 44;
     } else if (t < 9.6) { // high above the field: every king falls, every enemy falls with it
       const k = ease((t - 7.6) / 2.0);
       const cen = new THREE.Vector3(o.x, o.y, o.z);

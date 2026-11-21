@@ -18,6 +18,17 @@ const MODE_DESC = {
   custom: 'Custom: a private match for your party. Pick the kill limit and time limit, invite friends with their Name#1234 tag, then start.',
   practice: 'Practice: a solo range on Sunvale with training dummies. Learn your mage: string your M1s, land every ability, try your ultimate.',
 };
+// watermark size: the longest word of the name just spans the card (cardVw = the card's width in vw)
+// eslint-disable-next-line no-unused-vars
+const wmSize = (name, cardVw) => `min(${(cardVw * 1.45 / Math.max(4, ...name.split(/\s+/).map((w) => w.length))).toFixed(2)}vw, ${Math.round(cardVw * 1.45 * 16 / Math.max(4, ...name.split(/\s+/).map((w) => w.length)))}px)`;
+// fanart for each mage's cards: [image, focus point]
+const ART = {
+  pyro: ['art/pyro.jpg', '52% 24%'],
+  meteora: ['art/meteora.jpg', '48% 26%'],
+  sorcerer: ['art/sorcerer.jpg', '50% 22%'],
+  kineslayer: ['art/kineslayer.jpg', '64% 6%'],
+  manipulator: ['art/manipulator.jpg', '62% 8%'],
+};
 const MAGES = [
   { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },
   { id: 'meteora', name: 'METEORA', icon: ICONS.nova, open: true },
@@ -35,7 +46,11 @@ export class Lobby {
     this.pm = app.pm; this.session = app.session;
     this.mode = 'ffa';
     this.queue = { searching: false };
-    this.mage = MAGE_DEFS[app.settings.mage] && this.canUse(app.settings.mage) ? app.settings.mage : 'pyro';
+    // the saved pick (settings.mage) is never overwritten by an access check: if it is admin-only
+    // and the admin check has not finished yet, Shoto stands in until refreshAccess() restores it
+    const want = app.settings.mage;
+    this.mage = MAGE_DEFS[want] && this.canUse(want) ? want : 'pyro';
+    this.browse = MAGE_DEFS[want] ? want : this.mage; // the mage shown in the Mages tab
     this.pm.setMage(this.mage);
     this._bind();
     this.renderParty(); this.renderSocial(); this.renderMages(); this.renderCareer();
@@ -186,10 +201,9 @@ export class Lobby {
       if (i === 2) { box.appendChild(this._card(m, true)); return; }
       if (m) box.appendChild(this._card(m, false));
       else {
-        const c = el('div', 'card empty');
-        c.appendChild(el('div', 'frame'));
-        c.appendChild(el('div', 'plus', '+'));
-        const meta = el('div', 'meta'); meta.appendChild(el('div', 'pname', 'INVITE')); c.appendChild(meta);
+        const c = el('div', 'vcard empty');
+        c.appendChild(el('div', 'v-plus', '+'));
+        c.appendChild(el('div', 'v-inv', 'INVITE'));
         c.onclick = () => { Audio.play('ui'); $('inviteInput').focus(); };
         box.appendChild(c);
       }
@@ -214,22 +228,26 @@ export class Lobby {
     this._startLabel();
   }
 
-  // party card: no characters in the lobby, just the player — a big initial emblem + the name
-  // (long names are cut with an ellipsis)
+  // party banner (Valorant-style): the member's mage fanart, the mage name as a huge watermark,
+  // READY and the player's name on a plate; yours is the highlighted one
   _card(m, isMe) {
-    const pm = this.pm;
-    const c = el('div', 'card name-card' + (isMe ? ' me' : ''));
-    c.appendChild(el('div', 'frame'));
-    if (pm.party.leader === m.id && pm.inParty) c.appendChild(el('div', 'leader', '★'));
-    const emb = el('div', 'emblem', (m.name || '?').trim().charAt(0).toUpperCase());
-    c.appendChild(emb);
-    const meta = el('div', 'meta');
-    meta.appendChild(el('div', 'ready', isMe ? 'YOU' : 'READY'));
-    const nm = el('div', 'pname', m.name); nm.title = `${m.name}#${m.tag || ''}`;
-    meta.appendChild(nm);
-    meta.appendChild(el('div', 'ptag', m.tag ? `#${m.tag}` : ''));
-    c.appendChild(meta);
-    const rank = el('div', 'rank'); rank.innerHTML = ICONS.rank; c.appendChild(rank);
+    const pm = this.pm, id = MAGE_DEFS[m.mage] ? m.mage : 'pyro', md = mageOf(id), art = ART[id];
+    const c = el('div', 'vcard filled' + (isMe ? ' me' : ''));
+    c.style.setProperty('--accent', md.color);
+    const ban = el('div', 'v-banner');
+    if (art) { const img = el('div', 'v-art'); img.style.backgroundImage = `url(${art[0]})`; img.style.backgroundPosition = art[1]; ban.appendChild(img); }
+    ban.appendChild(el('div', 'v-shade'));
+    ban.appendChild(el('div', 'v-chev'));
+    ban.appendChild(el('div', 'v-diamond'));
+    const plate = el('div', 'v-plate');
+    plate.appendChild(el('div', 'v-ready', isMe ? 'READY · YOU' : 'READY'));
+    const nm = el('div', 'v-name', m.name); nm.title = `${m.name}#${m.tag || ''}`;
+    plate.appendChild(nm);
+    ban.appendChild(plate);
+    c.appendChild(ban);
+    c.appendChild(el('i', 'v-notch'));
+    if (pm.party.leader === m.id && pm.inParty) c.appendChild(el('div', 'v-lead', '♛'));
+    if (isMe) { c.title = 'Change your mage in the MAGES tab'; c.onclick = () => this.setTab('mages'); }
     return c;
   }
 
@@ -290,16 +308,25 @@ export class Lobby {
   // Meteora is reserved for the unlocked admin client
   canUse(id) { const m = MAGES.find((x) => x.id === id); return !!m && m.open && (!m.admin || isAdmin() || isPublicMage(id)); }
   // re-check after the admin unlocks / locks
-  refreshAccess() { if (!this.canUse(this.mage)) this.selectMage('pyro'); this.renderMages(); }
+  refreshAccess() {
+    const want = this.app.settings.mage;
+    if (want && want !== this.mage && MAGE_DEFS[want] && this.canUse(want)) this._apply(want);
+    else if (!this.canUse(this.mage)) this._apply('pyro'); // stand-in only: the saved pick stays saved
+    this.renderMages(); this.renderParty();
+  }
+  _apply(id) {
+    this.mage = id;
+    this.pm.setMage(id);
+    if (this.app.lobbyScene) this.app.lobbyScene.setMage(id);
+  }
 
   selectMage(id) {
     if (!MAGE_DEFS[id] || id === this.mage) return;
     if (!this.canUse(id)) { toast('That mage is admin-only.'); return; }
     if (this.queue.searching) { toast('Cancel the queue to switch mages.'); return; }
-    this.mage = id;
-    this.app.settings.mage = id; this.app.saveSettings();
-    this.pm.setMage(id);
-    this.app.lobbyScene.setMage(id);
+    this.app.settings.mage = id; this.app.saveSettings(); // remembered across reloads
+    this._apply(id);
+    this.browse = id;
     Audio.play('found', 0.4);
     this.renderMages(); this.renderParty();
   }
@@ -315,36 +342,40 @@ export class Lobby {
     document.body.style.setProperty('--hero', md.color);
   }
 
+  // MAGES tab: the roster of fanart cards — click one to see it, SELECT to play it
   renderMages() {
     const ro = $('mageRoster');
     ro.textContent = '';
+    if (!MAGE_DEFS[this.browse]) this.browse = this.mage;
     for (const m of MAGES) {
-      const usable = this.canUse(m.id);
-      const t = el('div', 'mage-tile' + (usable ? '' : ' locked') + (m.id === this.mage ? ' sel' : ''));
-      t.innerHTML = m.icon;
-      t.appendChild(document.createTextNode(m.name));
-      if (!m.open) t.appendChild(el('span', 'soon', 'SOON'));
-      else if (!usable) { t.appendChild(el('span', 'soon', 'ADMIN')); t.onclick = () => toast(`${m.name} is admin-only.`); }
-      else t.onclick = () => this.selectMage(m.id);
+      const usable = this.canUse(m.id), art = ART[m.id];
+      const t = el('div', 'mtile' + (usable ? '' : ' locked') + (m.id === this.mage ? ' equipped' : '') + (m.id === this.browse ? ' sel' : '') + (m.open ? '' : ' soon'));
+      t.dataset.mage = m.id;
+      if (art) { const img = el('div', 'mt-art'); img.style.backgroundImage = `url(${art[0]})`; img.style.backgroundPosition = art[1]; t.appendChild(img); }
+      else { const ic = el('div', 'mt-icon'); ic.innerHTML = m.icon; t.appendChild(ic); }
+      t.appendChild(el('div', 'mt-name', m.name));
+      if (!m.open) t.appendChild(el('span', 'mt-tag', 'SOON'));
+      else if (!usable) t.appendChild(el('span', 'mt-tag', 'ADMIN'));
+      else if (m.id === this.mage) t.appendChild(el('span', 'mt-tag on', 'EQUIPPED'));
+      t.onclick = () => {
+        if (!m.open) { toast(`${m.name} is coming soon.`); return; }
+        Audio.play('ui', 0.6);
+        this.browse = m.id;
+        if (usable && m.id !== this.mage) this.selectMage(m.id); else this.renderMages();
+      };
       ro.appendChild(t);
     }
-    const row = $('mageRow');
-    if (row) {
-      row.textContent = '';
-      for (const m of MAGES) {
-        const usable = this.canUse(m.id);
-        if (!m.open && row.childElementCount >= 6) continue;
-        const t = el('div', 'mage-tile' + (usable ? '' : ' locked') + (m.id === this.mage ? ' sel' : ''));
-        t.innerHTML = m.icon;
-        t.title = m.name;
-        if (!m.open) t.appendChild(el('span', 'soon', 'SOON'));
-        else if (!usable) { t.appendChild(el('span', 'soon', 'ADMIN')); t.onclick = () => toast(`${m.name} is admin-only.`); }
-        else t.onclick = () => this.selectMage(m.id);
-        row.appendChild(t);
-      }
+    const D = mageOf(this.browse), A = ART[this.browse], usable = this.canUse(this.browse);
+    const art = $('mageArt');
+    if (art) {
+      art.textContent = '';
+      art.style.setProperty('--accent', D.color);
+      if (A) { const img = el('div', 'ma-img'); img.style.backgroundImage = `url(${A[0]})`; img.style.backgroundPosition = A[1]; art.appendChild(img); }
+      const b = el('button', 'btn-start ma-select' + (this.browse === this.mage ? ' on' : ''), this.browse === this.mage ? 'EQUIPPED' : usable ? 'SELECT' : 'ADMIN ONLY');
+      b.disabled = !usable || this.browse === this.mage;
+      b.onclick = () => this.selectMage(this.browse);
+      art.appendChild(b);
     }
-    const D = mageOf(this.mage);
-    if ($('pickName')) { $('pickName').textContent = D.name; $('pickRole').textContent = D.role; }
     const d = $('mageDetail');
     d.textContent = '';
     d.appendChild(el('div', 'md-role', `// ${D.role}`));
@@ -353,7 +384,7 @@ export class Lobby {
     const list = el('div', 'md-abils');
     for (const a of D.abilities) {
       const row = el('div', 'md-ab' + (a.ult ? ' ult' : ''));
-      const ic = el('div', 'ic'); ic.innerHTML = ABILITY_ICON[a.id]; ic.appendChild(el('b', '', a.key)); row.appendChild(ic);
+      const ic = el('div', 'ic'); ic.innerHTML = ABILITY_ICON[a.id] || ''; ic.appendChild(el('b', '', a.key)); row.appendChild(ic);
       const txt = el('div');
       txt.appendChild(el('div', 't', a.name.toUpperCase() + (a.cd ? `  ·  ${a.cd}s` : a.ult ? `  ·  ${a.cost} PTS` : '')));
       txt.appendChild(el('div', 'd', a.desc));

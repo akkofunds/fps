@@ -47,9 +47,11 @@ const RIVER_W = [[LAKE.x, LAKE.z], [LAKE.x - 10 * S, LAKE.z + 16 * S], ...sc([[-
 export const RIVER_W_PTS = RIVER_W, RIVER_E_PTS = RIVER_E;
 // faint dirt trails worn across the meadow
 export const PATH = sc([[-20, 120], [-12, 70], [-4, 30], [0, 0], [6, -24], [10, -46]]);
-export const PATH2 = sc([[-70, 40], [-36, 22], [0, 0], [40, -6], [78, -2]]);
+export const PATH2 = sc([[-68, 4], [-58, -8], [-45, -20], [-24, -12], [0, 0], [40, -6], [78, -2]]);
 // the small round mesa on the east side
 export const MESA = { x: 64 * S, z: -16 * S, r: 19, h: 7.5 };
+// rolling hills across the meadow (x, z, radius, height): gentle, grassy, kept off the river
+export const HILLS = [[115, 70, 40, 7], [-100, 92, 36, 6], [55, 168, 44, 8.5], [-62, -58, 30, 4.5], [172, 112, 34, 6], [0, 196, 40, 7], [-128, -36, 30, 5], [80, -60, 26, 3.5], [-40, 120, 24, 4]];
 
 function distToPolyline(x, z, pts) {
   let best = 1e9;
@@ -104,6 +106,11 @@ export function H(x, z) {
   h += MESA.h * smoothstep(MESA.r + 0.8, MESA.r - 0.8, dm) + 0.6 * N.fbm(x / 6, z / 6, 2) * smoothstep(MESA.r, MESA.r - 3, dm);
   // river channel + plunge pool (below the water level; the banks stay above it)
   const rd = riverDist(x, z);
+  // rolling hills (soft-topped, a little lumpy), fading out near the river banks
+  for (const [hx, hz, hr, hh] of HILLS) {
+    const d = Math.hypot(x - hx, z - hz) + N.n2(x / 11 + hx, z / 11) * 4;
+    if (d < hr) { const k = 1 - d / hr; h += hh * k * k * (3 - 2 * k) * smoothstep(8, 30, rd); }
+  }
   const rw = 4.6 + 1.6 * N.n2(x / 20, z / 20);
   const floor = WATER_Y - 0.9;
   const bank = smoothstep(rw + 2.2, rw - 0.4, rd);
@@ -174,6 +181,26 @@ function detailTexture() {
   return t;
 }
 
+function rockTexture() {
+  // greyscale multiplier: horizontal strata bands, vertical cracks and blocky fractures
+  const S = 512;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  const img = g.createImageData(S, S);
+  const n = makeNoise(1717);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const band = 0.82 + 0.18 * Math.sin(y / S * Math.PI * 2 * 7 + n.n2(x / 70, y / 40) * 2.2);
+    const crack = Math.abs(n.n2(x / 22, y / 140));
+    const v = (0.72 + 0.22 * n.fbm(x / 60, y / 60, 3) + 0.1 * n.n2(x / 5, y / 5)) * band * (0.75 + 0.25 * Math.min(1, crack * 6));
+    const k = Math.max(0, Math.min(255, v * 235));
+    const i = (y * S + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = k; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
+
 export function grassColorAt(x, z, out) {
   // shared palette for the ground and grass blades
   const n1 = N.fbm(x / 23 + 40, z / 23, 3), n2 = N.n2(x / 7, z / 7);
@@ -229,7 +256,24 @@ export function buildTerrain(step = 1) {
   }
   g.setIndex(new THREE.BufferAttribute(full, 1));
   g.computeVertexNormals();
-  const mat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, map: detailTexture() }), { wrap: 0.35, band: 0.1 });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: detailTexture() });
+  // cliffs: a triplanar rock texture (layered strata, vertical cracks) faded in by slope, so the
+  // walls read as stone instead of stretched grass detail
+  const rockTex = rockTexture();
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.tRock = { value: rockTex };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vTpW; varying vec3 vTpN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTpW = position; vTpN = normal;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tRock; varying vec3 vTpW; varying vec3 vTpN;')
+      .replace('#include <map_fragment>', `
+        vec4 dTex = texture2D( map, vMapUv );
+        vec3 bw = pow( abs( normalize( vTpN ) ), vec3( 4.0 ) ); bw /= ( bw.x + bw.y + bw.z );
+        vec3 rTex = texture2D( tRock, vTpW.zy * vec2( 0.11, 0.16 ) ).rgb * bw.x + texture2D( tRock, vTpW.xz * 0.11 ).rgb * bw.y + texture2D( tRock, vTpW.xy * vec2( 0.11, 0.16 ) ).rgb * bw.z;
+        float rockW = smoothstep( 0.16, 0.36, 1.0 - normalize( vTpN ).y );
+        diffuseColor.rgb *= mix( dTex.rgb, rTex * 1.12, rockW );`);
+  };
+  mat.customProgramCacheKey = () => 'terrainTri';
+  stylize(mat, { wrap: 0.35, band: 0.1 });
   // tiles sharing one vertex buffer (no seams): each frustum-culls on its own, so only the part of
   // the (big) valley in view is drawn
   const group = new THREE.Group();

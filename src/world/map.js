@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { buildTerrain, groundH, WATER_Y, LAKE, PLAY_RADIUS, MAP_SCALE } from './terrain.js';
+import { buildTerrain, groundH, H as terrainH, WATER_Y, LAKE, PLAY_RADIUS, MAP_SCALE } from './terrain.js';
+import './fog.js';
+import { buildVista } from './scenery.js';
+import { buildAmbient } from './ambient.js';
+import { buildWaterfalls } from './waterfalls.js';
 import { buildSky, buildMountains, SUN_DIR, SKY } from './sky.js';
 import { buildWater } from './water.js';
 import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
@@ -25,16 +29,16 @@ export class GameMap {
     const Q = QUALITY[quality] || QUALITY.high;
     this.quality = quality;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(SKY.fog, 140, 1100);
+    this.scene.fog = new THREE.Fog(SKY.fog, 160, 1300);
     this.world = new CollisionWorld();
     this.world.water = { x: LAKE.x, z: LAKE.z, r: LAKE.r + 8, y: WATER_Y };
     this.waterY = WATER_Y;
     const s = this.scene;
 
     // lighting: warm low sun, sky/ground bounce
-    this.hemi = new THREE.HemisphereLight(0xbcd4ff, 0x5a6a2c, 1.25);
+    this.hemi = new THREE.HemisphereLight(0xb6a8ec, 0x7a6038, 1.35);
     s.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffe2b8, 2.6);
+    this.sun = new THREE.DirectionalLight(0xffbe80, 3.7);
     this.sun.position.copy(SUN_DIR).multiplyScalar(80);
     this.sun.castShadow = Q.shadows;
     if (Q.shadows) {
@@ -46,7 +50,9 @@ export class GameMap {
     s.add(this.sun); s.add(this.sun.target);
 
     this.sky = buildSky(); s.add(this.sky);
-    this.mountains = buildMountains(); s.add(this.mountains);
+    this.mountains = buildMountains((x, z) => terrainH(x, z)); s.add(this.mountains);
+    this.vista = buildVista(); s.add(this.vista);
+    this.waterfalls = buildWaterfalls(); s.add(this.waterfalls);
     this.Q = Q;
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
@@ -55,6 +61,7 @@ export class GameMap {
     this.landmarks = buildLandmarks(this.world, Q); s.add(this.landmarks);
     this.props = buildProps(this.world, quality, Q); s.add(this.props);
     const avoid = this.props.userData.avoid;
+    this.ambient = buildAmbient(this.props.userData.groves || [], Q); s.add(this.ambient);
     // the valley is MAP_SCALE x wider: ~MAP_SCALE^2 the ground to cover. Undergrowth is chunked and
     // distance-culled, so more of it costs memory/load time, not frame time (kept a bit under area)
     const AREA = Math.min(4, MAP_SCALE * MAP_SCALE * 0.75);
@@ -77,7 +84,7 @@ export class GameMap {
         const r = 58 + (tries % 4) * 6 + (i % 2) * 12;
         const x = Math.cos(a + tries * 0.05) * r, z = Math.sin(a + tries * 0.05) * r;
         const y = groundH(x, z);
-        if (this.world.inWater(x, z) > 0 || y > 3) continue;
+        if (this.world.inWater(x, z) > 0 || y > 12) continue;
         const p = { x, y: this.world.groundAt(x, z, y + 3), z };
         const test = new THREE.Vector3(x, p.y, z);
         if (this.world.resolve(test, 0.6, 1.8)) continue;
@@ -126,6 +133,9 @@ export class GameMap {
     WIND.uTime.value = this.time; treeTime.value = this.time; STYLE.uTime.value = this.time;
     if (this.village) this.village.userData.update(this.time);
     this.landmarks.userData.update(this.time);
+    this.vista.userData.update(this.time);
+    this.waterfalls.userData.update(this.time);
+    this.ambient.userData.update(this.time, camera.position);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);
     this.water.material.uniforms.uTime.value = this.time;

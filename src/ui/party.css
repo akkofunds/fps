@@ -1,0 +1,138 @@
+/* =====================================================================================
+   Lobby v3 (Valorant party screen, in the Night Steel palette)
+   PLAY: mode tabs on top, five tall party banners with each member's mage fanart, the mode
+   blurb and PRACTICE / START / LEAVE PARTY underneath. MAGES: a roster of fanart cards, the
+   selected one large with SELECT, its kit beside it. Loaded last: overrides older layouts.
+   ===================================================================================== */
+
+/* ---------------------------------------------------------------- PLAY */
+#lobby #tabPlay { position: absolute; inset: 64px 300px 0 0; display: block; }
+#lobby #tabPlay.hidden { display: none !important; }
+
+/* mode tabs: thin text tabs on a hairline, a lit underline on the active one */
+#lobby .mode-tabs { position: absolute !important; top: 18px !important; bottom: auto !important; left: 50% !important; transform: translateX(-50%) !important;
+  display: flex !important; gap: 0 !important; padding: 0 40px; border-bottom: 1px solid rgba(170, 195, 230, 0.28) !important; }
+#lobby .mode-tab { position: relative; background: none !important; border: 0 !important; box-shadow: none !important; padding: 10px 26px 12px !important;
+  font-family: var(--font-n) !important; font-size: 13px !important; font-weight: 700 !important; letter-spacing: 0.26em !important; color: rgba(205, 216, 235, 0.5) !important; text-shadow: none !important; }
+#lobby .mode-tab:hover { color: #fff !important; }
+#lobby .mode-tab.active { color: #fff !important; background: linear-gradient(to top, rgba(79, 141, 255, 0.22), transparent) !important; }
+#lobby .mode-tab.active::after { display: block !important; content: ''; position: absolute; left: 10%; right: 10%; bottom: -1px; height: 3px; background: #b7d2ff; box-shadow: 0 0 12px rgba(120, 170, 255, 0.9); }
+
+/* the five party banners */
+#lobby #partyCards { display: flex !important; position: absolute !important; left: 0 !important; right: 0 !important; top: 84px !important; bottom: 176px !important; height: auto !important;
+  transform: none !important; justify-content: center; align-items: center; gap: 22px; }
+.vcard { position: relative; flex: 0 0 auto; width: clamp(140px, 13.2vw, 228px); height: 100%; max-height: 640px; cursor: default; transition: transform .25s ease; }
+.vcard.me { width: clamp(160px, 15.6vw, 262px); }
+.vcard.filled { filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.6)); }
+.vcard.me { cursor: pointer; }
+.vcard.me:hover { transform: translateY(-4px); }
+/* the banner: a tall pennant, V-cut at the bottom, steel hairline frame */
+.v-banner { position: absolute; inset: 22px 0 0 0; overflow: hidden; background: #0b1424;
+  clip-path: polygon(0 0, 100% 0, 100% 84%, 50% 100%, 0 84%); }
+.v-banner::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+  clip-path: polygon(0 0, 100% 0, 100% 84%, 50% 100%, 0 84%, 0 0, 2px 2px, 2px calc(84% - 1px), 50% calc(100% - 3px), calc(100% - 2px) calc(84% - 1px), calc(100% - 2px) 2px, 2px 2px);
+  background: linear-gradient(160deg, #eef4fd, #7c8fab 25%, #26334a 50%, #9db1cd 75%, #d3def0); }
+.vcard.me .v-banner::after { background: linear-gradient(160deg, #fffbe0, #e8dc8a 30%, #9c8a3e 55%, #f6eda8 80%, #fffbe0); }
+.v-art { position: absolute; inset: 0; background-size: cover; background-repeat: no-repeat; filter: saturate(1.12) contrast(1.06) brightness(1.03);
+  transform: scale(1.02); transition: transform .6s ease, filter .3s; }
+.vcard.filled:hover .v-art { transform: scale(1.06); filter: saturate(1.2) contrast(1.08) brightness(1.08); }
+/* a soft sheen that sweeps across the card on hover */
+.v-banner::before { content: ''; position: absolute; inset: -20% -60%; z-index: 3; pointer-events: none; opacity: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.22) 50%, transparent 60%); transform: translateX(-40%); transition: transform .9s ease, opacity .3s; }
+.vcard.filled:hover .v-banner::before { opacity: 1; transform: translateX(40%); }
+/* the mage name as a huge stacked watermark across the top of the art (agent-card style) */
+.v-wm { position: absolute; left: 0; right: 0; top: 3%; font-family: var(--font-d); font-weight: 700; line-height: 0.9;
+  letter-spacing: 0; text-align: center; color: color-mix(in srgb, var(--accent, #6fa8ff) 70%, #fff); opacity: 0.32;
+  mix-blend-mode: screen; pointer-events: none; text-transform: uppercase; }
+.v-side { position: absolute; right: 7px; top: 12px; writing-mode: vertical-rl; font: 700 9px/1 var(--font-n); letter-spacing: 0.3em; color: rgba(255, 255, 255, 0.55); }
+/* the art runs all the way down into the V tip: only a slim band behind the name plate is darkened,
+   plus a soft vignette and the mage's colour glowing up from the tip */
+.v-shade { position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(6, 10, 18, 0.35), transparent 14%),
+    linear-gradient(to bottom, transparent 52%, rgba(6, 10, 18, 0.72) 63%, rgba(6, 10, 18, 0.7) 76%, rgba(6, 10, 18, 0.1) 84%, transparent 89%),
+    radial-gradient(ellipse 70% 30% at 50% 100%, color-mix(in srgb, var(--accent, #4f8dff) 45%, transparent), transparent 70%);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.4); }
+/* thin chevron lines echoing the V cut (Valorant agent banner detail) */
+.v-chev { position: absolute; left: 0; right: 0; bottom: 0; height: 20%; z-index: 2; pointer-events: none; opacity: 0.75;
+  background:
+    linear-gradient(to top right, transparent calc(50% - 1px), rgba(255, 255, 255, 0.55) 50%, transparent calc(50% + 1px)) left bottom / 50% 70% no-repeat,
+    linear-gradient(to top left, transparent calc(50% - 1px), rgba(255, 255, 255, 0.55) 50%, transparent calc(50% + 1px)) right bottom / 50% 70% no-repeat; }
+.vcard.me .v-chev { background:
+    linear-gradient(to top right, transparent calc(50% - 1.5px), rgba(255, 246, 190, 0.85) 50%, transparent calc(50% + 1.5px)) left bottom / 50% 70% no-repeat,
+    linear-gradient(to top left, transparent calc(50% - 1.5px), rgba(255, 246, 190, 0.85) 50%, transparent calc(50% + 1.5px)) right bottom / 50% 70% no-repeat; }
+.v-diamond { position: absolute; left: 50%; bottom: 5%; width: 22px; height: 22px; margin-left: -11px; z-index: 2; transform: rotate(45deg);
+  border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 0 10px rgba(255, 255, 255, 0.35); pointer-events: none; }
+.vcard.me .v-diamond { border-color: rgba(255, 246, 190, 0.95); box-shadow: 0 0 12px rgba(255, 230, 150, 0.6); }
+.v-plate { position: absolute; left: 0; right: 0; bottom: 20%; z-index: 2; text-align: center; }
+.v-ready { font: 700 13px/1 var(--font-n); letter-spacing: 0.18em; color: #fff; text-shadow: 0 1px 4px #000; margin-bottom: 6px; }
+.v-name { margin: 0 6px; padding: 7px 8px; font: 600 21px/1 var(--font-n); color: #fff; background: rgba(255, 255, 255, 0.16); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); border-top: 1px solid rgba(255, 255, 255, 0.22);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vcard.me .v-name { background: #ede9b4; color: #12151c; }
+.v-mage { margin-top: 7px; font: 700 10px/1 var(--font-n); letter-spacing: 0.42em; color: #fff; text-shadow: 0 0 4px #000, 0 1px 6px #000, 0 0 12px rgba(0, 0, 0, 0.9); }
+.v-notch { position: absolute; left: 50%; top: 0; width: 4px; height: 30px; margin-left: -2px; background: #e8eef9; box-shadow: 0 0 10px rgba(180, 210, 255, 0.8); }
+.vcard.me .v-notch { background: #fffbe0; box-shadow: 0 0 12px rgba(255, 240, 170, 0.9); }
+.v-lead { position: absolute; top: 34px; left: 10px; font-size: 18px; color: #ffd98a; text-shadow: 0 0 8px rgba(255, 200, 90, 0.8); }
+/* empty slot: a faint translucent panel with a +, click to invite */
+.vcard.empty { inset: auto; top: auto; height: calc(100% - 44px); align-self: center; cursor: pointer; border: 1px solid rgba(220, 230, 250, 0.22);
+  background: linear-gradient(to bottom, rgba(200, 215, 240, 0.07), rgba(200, 215, 240, 0.03)); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.vcard.empty:hover { border-color: rgba(220, 230, 250, 0.5); background: rgba(200, 215, 240, 0.1); }
+.v-plus { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 300 44px/1 var(--font-n); color: rgba(255, 255, 255, 0.7); }
+.v-inv { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font: 700 10px/1 var(--font-n); letter-spacing: 0.36em; color: rgba(255, 255, 255, 0.35); }
+
+/* mode blurb + action row */
+#lobby .mode-desc { position: absolute !important; bottom: 118px !important; left: 50% !important; transform: translateX(-50%); width: min(760px, 86%); max-width: none !important; text-align: center; font-size: 13px !important; }
+#lobby .actions { position: absolute !important; bottom: 34px !important; left: 50% !important; transform: translateX(-50%); display: flex; align-items: center; gap: 110px !important; }
+#lobby .custom-panel { bottom: 150px !important; }
+
+/* ---------------------------------------------------------------- MAGES (collection) */
+#lobby .mages-wrap { position: absolute; inset: 36px 330px 28px 36px !important; display: grid !important; grid-template-columns: minmax(260px, 340px) minmax(220px, 290px) minmax(360px, 1fr); gap: 26px !important; }
+#lobby .mage-roster { width: auto !important; display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 12px !important; padding: 0 !important; align-content: start; background: none !important; }
+.mtile { position: relative; aspect-ratio: 3 / 4.2; overflow: hidden; cursor: pointer; border: 2px solid transparent; border-radius: 4px;
+  background: radial-gradient(ellipse at 50% 30%, #0f1a2f, #0a1222 70%) padding-box, linear-gradient(150deg, #eef4fd 0%, #7c8fab 20%, #1c2739 42%, #9db1cd 60%, #26334a 80%, #d3def0 100%) border-box;
+  box-shadow: 0 0 0 1px #000, 0 10px 22px rgba(0, 0, 0, 0.5); transition: transform .18s, box-shadow .18s; }
+.mtile:hover { transform: translateY(-3px); }
+.mt-art { position: absolute; inset: 0; background-size: cover; }
+.mtile::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 70%, rgba(4, 8, 16, 0.85)); }
+.mt-icon { position: absolute; inset: 0 0 22% 0; display: grid; place-items: center; }
+.mt-icon svg { width: 46%; fill: rgba(190, 210, 240, 0.35); }
+.mt-name { position: absolute; left: 2px; right: 2px; bottom: 8px; z-index: 1; text-align: center; font: 700 clamp(9px, 0.72vw, 12px)/1.1 var(--font-d); letter-spacing: 0.06em; color: #fff; text-shadow: 0 1px 4px #000; }
+.mt-tag { position: absolute; z-index: 1; top: 6px; right: 6px; padding: 2px 6px; font: 700 9px/1.2 var(--font-n); letter-spacing: 0.16em; color: #cfd8e8; background: rgba(4, 8, 16, 0.75); border: 1px solid rgba(255, 255, 255, 0.18); }
+.mt-tag.on { color: #12151c; background: #ede9b4; border-color: #fffbe0; }
+.mtile.sel { box-shadow: 0 0 0 1px #000, 0 0 0 3px #9cc4ff, 0 0 26px rgba(79, 141, 255, 0.75); }
+.mtile.equipped .mt-name { color: #fffbe0; }
+.mtile.locked .mt-art, .mtile.soon .mt-icon { filter: grayscale(0.9) brightness(0.45); }
+.mtile.soon { cursor: default; }
+/* the big art of the mage being looked at */
+.mage-art { position: relative; align-self: stretch; max-height: 760px; overflow: hidden; border-radius: 4px; border: 2px solid transparent;
+  background: radial-gradient(ellipse at 50% 30%, #0f1a2f, #0a1222 70%) padding-box, linear-gradient(150deg, #eef4fd, #7c8fab 20%, #1c2739 42%, #9db1cd 60%, #26334a 80%, #d3def0) border-box;
+  box-shadow: 0 0 0 1px #000, 0 18px 40px rgba(0, 0, 0, 0.6); }
+.ma-img { position: absolute; inset: 0; background-size: cover; }
+.mage-art::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to bottom, transparent 74%, rgba(4, 8, 16, 0.7)); }
+.ma-img { filter: saturate(1.1) contrast(1.05); }
+.ma-wm { position: absolute; left: 0; right: 0; top: 2%; z-index: 1; font-family: var(--font-d); font-weight: 700; line-height: 0.9; text-align: center;
+  color: color-mix(in srgb, var(--accent, #6fa8ff) 70%, #fff); opacity: 0.28; mix-blend-mode: screen; pointer-events: none; }
+#lobby .ma-select { position: absolute !important; z-index: 2; left: 50%; bottom: 22px; transform: translateX(-50%); width: 72% !important; height: 48px !important; font-size: 20px !important; }
+#lobby .ma-select::before, #lobby .ma-select::after { display: none; }
+#lobby .ma-select.on { filter: none !important; background: #ede9b4 !important; color: #12151c !important; text-shadow: none !important; }
+#lobby .ma-select:disabled:not(.on) { filter: grayscale(0.8) brightness(0.6); }
+#lobby .mage-detail { max-width: none !important; margin: 0 !important; align-self: start; max-height: 100%; overflow-y: auto; }
+
+/* ---------------------------------------------------------------- small screens */
+@media (max-width: 1100px) {
+  #lobby #tabPlay { right: 240px; }
+  #lobby .mages-wrap { inset: 24px 260px 20px 20px !important; grid-template-columns: 1fr 1fr; }
+  #lobby .mage-detail { grid-column: 1 / -1; }
+  #lobby .actions { gap: 50px !important; }
+}
+@media (max-width: 760px) {
+  #lobby #tabPlay { right: 0; }
+  #lobby #partyCards { gap: 10px; top: 70px; bottom: 150px !important; }
+  .vcard:not(.me) { display: none; }
+  #lobby .mode-tabs { padding: 0 4px; width: calc(100% - 16px); justify-content: space-between; }
+  #lobby .mode-tab { padding: 9px 6px 10px !important; font-size: 10px !important; letter-spacing: 0.1em !important; }
+  .vcard.me { width: min(60vw, 260px); }
+  #lobby .mages-wrap { inset: 10px !important; display: flex !important; flex-direction: column; overflow-y: auto; }
+  #lobby .mage-roster { grid-template-columns: repeat(4, 1fr); }
+  .mage-art { min-height: 420px; }
+}

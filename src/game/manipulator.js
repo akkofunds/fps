@@ -17,7 +17,7 @@ export const MANIP = {
   perk: { speed: 1.02, airJumps: 1, dashMax: 3, dashRate: 1.2 },
   bio: 'Top of nothing on paper, first in everything that matters. A product of the White Room, he treats every person as a piece on a board, and he has already played the game to its last move before you notice it started.',
   abilities: [
-    { key: 'LMB', id: 'm1', name: 'Efficient Strikes', desc: 'M1: a 4-hit string with no wasted motion: jab, cross, palm strike, then a spinning kick that launches. Every hit stuns and each swing steps you in.' },
+    { key: 'LMB', id: 'm1', name: 'Efficient Strikes', desc: 'M1: a 4-hit string with one hand in his pocket and no wasted motion: right straight, turning elbow, low roundhouse, then a stepping palm strike that launches. Every hit stuns and each swing steps you in.' },
     { key: 'Q', id: 'dash', name: "King's Step", desc: 'Passive White Room: 3 dash charges that refill faster. One square in any direction, always exactly where he meant to be.' },
     { key: 'E', id: 'knight', name: "Knight's Fork", cd: 8, desc: 'Jump in an L like the knight, two squares forward and one across, onto the spot you aim at. The white knight crashes down where you land: 24 damage and a stun to everyone on that square.' },
     { key: 'C', id: 'rook', name: "Rook's File", cd: 10, desc: 'A giant black rook slams down where you aim (18), then charges straight down the file away from you, ramming everyone in its path aside (24).' },
@@ -29,10 +29,10 @@ export const MANIP = {
 // M1: the shared fist string, a touch faster and cleaner
 export const MANIP_M1 = {
   hits: [
-    { anim: 'm1a', at: 0.05, dmg: 9, stun: 0.55, kb: 2.2, up: 0, hand: 'L' },
-    { anim: 'm1b', at: 0.06, dmg: 9, stun: 0.55, kb: 2.2, up: 0, hand: 'R' },
-    { anim: 'm1c', at: 0.1, dmg: 10, stun: 0.6, kb: 2.6, up: 0, hand: 'L' },
-    { anim: 'm1d', at: 0.15, dmg: 15, stun: 0.9, kb: 16, up: 7, hand: 'footR', fin: true },
+    { anim: 'mnA', at: 0.05, dmg: 9, stun: 0.55, kb: 2.2, up: 0, hand: 'R' },
+    { anim: 'mnB', at: 0.06, dmg: 9, stun: 0.55, kb: 2.4, up: 0, hand: 'R' },
+    { anim: 'mnC', at: 0.1, dmg: 10, stun: 0.6, kb: 2.6, up: 0, hand: 'footR' },
+    { anim: 'mnD', at: 0.15, dmg: 15, stun: 0.9, kb: 16, up: 7, hand: 'R', fin: true },
   ],
   gap: 0.28, window: 1.0, endlag: 0.8, range: 2.9, cone: 0.4, seek: 3.0, seekCone: 0.82, lungeMax: 11,
 };

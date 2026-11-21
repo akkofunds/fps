@@ -307,6 +307,12 @@ Object.assign(SFX, {
   leapUp: [0.6, (oc, o) => { thump(oc, o, 0, 110, 40, 0.25, 0.9); noise(oc, o, { dur: 0.4, type: 'lowpass', f: [2500, 300], env: [[0.002, 0.7], [0.4, 0]], seed: 711 }); whoosh(oc, o, 0.03, 0.45, 300, 2400, 0.7, 713); }, { reverb: 0.2, tau: 0.35, drive: 1.6, level: 0.8 }],
   dive: [0.5, (oc, o) => { whoosh(oc, o, 0, 0.5, 6000, 500, 1, 715); }, { level: 0.65 }],
   slam: [1.4, (oc, o) => { thump(oc, o, 0, 90, 26, 0.7, 1); click(oc, o, 0, 1, 2000); noise(oc, o, { dur: 1.1, type: 'lowpass', f: [5000, 600, 90], env: [[0.002, 1], [0.15, 0.5], [1.1, 0]], seed: 717 }); }, { reverb: 0.45, tau: 0.7, drive: 3, level: 1 }],
+  // a chess piece set down on a wooden board: a dry knock with a short hollow ring
+  clack: [0.35, (oc, o) => { click(oc, o, 0, 1, 5200); tone(oc, o, { dur: 0.12, f: [1180, 1020], type: 'triangle', env: [[0.001, 0.5], [0.12, 0]] }); tone(oc, o, { dur: 0.2, f: [420, 380], type: 'sine', env: [[0.001, 0.35], [0.2, 0]] }); thump(oc, o, 0, 160, 90, 0.08, 0.5); }, { reverb: 0.35, tau: 0.5, level: 0.9 }],
+  // lub-dub
+  heartbeat: [0.9, (oc, o) => { thump(oc, o, 0, 70, 38, 0.22, 1); thump(oc, o, 0.24, 62, 34, 0.26, 0.75); }, { reverb: 0.2, tau: 0.4, level: 1 }],
+  // a chess clock being pressed
+  tick: [0.3, (oc, o) => { click(oc, o, 0, 0.9, 3800); tone(oc, o, { dur: 0.05, f: [2600, 2400], type: 'square', env: [[0.001, 0.12], [0.05, 0]] }); }, { reverb: 0.15, tau: 0.25, level: 0.7 }],
   nullify: [1.0, (oc, o) => { tone(oc, o, { dur: 0.9, f: [880, 30], type: 'sawtooth', env: [[0.002, 0.2], [0.9, 0]] }); tone(oc, o, { dur: 0.9, f: [1320, 45], type: 'square', env: [[0.002, 0.08], [0.9, 0]] }); click(oc, o, 0, 1, 4200); noise(oc, o, { dur: 0.3, type: 'highpass', f: [5000, 1500], env: [[0.002, 0.6], [0.3, 0]], seed: 719 }); }, { reverb: 0.35, tau: 0.5, drive: 2, level: 0.85 }],
   sever: [1.6, (oc, o) => { noise(oc, o, { dur: 1.2, f: [300, 9000], Q: 2, env: [[0.02, 0.2], [1.0, 0.6], [1.2, 0]], seed: 721 }); tone(oc, o, { dur: 1.2, f: [60, 40], type: 'sawtooth', env: [[0.05, 0.15], [1.2, 0]] }); }, { reverb: 0.3, tau: 0.5, level: 0.8 }],
 });
