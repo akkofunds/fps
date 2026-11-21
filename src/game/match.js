@@ -904,6 +904,7 @@ export class Match {
   _endCine() {
     const C = this.cine;
     if (!C) return;
+    this.camera.up.set(0, 1, 0);
     if (C.end) { this.cine = null; C.end.call(this, C); this.app.hud.cineEnd(); this.cam.pivotY = null; return; }
     this._cineSetStage(false);
     C.stage.dispose();
@@ -1350,9 +1351,10 @@ export class Match {
   }
 
   // ---------------------------------------------------------------- Checkmate (the Manipulator)
-  // An 11 s cutscene every player watches: he rests his chin on his fist over a little board, the
-  // field turns into a giant chessboard, his white pieces rise round every enemy and close in, he
-  // moves one piece… their kings topple, and every one of them dies.
+  // A 16 s cutscene every player watches. Time stops; he rests his chin on his fist over a little
+  // board and talks quietly while the field turns into a giant chessboard, his white pieces fall
+  // round every enemy, his threads of attack draw themselves to every king; a close-up on his empty
+  // eyes; he moves one piece. "Checkmate." Their kings topple in slow motion and every one of them dies.
   _openCheckmate(e, d, local) {
     const c = new THREE.Vector3().fromArray(d.c), yaw = Number(d.yaw) || 0;
     const f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), side = new THREE.Vector3(-f.z, 0, f.x);
@@ -1391,48 +1393,82 @@ export class Match {
     const king = this.fx.chessPiece('king', kp, { white: false, h: 4.2, mode: 'rise', t: 0.6, hold: Infinity, yaw: Math.atan2(-away.x, -away.z) });
     king.away = away; king.at = kp; M.kings.push(king);
   }
+  // lines of attack: a red thread from each of his pieces to the king it is hunting
+  _mateLines() {
+    const M = this._mate;
+    if (!M || M.lines) return;
+    M.lines = [];
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 0.16, 0.12), transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
+    M.pieces.forEach((H, i) => {
+      const a = H.home.clone(), b = H.vp.clone();
+      a.y = this.world.groundAt(a.x, a.z, 50) + 0.35; b.y = this.world.groundAt(b.x, b.z, 50) + 0.35;
+      const len = a.distanceTo(b);
+      if (len < 0.5) return;
+      const g = new THREE.BoxGeometry(0.09, 0.09, 1); g.translate(0, 0, 0.5);
+      const m = new THREE.Mesh(g, mat);
+      m.position.copy(a); m.lookAt(b); m.scale.set(1, 1, 0.001); m.frustumCulled = false;
+      m.userData = { len, t0: i * 0.05 };
+      this.scene.add(m); M.lines.push(m);
+    });
+    M.lineMat = mat;
+  }
   _mateCineUpdate(dt) {
     const C = this.cine, M = this._mate, hud = this.app.hud;
     C.t += dt;
-    const t = C.t;
+    const t = C.t, T = CHECKMATE.move;
     this.chessWorld.update(dt);
+    const mono = (s, big) => hud.cineMono(s, 'mono', big);
     const cues = [
       // time stops: every enemy freezes mid-motion; a heartbeat, a chess clock
       [0.02, () => { for (const v of M.victims) if (v.view) v.view.anim.hitStop(CHECKMATE.kill); this.sound('heartbeat', M.c, 1, 400); }],
-      [0.15, () => hud.cineSub('Everyone here is a piece on my board.')],
-      [0.6, () => this.sound('tick', M.c, 0.9, 400)],
-      [1.0, () => this.sound('heartbeat', M.c, 1, 400)],
-      [1.4, () => this.sound('tick', M.c, 0.9, 400)],
-      [1.75, () => hud.cineSub('')],
+      [0.35, () => mono('Don’t move. …Ah. You can’t.')],
+      [0.8, () => this.sound('tick', M.c, 0.9, 400)],
+      [1.2, () => this.sound('heartbeat', M.c, 1, 400)],
+      [1.6, () => this.sound('tick', M.c, 0.9, 400)],
+      [1.85, () => mono('')],
       // the field becomes his board: a shockwave across it, tiles lifting into the white sky
-      [1.9, () => { hud.flash(1); hud.cineGrade('mono'); this.chessWorld.start(M.c); M.victims.forEach((v, k) => this._mateSurround(v, k)); this.fx.shake(0.4); this.sound('domain', M.c, 1.3, 160);
+      [2.0, () => { hud.flash(1); hud.cineGrade('mono'); this.chessWorld.start(M.c); M.victims.forEach((v, k) => this._mateSurround(v, k)); this.fx.shake(0.4); this.sound('domain', M.c, 1.3, 160);
         this.fx.groundShock(new THREE.Vector3(M.c.x, M.c.y + 0.2, M.c.z), 26, { core: [1.4, 1.42, 1.5], edge: [0.2, 0.2, 0.24] }); this.fx.riseTiles(M.c, 60, 70, 8.5); }],
+      [3.2, () => mono('You’ve been fighting me since the moment you got here.')],
       [3.6, () => { M.rings = M.victims.filter((v) => v.alive).map((v) => this.fx.checkRing(() => v.pos, 1.5)); }],
-      [3.7, () => hud.cineSub('You were never playing against me.')],
-      [5.5, () => { hud.cineSub(''); for (const H of M.pieces) H.slideTo(H.vp.clone().add(H.home.clone().sub(H.vp).setY(0).setLength(3.4)), 0.8); this.sound('slam', M.c, 0.8, 200); }],
-      [5.95, () => this.sound('heartbeat', M.c, 1, 400)],
-      [6.35, () => { if (M.caster.view) M.caster.view.anim.play('mnPlace'); }],
-      [7.25, () => { hud.cineSub(''); hud.impactFrames(() => hud.cineCard('CHECKMATE', '詰 み', 'mono')); this.sound('slashHeavy', M.c, 1, 200); this.sound('tick', M.c, 1, 400); }],
-      [7.9, () => { for (const K of M.kings) K.topple(K.away, 0.55); }],
+      [4.9, () => mono('Every dodge. Every step. Every choice you were proud of…')],
+      [6.3, () => mono('…I put every one of them in front of you.')],
+      // the strategy: high over the board, his threads of attack drawn to every king
+      [6.9, () => { mono(''); this._mateLines(); this.sound('clack', M.c, 1, 400); }],
+      [7.25, () => mono('Talent. Effort. Pride. Those are just pieces too.')],
+      [7.4, () => this.sound('tick', M.c, 1, 400)], [7.8, () => this.sound('tick', M.c, 1, 400)], [8.1, () => this.sound('tick', M.c, 1, 400)], [8.3, () => this.sound('tick', M.c, 1, 400)],
+      // his eyes: nothing in them
+      [8.45, () => { mono('I don’t hate you. I don’t think about you at all.'); this.sound('heartbeat', M.c, 1, 400); }],
+      [9.0, () => { for (const H of M.pieces) H.slideTo(H.vp.clone().add(H.home.clone().sub(H.vp).setY(0).setLength(3.4)), 0.8); this.sound('slam', M.c, 0.8, 200); }],
+      [T, () => { mono(''); if (M.caster.view) M.caster.view.anim.play('mnPlace'); }],
+      [T + 1.25, () => { hud.impactFrames(() => mono('Checkmate.', true)); this.sound('slashHeavy', M.c, 1, 200); this.sound('tick', M.c, 1, 400); if (M.lines) for (const l of M.lines) l.visible = false; }],
+      [T + 1.9, () => { for (const K of M.kings) K.topple(K.away, 0.95); this.sound('heartbeat', M.c, 1.1, 400); }],
+      [T + 2.2, () => mono('')],
       // their kings hit the board and shatter; his queens fall on every one of them
-      [8.3, () => { for (const K of M.kings) { const p = K.at; this.fx.tileShards(new THREE.Vector3(p.x, this.world.groundAt(p.x, p.z, 50) + 1.2, p.z), K.away, 26, 3.2); K.dispose(); } M.kings.length = 0;
+      [T + 2.8, () => { for (const K of M.kings) { const p = K.at; this.fx.tileShards(new THREE.Vector3(p.x, this.world.groundAt(p.x, p.z, 50) + 1.2, p.z), K.away, 26, 3.2); K.dispose(); } M.kings.length = 0;
         for (const v of M.victims) if (v.alive) this.fx.chessPiece('queen', v.pos.clone(), { white: true, h: 5.2, mode: 'drop', t: 0.3, hold: 1.2, yaw: Math.random() * 6.28 }); }],
       [CHECKMATE.kill, () => { this._mateKill(); if (M.rings) for (const r of M.rings) r.dispose(); }],
-      [9.6, () => { hud.cineSub('It was over before it started.'); for (const H of [...M.pieces, ...M.kings]) H.sink(0.7); if (M.caster.view) M.caster.view.anim.play('mnChin'); }],
-      [10.55, () => { hud.flash(0.9); hud.cineSub(''); this.chessWorld.end(); hud.cineGrade(''); for (const H of [...M.pieces, ...M.kings]) H.dispose(); M.pieces.length = M.kings.length = 0; }],
+      [T + 4.1, () => { for (const H of [...M.pieces, ...M.kings]) H.sink(0.9); if (M.caster.view) M.caster.view.anim.play('mnChin'); }],
+      [T + 4.3, () => mono('In the end, only winning matters. How I got there… doesn’t.')],
+      [T + 5.3, () => { hud.flash(0.9); this.chessWorld.end(); hud.cineGrade(''); for (const H of [...M.pieces, ...M.kings]) H.dispose(); M.pieces.length = M.kings.length = 0; }],
+      [T + 5.6, () => mono('…Next.')],
+      [CHECKMATE.dur - 0.25, () => mono('')],
     ];
     while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
+    // the threads draw themselves out from each piece, pulsing
+    if (M.lines) for (const l of M.lines) { const k = Math.min(1, Math.max(0, (t - 6.9 - l.userData.t0) / 0.35)); l.scale.z = Math.max(0.001, l.userData.len * k * k * (3 - 2 * k)); }
+    if (M.lineMat) M.lineMat.opacity = 0.65 + 0.3 * Math.sin(t * 12);
     // on the little board, his white queen glides across to stand over their king
     // Qh4–e7#: his fingers close on the queen (0.4 s into his move), lift her, carry her along the
     // diagonal and set her down (0.8 s); she is in his hand the whole way (MN_PLACE / miniBoard)
     if (M.board && M.caster.view) {
-      const T0 = 6.35, q = M.board.pcs.wq, u = t - T0;
+      const q = M.board.pcs.wq, u = t - T;
       if (u > 0.42 && u < 0.8) M.board.holdAt(M.caster.view.rig.ends.handR.getWorldPosition(this._cv3 || (this._cv3 = new THREE.Vector3())));
       else if (u >= 0.8 && !M.placed) { q.position.lerp(M.board.pcs.to, Math.min(1, (u - 0.8) / 0.06)); if (u > 0.86) { q.position.copy(M.board.pcs.to); M.placed = true; this.sound('clack', M.c, 1, 30); } }
     }
-    if (M.board && t > 7.3) M.board.pcs.glow.material.opacity = Math.min(0.85, (t - 7.3) * 3) * (0.75 + 0.25 * Math.sin(t * 10));
-    if (M.board && t > 7.9 && t < 8.6) { const k = Math.min(1, (t - 7.9) / 0.5); M.board.pcs.bk.rotation.z = k * k * Math.PI * 0.5; }
-    hud.cineDark(t < 1.9 ? 0.25 : t < 7.25 ? 0.12 : 0.3);
+    if (M.board && t > T + 1.2) M.board.pcs.glow.material.opacity = Math.min(0.85, (t - T - 1.2) * 3) * (0.75 + 0.25 * Math.sin(t * 10));
+    if (M.board && t > T + 1.9 && t < T + 2.9) { const k = Math.min(1, (t - T - 1.9) / 0.9); M.board.pcs.bk.rotation.z = k * k * Math.PI * 0.5; }
+    hud.cineDark(t < 2.0 ? 0.3 : t < 8.45 ? 0.12 : t < 9.5 ? 0.45 : t < T + 1.25 ? 0.15 : 0.3);
     if (t >= C.dur) this._endCine();
   }
   // the end of the game: every victim is struck down where they stand (the caster resolves it)
@@ -1466,57 +1502,73 @@ export class Match {
     this.chessWorld.end();
     for (const H of [...M.pieces, ...M.kings]) H.dispose();
     if (M.rings) for (const r of M.rings) r.dispose();
+    if (M.lines) for (const l of M.lines) { this.scene.remove(l); l.geometry.dispose(); }
+    if (M.lineMat) M.lineMat.dispose();
     if (M.board) M.board.dispose();
     this._mate = null;
   }
   _mateCineCamera() {
-    const C = this.cine, M = this._mate, t = C.t, o = M.c, f = M.f, sd = M.side, cam = this.camera;
+    const C = this.cine, M = this._mate, t = C.t, o = M.c, f = M.f, sd = M.side, cam = this.camera, T = CHECKMATE.move;
     const P = tmpV, L = tmpV2;
     const ease = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
     const view = M.caster.view;
     const head = view ? view.head.getWorldPosition(this._cv1 || (this._cv1 = new THREE.Vector3())) : this._cv1 || (this._cv1 = new THREE.Vector3(o.x, o.y + 1.6, o.z));
     let fov = 40, roll = 0;
     const vics = M.victims.filter((v) => v.view);
-    if (t < 1.9) { // across the little board, low, his chin on his fist (the reference shot)
-      // a dolly zoom: the camera pulls back while the lens closes in, he stays the same size and
-      // the world behind him stretches away
-      const k = ease(t / 1.9), r = 1.7 + k * 1.1;
-      P.set(o.x + f.x * r + sd.x * 0.42 * (r / 1.7), o.y + 1.3, o.z + f.z * r + sd.z * 0.42 * (r / 1.7));
-      L.set(head.x, head.y - 0.18, head.z); fov = 2 * Math.atan(Math.tan(19 * Math.PI / 180) * 1.7 / r) * 180 / Math.PI;
-    } else if (t < 3.7) { // the board spreads to the horizon: rising wide behind him
-      const k = ease((t - 1.9) / 1.8);
-      P.set(o.x - f.x * (4 + 6 * k) + sd.x * (2 + k), o.y + 2 + 9 * k, o.z - f.z * (4 + 6 * k) + sd.z * (2 + k));
-      L.set(o.x + f.x * 22, o.y + 1, o.z + f.z * 22); fov = 52; roll = -0.02;
-    } else if (t < 6.35 && vics.length) { // each victim, frozen, his pieces towering over them
-      const seg = (6.35 - 3.7) / Math.min(3, vics.length), i = Math.min(Math.floor((t - 3.7) / seg), Math.min(3, vics.length) - 1);
-      const v = vics[i], vp = v.pos, k = ease(((t - 3.7) - i * seg) / seg);
-      const to = new THREE.Vector3(o.x - vp.x, 0, o.z - vp.z).normalize();
-      const a = Math.atan2(to.x, to.z) + 0.6 - k * 0.5;
-      P.set(vp.x + Math.sin(a) * 3.2, vp.y + 0.5, vp.z + Math.cos(a) * 3.2);
-      L.set(vp.x, vp.y + 2.2, vp.z); fov = 50; roll = 0.03;
-    } else if (t < 6.35) { // nobody to fight: a slow orbit over the empty board
-      const a = Math.atan2(f.x, f.z) + (t - 3.7) * 0.4;
-      P.set(o.x + Math.sin(a) * 14, o.y + 7, o.z + Math.cos(a) * 14); L.set(o.x, o.y + 1, o.z); fov = 48;
-    } else if (t < 7.6) { // close on the little board: his hand moves the queen
-      const b = M.board.g.position, k = ease((t - 6.35) / 1.25);
-      // from Black's side, low over their pieces (the reference shot): his hand brings the queen
-      // across the board toward the camera, his face behind it
-      P.set(b.x + f.x * (1.25 - k * 0.12) + sd.x * 0.16, b.y + 0.4, b.z + f.z * (1.25 - k * 0.12) + sd.z * 0.16);
-      L.set(b.x - f.x * 0.1, b.y + 0.3, b.z - f.z * 0.1); fov = 44;
-    } else if (t < 9.6) { // high above the field: every king falls, every enemy falls with it
-      const k = ease((t - 7.6) / 2.0);
+    const centre = () => {
       const cen = new THREE.Vector3(o.x, o.y, o.z);
       for (const v of vics) cen.add(v.pos);
       cen.divideScalar(vics.length + 1);
-      const spread = Math.max(16, ...vics.map((v) => Math.hypot(v.pos.x - cen.x, v.pos.z - cen.z) * 1.6));
-      P.set(cen.x - f.x * spread * 0.35, cen.y + spread * (1.05 - 0.15 * k), cen.z - f.z * spread * 0.35);
+      return [cen, Math.max(16, ...vics.map((v) => Math.hypot(v.pos.x - cen.x, v.pos.z - cen.z) * 1.6))];
+    };
+    if (t < 2.0) { // across the little board, low, his chin on his fist: a dolly zoom (he stays the
+      // same size while the world behind him stretches away)
+      const k = ease(t / 2.0), r = 1.7 + k * 1.1;
+      P.set(o.x + f.x * r + sd.x * 0.42 * (r / 1.7), o.y + 1.3, o.z + f.z * r + sd.z * 0.42 * (r / 1.7));
+      L.set(head.x, head.y - 0.18, head.z); fov = 2 * Math.atan(Math.tan(19 * Math.PI / 180) * 1.7 / r) * 180 / Math.PI;
+    } else if (t < 3.4) { // the board spreads to the horizon: rising wide behind him
+      const k = ease((t - 2.0) / 1.4);
+      P.set(o.x - f.x * (4 + 6 * k) + sd.x * (2 + k), o.y + 2 + 9 * k, o.z - f.z * (4 + 6 * k) + sd.z * (2 + k));
+      L.set(o.x + f.x * 22, o.y + 1, o.z + f.z * 22); fov = 52; roll = -0.02;
+    } else if (t < 6.9 && vics.length) { // each victim, frozen, his pieces towering over them
+      const n = Math.min(3, vics.length), seg = (6.9 - 3.4) / n, i = Math.min(Math.floor((t - 3.4) / seg), n - 1);
+      const v = vics[i], vp = v.pos, k = ease(((t - 3.4) - i * seg) / seg);
+      const to = new THREE.Vector3(o.x - vp.x, 0, o.z - vp.z).normalize();
+      const a = Math.atan2(to.x, to.z) + 0.6 - k * 0.5;
+      P.set(vp.x + Math.sin(a) * (3.4 - k * 0.6), vp.y + 0.45, vp.z + Math.cos(a) * (3.4 - k * 0.6));
+      L.set(vp.x, vp.y + 2.0, vp.z); fov = 48; roll = 0.03;
+    } else if (t < 6.9) { // nobody to fight: a slow orbit over the empty board
+      const a = Math.atan2(f.x, f.z) + (t - 3.4) * 0.4;
+      P.set(o.x + Math.sin(a) * 14, o.y + 7, o.z + Math.cos(a) * 14); L.set(o.x, o.y + 1, o.z); fov = 48;
+    } else if (t < 8.45) { // the strategy: straight down over the board, turning slowly, the threads drawn
+      const [cen, spread] = centre(), k = (t - 6.9) / 1.55;
+      const a = Math.atan2(f.x, f.z) + k * 0.35;
+      P.set(cen.x + Math.sin(a) * 0.01, cen.y + spread * 1.25 - k * 3, cen.z + Math.cos(a) * 0.01);
+      L.set(cen.x, cen.y, cen.z); fov = 52;
+      cam.up.set(Math.sin(a), 0, Math.cos(a));
+    } else if (t < T) { // his eyes: an extreme close-up, pushing in; nothing in them
+      const k = ease((t - 8.45) / (T - 8.45)), r = 0.62 - k * 0.14;
+      P.set(head.x + f.x * r + sd.x * 0.05, head.y + 0.06, head.z + f.z * r + sd.z * 0.05);
+      L.set(head.x, head.y + 0.06, head.z); fov = 22;
+    } else if (t < T + 1.25) { // close on the little board from Black's side: his hand brings the queen
+      const b = M.board.g.position, k = ease((t - T) / 1.25);
+      P.set(b.x + f.x * (1.25 - k * 0.12) + sd.x * 0.16, b.y + 0.4, b.z + f.z * (1.25 - k * 0.12) + sd.z * 0.16);
+      L.set(b.x - f.x * 0.1, b.y + 0.3, b.z - f.z * 0.1); fov = 44;
+    } else if (t < T + 1.9) { // CHECKMATE: snap to a low hero angle under him
+      const k = ease((t - T - 1.25) / 0.65);
+      P.set(o.x + f.x * 2.2 - sd.x * 1.0, o.y + 0.35, o.z + f.z * 2.2 - sd.z * 1.0);
+      L.set(head.x, head.y + 0.1 + k * 0.1, head.z); fov = 34 + k * 4; roll = -0.06;
+    } else if (t < T + 4.1) { // high above the field: every king falls in slow motion, every enemy with it
+      const [cen, spread] = centre(), k = ease((t - T - 1.9) / 2.2);
+      P.set(cen.x - f.x * spread * 0.35, cen.y + spread * (1.05 - 0.2 * k), cen.z - f.z * spread * 0.35);
       L.set(cen.x, cen.y, cen.z); fov = 50;
     } else { // he turns away from the board as if nothing happened
-      const k = ease((t - 9.6) / 1.6);
-      const a = Math.atan2(f.x, f.z) + 1.2 + k * 0.5;
-      P.set(o.x + Math.sin(a) * 2.4, o.y + 1.5, o.z + Math.cos(a) * 2.4);
+      const k = ease((t - T - 4.1) / (CHECKMATE.dur - T - 4.1));
+      const a = Math.atan2(f.x, f.z) + 1.2 + k * 0.6;
+      P.set(o.x + Math.sin(a) * (2.4 + k * 1.2), o.y + 1.5, o.z + Math.cos(a) * (2.4 + k * 1.2));
       L.set(head.x, head.y - 0.1, head.z); fov = 36;
     }
+    if (!(t >= 6.9 && t < 8.45)) cam.up.set(0, 1, 0);
     P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 20) + 0.3);
     cam.position.copy(P); cam.lookAt(L);
     if (roll) cam.rotateZ(roll);
@@ -1572,26 +1624,38 @@ export class Match {
     }
   }
   _domainCineUpdate(dt) {
-    const C = this.cine, hud = this.app.hud;
+    const C = this.cine, hud = this.app.hud, V = this.voidFx;
     C.t += dt;
-    const t = C.t;
+    const t = C.t, vic = !!C.victim;
+    const mono = (s, big) => hud.cineMono(s, 'void', big);
     const cues = [
-      [0.25, () => hud.cineSub('Domain Expansion…')],
+      [0.3, () => mono('Domain Expansion…')],
       [0.9, () => hud.cineGrade('cold')],
-      [1.28, () => { hud.flash(1); hud.cineWipe(false); this._domainOpen(); hud.cineSub(''); hud.cineGrade('void'); }],
-      [1.5, () => hud.cineCard('UNLIMITED VOID', '無 量 空 処', 'void')],
-      [3.2, () => { hud.cineWipe(false); hud.cineSub('Infinite information… and nothing you can do with it.'); }],
-      [4.5, () => { hud.cineWipe(false); hud.cineSub(''); if (C.victim) hud.overload(0.85); }],
-      [5.3, () => hud.overload(0)],
+      // the world goes out like a light; a pinprick of black hole opens on the horizon
+      [1.4, () => { hud.flash(1); hud.cineWipe(false); this._domainOpen(); V.setGrow(0.04); mono(''); hud.cineGrade('void'); }],
+      [1.7, () => hud.cineCard('UNLIMITED VOID', '無 量 空 処', 'void')],
+      [2.1, () => { this.sound('domain', C.c, 1.2, 200); this.fx.shake(0.35); }],
+      [3.6, () => mono('In here, nothing is ever hidden from you.')],
+      [4.9, () => mono('Every sight. Every sound. Every thought there is — all at once, forever.')],
+      [5.35, () => { if (vic) { this.sound('domainCast', C.c, 0.8, 200); } }],
+      [5.75, () => mono(vic ? 'You’ll understand everything…' : 'Being given everything…')],
+      [6.65, () => { mono('…and be able to do absolutely nothing.'); if (vic) hud.overload(0.9); }],
+      [7.55, () => { hud.overload(0); hud.cineWipe(false); mono('Throughout heaven and earth, I alone stand here.'); }],
+      [C.dur - 0.2, () => mono('')],
     ];
     while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
-    if (t >= 4.5 && t < 5.3 && C.victim && Math.random() < dt * 14) hud.flash(0.25);
-    hud.cineDark(t < 1.28 ? Math.min(1, t / 0.6) * 0.8 : t < 4.5 ? 0.35 : 0.6);
+    // the black hole swells from a pinprick to fill the horizon
+    if (t >= 1.4) V.setGrow(0.04 + 0.96 * Math.pow(Math.min(1, (t - 1.4) / 2.2), 1.6));
+    // the flood of information: a trickle, then a torrent pouring into the victim
+    V.setFlood(t < 3.4 ? 0 : t < 5.35 ? (t - 3.4) * 0.12 : t < 7.55 ? Math.min(1, 0.25 + (t - 5.35) * 0.6) : 0.5);
+    if (t >= 6.65 && t < 7.55 && vic && Math.random() < dt * 16) hud.flash(0.22);
+    hud.cineDark(t < 1.4 ? Math.min(1, t / 0.6) * 0.8 : t < 6.65 ? 0.3 : 0.55);
     if (t >= C.dur) this._endCine();
   }
   _domainCineEnd(C) {
     this.app.hud.overload(0);
     this._domainOpen();
+    this.voidFx.setGrow(1); this.voidFx.setFlood(0.3);
     for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;
     this._domainStrike(C.local);
   }
@@ -1602,30 +1666,38 @@ export class Match {
     const view = C.caster.view;
     const head = view.head.getWorldPosition(this._cv1 || (this._cv1 = new THREE.Vector3()));
     let fov = 45, roll = 0;
-    if (t < 0.75) { // low, in front: he raises the sign
-      const k = ease(t / 0.75), r = 2.4 - k * 0.6;
+    const v = C.victim;
+    if (t < 0.8) { // low, in front: he raises the sign
+      const k = ease(t / 0.8), r = 2.4 - k * 0.6;
       P.set(o.x + f.x * r - sd.x * 0.5, o.y + 1.05, o.z + f.z * r - sd.z * 0.5);
       L.set(head.x, head.y - 0.05, head.z); fov = 42;
-    } else if (t < 1.35) { // extreme close-up: the Six Eyes behind the raised hand
-      const k = ease((t - 0.75) / 0.6);
+    } else if (t < 1.4) { // extreme close-up: the Six Eyes behind the raised hand
+      const k = ease((t - 0.8) / 0.6);
       const hand = view.palmWorld('R', this._cv2 || (this._cv2 = new THREE.Vector3()));
-      P.set(head.x + f.x * (0.85 - k * 0.2) + sd.x * 0.12, head.y + 0.02, head.z + f.z * (0.85 - k * 0.2) + sd.z * 0.12);
-      L.lerpVectors(head, hand, 0.35); fov = 26; roll = 0.05;
-    } else if (t < 3.2) { // the void: tiny against the black hole, the camera rising behind him
-      const k = ease((t - 1.35) / 1.85);
-      const back = 6 + k * 4;
-      P.set(o.x - f.x * back + sd.x * (1.6 + k), o.y + 0.9 + k * 2.6, o.z - f.z * back + sd.z * (1.6 + k));
-      L.set(o.x + f.x * 30, o.y + 4 + k * 3, o.z + f.z * 30); fov = 56 - k * 6; roll = -0.03;
-    } else if (t < 4.5 || !C.victim) { // a slow orbit round him; he does not move at all
-      const k = (t - 3.2) / 1.3;
-      const a = Math.atan2(f.x, f.z) + 0.5 + k * 1.8, r = 3.2;
-      P.set(o.x + Math.sin(a) * r, o.y + 1.25, o.z + Math.cos(a) * r);
+      P.set(head.x + f.x * (0.85 - k * 0.25) + sd.x * 0.12, head.y + 0.02, head.z + f.z * (0.85 - k * 0.25) + sd.z * 0.12);
+      L.lerpVectors(head, hand, 0.35); fov = 24; roll = 0.05;
+    } else if (t < 3.6) { // the void: tiny against the black hole as it swells, the camera rising behind him
+      const k = ease((t - 1.4) / 2.2);
+      const back = 5 + k * 6;
+      P.set(o.x - f.x * back + sd.x * (1.4 + k), o.y + 0.7 + k * 3, o.z - f.z * back + sd.z * (1.4 + k));
+      L.set(o.x + f.x * 30, o.y + 4 + k * 4, o.z + f.z * 30); fov = 60 - k * 10; roll = -0.03;
+    } else if (t < 5.35 || !v) { // a slow orbit round him; he does not move at all
+      const k = (t - 3.6) / 1.75;
+      const a = Math.atan2(f.x, f.z) + 0.5 + k * 1.6, r = 3.0;
+      P.set(o.x + Math.sin(a) * r, o.y + 1.2, o.z + Math.cos(a) * r);
       L.set(head.x, head.y - 0.15, head.z); fov = 40;
-    } else { // the victim: frozen, eyes wide, the void pouring into them
-      const v = C.victim, vp = v.pos, vy = v.yaw || 0;
-      const k = ease((t - 4.5) / 1.1);
-      P.set(vp.x + Math.sin(vy) * (1.3 - k * 0.4), vp.y + 1.55, vp.z + Math.cos(vy) * (1.3 - k * 0.4));
-      L.set(vp.x, vp.y + 1.45, vp.z); fov = 34; roll = Math.sin(t * 40) * 0.01;
+    } else if (t < 6.65) { // over the victim's shoulder: the torrent of light pouring out of the hole into them
+      const vp = v.pos, hole = this.voidFx.U.uHole.value, k = ease((t - 5.35) / 1.3);
+      P.set(vp.x - hole.x * (3.2 - k) + sd.x * 1.2, vp.y + 1.9, vp.z - hole.z * (3.2 - k) + sd.z * 1.2);
+      L.set(vp.x + hole.x * 20, vp.y + 5, vp.z + hole.z * 20); fov = 52; roll = 0.02;
+    } else if (t < 7.55) { // the victim: frozen, eyes wide, the void pouring into them
+      const vp = v.pos, vy = v.yaw || 0, k = ease((t - 6.65) / 0.9);
+      P.set(vp.x + Math.sin(vy) * (1.3 - k * 0.45), vp.y + 1.55, vp.z + Math.cos(vy) * (1.3 - k * 0.45));
+      L.set(vp.x, vp.y + 1.45, vp.z); fov = 32; roll = Math.sin(t * 40) * 0.012;
+    } else { // him again from low behind: a silhouette against the black hole and its blazing ring
+      const k = ease((t - 7.55) / (C.dur - 7.55));
+      P.set(o.x - f.x * (2.4 + k * 0.8) + sd.x * 0.7, o.y + 0.45, o.z - f.z * (2.4 + k * 0.8) + sd.z * 0.7);
+      L.set(head.x + f.x * 6, head.y + 1.6, head.z + f.z * 6); fov = 44;
     }
     P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 20) + 0.3);
     cam.position.copy(P); cam.lookAt(L);

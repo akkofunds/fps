@@ -10,6 +10,7 @@ import * as THREE from 'three';
 export const STYLE = {
   uTime: { value: 0 },
   uCloud: { value: 0.42 }, // how dark a cloud shadow gets (0 = off)
+  lite: false,             // Low preset: no per-pixel cloud shadows (compiled out)
 };
 
 const LAMBERT = THREE.ShaderChunk.lights_lambert_pars_fragment;
@@ -52,13 +53,13 @@ export function stylize(mat, { wrap = 0.45, translucency = 0, band = 0.12, cloud
           return mix(mix(styHash(i), styHash(i + vec2(1, 0)), u.x), mix(styHash(i + vec2(0, 1)), styHash(i + vec2(1, 1)), u.x), u.y); }`)
       .replace('#include <lights_lambert_pars_fragment>', LAMBERT.replace(/void RE_Direct_Lambert[\s\S]*?\n}\n/, direct + '\n'))
       .replace('#include <lights_fragment_begin>', `
-        ${clouds ? `{
+        ${clouds && !STYLE.lite ? `{
           vec2 cp = vStyWP.xz * 0.011 + vec2(uStyTime * 0.018, uStyTime * 0.007);
           float c = styNoise(cp) * 0.65 + styNoise(cp * 2.3 + 4.1) * 0.35;
           styCloud = 1.0 - uStyCloud * smoothstep(0.5, 0.72, c);
         }` : ''}
         #include <lights_fragment_begin>`);
   };
-  mat.customProgramCacheKey = () => `${prevKey()}|sty${wrap}${translucency}${band}${clouds}`;
+  mat.customProgramCacheKey = () => `${prevKey()}|sty${wrap}${translucency}${band}${clouds && !STYLE.lite}`;
   return mat;
 }

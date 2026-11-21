@@ -28,6 +28,7 @@ export class GameMap {
   constructor(quality = 'high') {
     const Q = QUALITY[quality] || QUALITY.high;
     this.quality = quality;
+    STYLE.lite = quality === 'low';
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(SKY.fog, 160, 1300);
     this.world = new CollisionWorld();
@@ -54,12 +55,12 @@ export class GameMap {
     this.vista = buildVista(); s.add(this.vista);
     this.waterfalls = buildWaterfalls(); s.add(this.waterfalls);
     this.Q = Q;
-    this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
+    this.terrain = buildTerrain(Q.terrainStep, quality === 'low'); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
     // the valley has no buildings: just the waterfall (landmarks.js builds only the falls now)
     this.village = null;
     this.landmarks = buildLandmarks(this.world, Q); s.add(this.landmarks);
-    this.props = buildProps(this.world, quality, Q); s.add(this.props);
+    this.props = buildProps(this.world, quality, { ...Q, farGround: this.mountains.userData.heightAt }); s.add(this.props);
     const avoid = this.props.userData.avoid;
     this.ambient = buildAmbient(this.props.userData.groves || [], Q); s.add(this.ambient);
     // the valley is MAP_SCALE x wider: ~MAP_SCALE^2 the ground to cover. Undergrowth is chunked and

@@ -6,7 +6,7 @@ import { SUN_DIR, SKY } from './sky.js';
 //  - a mist wall past the valley rim: the far lands fade into low mist (the map's barrier); the
 //    battle area itself stays clear
 //  - in-scattering: looking toward the sun the haze glows gold, away from it it stays lavender
-// World position is rebuilt from the view-space position (cameraPosition + R^T · mv), so custom
+// World position is rebuilt from the view-space position (R^T · (mv − t)), so custom
 // shader materials that already include the fog chunks get it for free.
 
 const v3 = (v) => `vec3(${v.x.toFixed(4)}, ${v.y.toFixed(4)}, ${v.z.toFixed(4)})`;
@@ -18,7 +18,7 @@ THREE.ShaderChunk.fog_pars_vertex = /* glsl */`
 THREE.ShaderChunk.fog_vertex = /* glsl */`
 #ifdef USE_FOG
   vFogDepth = - mvPosition.z;
-  vFogWorld = cameraPosition + transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);
+  vFogWorld = transpose(mat3(viewMatrix)) * (mvPosition.xyz - viewMatrix[3].xyz);  // mv = R·w + t  →  w = Rᵀ(mv − t)
 #endif`;
 THREE.ShaderChunk.fog_pars_fragment = /* glsl */`
 #ifdef USE_FOG
@@ -46,8 +46,8 @@ THREE.ShaderChunk.fog_fragment = /* glsl */`
     fogFactor *= mix( 1.0, mix( 0.5, 1.0, exp( - max( vFogWorld.y, 0.0 ) * 0.006 ) ), FOG_MIST );
     // the mist wall: the world fades into low mist past the valley rim (the map's barrier)
     float wr = length( vFogWorld.xz );
-    float barrier = smoothstep( 235.0, 470.0, wr ) * exp( - max( vFogWorld.y - 45.0, 0.0 ) * 0.012 ) * smoothstep( 40.0, 160.0, fd );
-    fogFactor = max( fogFactor, barrier * 0.75 * FOG_MIST );
+    float barrier = smoothstep( 300.0, 700.0, wr ) * smoothstep( 40.0, 160.0, fd );
+    fogFactor = max( fogFactor, barrier * 0.55 * FOG_MIST );
     float sunAmt = pow( max( dot( fwd / max( fd, 1e-3 ), ${v3(SUN_DIR)} ), 0.0 ), 5.0 );
     vec3 fc = mix( fogColor, ${v3(new THREE.Vector3(1.25, 0.78, 0.48))}, sunAmt * 0.7 * FOG_MIST );
     gl_FragColor.rgb = mix( gl_FragColor.rgb, fc, clamp( fogFactor, 0.0, 1.0 ) );

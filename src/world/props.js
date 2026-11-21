@@ -106,7 +106,7 @@ class Builder {
 }
 
 // ---------------------------------------------------------------- trees
-let LEAF_DETAIL = 2;
+let LEAF_DETAIL = 2, LEAF_LITE = false;
 // painted leaf-cluster texture: dozens of small overlapping leaves in a round clump (white, tinted
 // per vertex), alpha-cut — every canopy is built from cards of this round a dark inner hull
 let LEAF_TEX = null;
@@ -146,7 +146,7 @@ function foliage(out, s, x, y, z, sy, seed, ctr = [x, y - s, z], warm = 0) {
       for (let i = 0; i < hp.count; i++) { v.fromBufferAttribute(hp, i).normalize(); uv[i * 2] = 0.5 + 0.26 * v.x + 0.08 * v.z; uv[i * 2 + 1] = 0.5 + 0.26 * v.y - 0.08 * v.z; }
       hull.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); }
     hull.translate(x, y, z); parts.push(hull);
-    const n = LEAF_DETAIL >= 2 ? 24 : 10;
+    const n = LEAF_DETAIL >= 2 ? 24 : LEAF_LITE ? 6 : 10;
     const u = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
     for (let k = 0; k < n; k++) {
       u.set(r() * 2 - 1, r() * 1.7 - 0.5, r() * 2 - 1).normalize();
@@ -232,6 +232,7 @@ function treeColors(def) {
 
 function leafMaterial() {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide });
+  m.alphaToCoverage = true; // soft, anti-aliased leaf edges instead of jagged alpha-test stairs
   // canopy sway: scale the wind by height (position.y in tree space, ~0-9 m)
   m.onBeforeCompile = (sh) => {
     const parent = windPatch;
@@ -296,7 +297,7 @@ function rockGeometry(seed) {
 
 // ---------------------------------------------------------------- assemble
 export function buildProps(world, quality = 'high', Q = {}) {
-  LEAF_DETAIL = Q.leafDetail || 2;
+  LEAF_DETAIL = Q.leafDetail || 2; LEAF_LITE = quality === 'low';
   const root = new THREE.Group(); root.name = 'props';
   const B = new Builder(world);
 
@@ -329,7 +330,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
   const SEEDS = [11, 23, 37];
   const variants = () => SEEDS.map((sd) => treeColors(bigTreeGeometry(sd)));
   const kinds = { oak: variants() };
-  LEAF_DETAIL = 1; const kindsFar = { oak: variants() };        // on the rims: half the leaf cards
+  LEAF_DETAIL = LEAF_LITE ? 0 : 1; const kindsFar = { oak: variants() }; // on the rims: fewer leaf cards (none on Low)
   LEAF_DETAIL = 0; const kindsVeryFar = { oak: variants() };    // far plateaus: a ball per clump
   const placements = [];
   const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true }), { wrap: 0.4, band: 0.12 });
@@ -377,6 +378,19 @@ export function buildProps(world, quality = 'high', Q = {}) {
     if (N.fbm(x / 40, z / 40, 2) < 0.05) continue;
     if (tryTree(x, z, 'oak', R(1.5, 2.3), false, 8)) i++;
   }
+  // groves out on the far plateaus past the rim (the reference's forested distance); planted on the
+  // far-land surface from sky.js, drawn with the cheapest canopy
+  const farTrees = [];
+  if (Q.farGround && quality !== 'low') {
+    const nFar = Math.round((Q.scenery || 230) * 1.2);
+    for (let i = 0, t = 0; i < nFar && t < nFar * 20; t++) {
+      const a = rnd() * 6.28, r = R(275, 470), x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (N.fbm(x / 60 + 9, z / 60, 2) < 0.0) continue;
+      const y = Q.farGround(x, z);
+      if (y < 4) continue;
+      farTrees.push({ x, y: y - 0.3, z, scale: R(1.6, 2.6), v: Math.floor(rnd() * SEEDS.length), rot: rnd() * 6.28 }); i++;
+    }
+  }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
   // arena trees cast shadows; the forest on the surrounding hills doesn't (it's outside the shadow
   // camera anyway, but splitting them keeps the shadow pass from even considering them)
@@ -403,6 +417,14 @@ export function buildProps(world, quality = 'high', Q = {}) {
       lm.customDepthMaterial = leafDepth; // leaf-shaped shadows, not square cards
       for (const m of [tm, lm]) { m.castShadow = near; m.receiveShadow = near; m.computeBoundingSphere(); root.add(m); }
     });
+  });
+
+  kindsVeryFar.oak.forEach((def, v) => {
+    const list = farTrees.filter((p) => p.v === v);
+    if (!list.length) return;
+    const tm = new THREE.InstancedMesh(def.trunk, trunkMat, list.length), lm = new THREE.InstancedMesh(def.leaves, leafMat, list.length);
+    list.forEach((p, i) => { q.setFromAxisAngle(up, p.rot); m4.compose(new THREE.Vector3(p.x, p.y, p.z), q, new THREE.Vector3(p.scale, p.scale, p.scale)); tm.setMatrixAt(i, m4); lm.setMatrixAt(i, m4); });
+    for (const m of [tm, lm]) { m.computeBoundingSphere(); root.add(m); }
   });
 
   // ---------------- rocks

@@ -210,7 +210,7 @@ export function grassColorAt(x, z, out) {
   return out;
 }
 
-export function buildTerrain(step = 1) {
+export function buildTerrain(step = 1, lite = false) {
   const xs = axisCoords(step);
   const nx = xs.length;
   const pos = new Float32Array(nx * nx * 3), col = new Float32Array(nx * nx * 3), uv = new Float32Array(nx * nx * 2);
@@ -257,9 +257,11 @@ export function buildTerrain(step = 1) {
   g.setIndex(new THREE.BufferAttribute(full, 1));
   g.computeVertexNormals();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: detailTexture() });
+  if (lite) mat.map.anisotropy = 2;
   // cliffs: a triplanar rock texture (layered strata, vertical cracks) faded in by slope, so the
   // walls read as stone instead of stretched grass detail
   const rockTex = rockTexture();
+  if (lite) rockTex.anisotropy = 1;
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.tRock = { value: rockTex };
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vTpW; varying vec3 vTpN;')
@@ -267,12 +269,23 @@ export function buildTerrain(step = 1) {
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tRock; varying vec3 vTpW; varying vec3 vTpN;')
       .replace('#include <map_fragment>', `
         vec4 dTex = texture2D( map, vMapUv );
-        vec3 bw = pow( abs( normalize( vTpN ) ), vec3( 4.0 ) ); bw /= ( bw.x + bw.y + bw.z );
-        vec3 rTex = texture2D( tRock, vTpW.zy * vec2( 0.11, 0.16 ) ).rgb * bw.x + texture2D( tRock, vTpW.xz * 0.11 ).rgb * bw.y + texture2D( tRock, vTpW.xy * vec2( 0.11, 0.16 ) ).rgb * bw.z;
         float rockW = smoothstep( 0.16, 0.36, 1.0 - normalize( vTpN ).y );
-        diffuseColor.rgb *= mix( dTex.rgb, rTex * 1.12, rockW );`);
+        vec3 tc = dTex.rgb;
+        // the rock texture is only fetched on the cliffs (most of the screen is flat meadow)
+        if ( rockW > 0.001 ) {
+          #ifdef TERRAIN_LITE
+            vec2 side = abs( vTpN.x ) > abs( vTpN.z ) ? vTpW.zy : vTpW.xy;
+            vec3 rTex = texture2D( tRock, side * vec2( 0.11, 0.16 ) ).rgb;
+          #else
+            vec3 bw = pow( abs( normalize( vTpN ) ), vec3( 4.0 ) ); bw /= ( bw.x + bw.y + bw.z );
+            vec3 rTex = texture2D( tRock, vTpW.zy * vec2( 0.11, 0.16 ) ).rgb * bw.x + texture2D( tRock, vTpW.xz * 0.11 ).rgb * bw.y + texture2D( tRock, vTpW.xy * vec2( 0.11, 0.16 ) ).rgb * bw.z;
+          #endif
+          tc = mix( tc, rTex * 1.12, rockW );
+        }
+        diffuseColor.rgb *= tc;`);
+    if (lite) sh.fragmentShader = '#define TERRAIN_LITE\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => 'terrainTri';
+  mat.customProgramCacheKey = () => (lite ? 'terrainLite' : 'terrainTri');
   stylize(mat, { wrap: 0.35, band: 0.1 });
   // tiles sharing one vertex buffer (no seams): each frustum-culls on its own, so only the part of
   // the (big) valley in view is drawn

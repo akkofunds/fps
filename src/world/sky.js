@@ -135,6 +135,7 @@ export function buildMountains(groundAt = null) {
     const clump = n.n2(x / 7, z / 7) * 0.6 + n.n2(x / 19 + 5, z / 19) * 0.4;
     c.setRGB(0.08, 0.2, 0.08).lerp(t.setRGB(0.36, 0.56, 0.14), smoothstep(0.35, 0.8, clump) * (0.35 + 0.65 * lit));
     c.lerp(t.setRGB(0.3, 0.46, 0.14), smoothstep(0.55, 0.2, clump) * 0.3);
+    c.multiplyScalar(0.7 + 0.4 * lit);
     // mountain rock: violet shadow side, pink-lavender sun side, faint gullies
     const gully = 0.85 + 0.15 * n.n2(x / 25, z / 25 + y / 40);
     t.setRGB(0.2, 0.13, 0.4).lerp(c.clone().setRGB(0.62, 0.38, 0.64), lit).multiplyScalar(gully);
@@ -142,16 +143,17 @@ export function buildMountains(groundAt = null) {
     // aerial perspective: lighter + pinker with distance, gold toward the sun; mist pooling low
     const toward = Math.max(0, Math.cos(_ad(a, sunA)));
     const haze = t.setRGB(0.5, 0.34, 0.66).lerp(c.clone().setRGB(0.98, 0.56, 0.52), toward * toward);
-    let hk = (1 - mtn) * (0.1 + 0.5 * smoothstep(245, 700, d)) + mtn * (0.1 + 0.25 * smoothstep(700, 1400, d));
-    hk = Math.max(hk, (1 - smoothstep(10, 70 + d * 0.03, y)) * smoothstep(280, 600, d) * 0.6);
+    let hk = (1 - mtn) * (0.05 + 0.45 * smoothstep(300, 900, d)) + mtn * (0.1 + 0.25 * smoothstep(700, 1400, d));
     c.lerp(haze, Math.min(0.8, hk));
     // the same mist wall the fog puts on the terrain past the rim (fog.js), baked in
-    c.lerp(SKY.fog, smoothstep(235, 470, d) * Math.exp(-Math.max(y - 45, 0) * 0.02) * 0.6);
+    c.lerp(SKY.fog, smoothstep(300, 700, d) * (1 - mtn) * 0.55);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
   m.name = 'mountains';
   m.frustumCulled = false;
+  // ground height of the far lands (for planting groves on them)
+  m.userData.heightAt = (x, z) => { const rad = Math.hypot(x, z); return height(x, z, rad, Math.atan2(z, x)); };
   return m;
 }
