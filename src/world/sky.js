@@ -5,25 +5,27 @@ import { stylize } from './stylize.js';
 // Golden-hour sky dome: gradient, sun disc + glow, two layers of drifting fBm clouds.
 // Also the distant mountain ring that sits in the haze behind the meadow hills.
 
-export const SUN_DIR = new THREE.Vector3(0.42, 0.68, 0.6).normalize(); // high, from the south-east: the falls cliff is sunlit (reference)
+// golden hour: the sun low in the west-south-west, long warm light across the valley
+export const SUN_DIR = new THREE.Vector3(-0.72, 0.2, 0.66).normalize();
 export const SKY = {
-  zenith: new THREE.Color(0.02, 0.15, 0.72),
-  horizon: new THREE.Color(0.36, 0.62, 0.96),
-  fog: new THREE.Color(0.66, 0.77, 0.9),
-  sun: new THREE.Color(1.0, 0.86, 0.66),
+  zenith: new THREE.Color(0.2, 0.2, 0.52),
+  horizon: new THREE.Color(0.98, 0.6, 0.52),
+  fog: new THREE.Color(0.88, 0.66, 0.72),
+  sun: new THREE.Color(1.0, 0.72, 0.42),
 };
 
+// Painted sunset dome: deep violet zenith → lavender → a pink/orange band at the horizon that
+// burns gold toward the sun; a big soft sun; layered cumulus lit orange/pink on the sun side with
+// violet bellies, plus wispy high streaks catching the light.
 export function buildSky() {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: {
-      uTime: { value: 0 }, uSun: { value: SUN_DIR }, uZen: { value: SKY.zenith }, uHor: { value: SKY.horizon }, uSunCol: { value: SKY.sun },
-    },
+    uniforms: { uTime: { value: 0 }, uSun: { value: SUN_DIR } },
     vertexShader: /* glsl */`
       varying vec3 vDir;
       void main() { vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`,
     fragmentShader: /* glsl */`
-      uniform float uTime; uniform vec3 uSun, uZen, uHor, uSunCol; varying vec3 vDir;
+      uniform float uTime; uniform vec3 uSun; varying vec3 vDir;
       float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
       float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
         return mix(mix(hash(i),hash(i+vec2(1,0)),u.x), mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y); }
@@ -31,30 +33,36 @@ export function buildSky() {
       void main(){
         vec3 d = normalize(vDir);
         float h = max(d.y, 0.0);
-        vec3 col = mix(uHor, uZen, pow(h, 0.35));
-        // warm band toward the sun near the horizon
         float sd = max(dot(d, uSun), 0.0);
-        col = mix(col, vec3(1.0, 0.78, 0.55), pow(sd, 6.0) * (1.0 - h) * 0.55);
-        // puffy cumulus on a flat layer, self-shadowed: compare density with a sample shifted
-        // toward the sun → bright sunlit rims, soft blue-grey bellies
+        float az = max(dot(normalize(d.xz + 1e-4), normalize(uSun.xz)), 0.0); // how much toward the sun's side
+        vec3 zen = vec3(0.2, 0.18, 0.56), mid = vec3(0.68, 0.42, 0.78), hor = mix(vec3(1.08, 0.5, 0.56), vec3(1.45, 0.62, 0.24), pow(az, 2.5));
+        vec3 col = mix(hor, mid, smoothstep(0.0, 0.22, h));
+        col = mix(col, zen, smoothstep(0.18, 0.85, h));
+        // golden glow round the sun
+        col += vec3(1.3, 0.62, 0.22) * pow(sd, 6.0) * 0.4 + vec3(1.2, 0.5, 0.3) * pow(sd, 2.0) * 0.12 * (1.0 - h);
         if (d.y > 0.0) {
-          vec2 uv = d.xz / (d.y + 0.14) * 0.8;
-          float t = uTime * 0.01;
-          vec2 o1 = vec2(t, t * 0.35), o2 = vec2(-t * 1.6, t * 0.2);
-          float dens = fbm(uv * 0.55 + o1) * 0.85 + (1.0 - abs(fbm(uv * 2.2 + o2) * 2.0 - 1.0)) * 0.2;
-          vec2 sh = normalize(uSun.xz + vec2(1e-4)) * 0.09;
-          float dens2 = fbm((uv + sh) * 0.55 + o1) * 0.85 + (1.0 - abs(fbm((uv + sh) * 2.2 + o2) * 2.0 - 1.0)) * 0.2;
-          float cov = smoothstep(0.6, 0.7, dens);   // distinct cumulus with blue sky between
-          float lit = clamp(0.62 + (dens - dens2) * 7.0, 0.0, 1.0);
-          vec3 cc = mix(vec3(0.62, 0.7, 0.86), vec3(1.15, 1.13, 1.1), lit);
-          cc = mix(cc, vec3(1.15, 0.98, 0.82), pow(sd, 5.0) * 0.6);
-          cc += vec3(0.25, 0.22, 0.18) * smoothstep(0.62, 0.52, dens) * cov; // bright thin edges
-          col = mix(col, cc, cov * smoothstep(0.0, 0.16, d.y) * 0.96);
+          float t = uTime * 0.008;
+          vec2 uv = d.xz / (d.y + 0.12) * 0.75;
+          // cumulus banks
+          float dens = fbm(uv * 0.5 + vec2(t, t * 0.3)) * 0.8 + fbm(uv * 1.9 - vec2(t * 1.4, 0.0)) * 0.3;
+          vec2 sh = normalize(uSun.xz + 1e-4) * 0.08;
+          float dens2 = fbm((uv + sh) * 0.5 + vec2(t, t * 0.3)) * 0.8 + fbm((uv + sh) * 1.9 - vec2(t * 1.4, 0.0)) * 0.3;
+          float cov = smoothstep(0.58, 0.74, dens) * smoothstep(0.0, 0.1, d.y);
+          float lit = clamp(0.55 + (dens - dens2) * 6.0, 0.0, 1.0);
+          vec3 shade = mix(vec3(0.46, 0.32, 0.66), vec3(0.6, 0.42, 0.78), h);
+          vec3 light = mix(vec3(1.25, 0.6, 0.62), vec3(1.55, 0.78, 0.36), pow(az, 2.0));
+          vec3 cc = mix(shade, light, lit);
+          cc += vec3(1.0, 0.62, 0.36) * smoothstep(0.66, 0.58, dens) * cov * 0.6 * (0.4 + az); // bright edges
+          col = mix(col, cc, cov * 0.97);
+          // wispy high streaks
+          vec2 su = vec2(uv.x * 0.25 + t * 2.0, uv.y * 2.2);
+          float st = smoothstep(0.62, 0.8, fbm(su)) * smoothstep(0.05, 0.3, d.y) * (1.0 - cov);
+          col = mix(col, mix(vec3(1.0, 0.6, 0.66), vec3(1.25, 0.75, 0.45), az), st * 0.6);
         }
-        // sun
-        col += uSunCol * (pow(sd, 900.0) * 5.0 + pow(sd, 90.0) * 0.3 + pow(sd, 10.0) * 0.08);
-        // below horizon: haze
-        col = mix(col, uHor * 0.92, smoothstep(0.0, -0.08, d.y));
+        // the sun: a big soft disc with a hot core
+        col += vec3(1.5, 1.05, 0.62) * smoothstep(0.9975, 0.9992, sd) * 1.3 + vec3(1.1, 0.6, 0.3) * pow(sd, 300.0) * 0.8;
+        // below the horizon: warm haze
+        col = mix(col, vec3(0.86, 0.6, 0.68), smoothstep(0.0, -0.06, d.y));
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -105,8 +113,8 @@ export function buildMountains() {
   g.setIndex(idx); g.computeVertexNormals();
   const P = g.attributes.position, Nn = g.attributes.normal, col = new Float32Array(P.count * 3), c = new THREE.Color();
   const top = new THREE.Color(0.3, 0.55, 0.16), topDark = new THREE.Color(0.14, 0.34, 0.12);
-  const stone = new THREE.Color(0.66, 0.7, 0.76), stoneDark = new THREE.Color(0.46, 0.5, 0.58);
-  const haze = new THREE.Color(0.55, 0.7, 0.88), hazeFar = new THREE.Color(0.66, 0.78, 0.93);
+  const stone = new THREE.Color(0.7, 0.64, 0.72), stoneDark = new THREE.Color(0.46, 0.42, 0.56);
+  const haze = new THREE.Color(0.66, 0.56, 0.78), hazeFar = new THREE.Color(0.84, 0.62, 0.72);
   for (let i = 0; i < P.count; i++) {
     const x = P.getX(i), y = P.getY(i), z = P.getZ(i), ny = Nn.getY(i);
     const d = Math.hypot(x, z);
@@ -117,7 +125,7 @@ export function buildMountains() {
     c.lerp(new THREE.Color().copy(stoneDark).lerp(stone, strata), rockK);
     // snow on the high peaks: thick on gentle slopes, streaky on steep faces
     const snow = Math.min(1, Math.max(0, (y - 330 - n.n2(x / 60, z / 60) * 40) / 50)) * (0.45 + 0.55 * Math.min(1, Math.max(0, (ny - 0.35) / 0.4)));
-    c.lerp(new THREE.Color(0.96, 0.97, 1.0), snow);
+    c.lerp(new THREE.Color(1.0, 0.86, 0.84), snow);
     // aerial perspective
     const hz = Math.min(1, Math.max(0, (d - 520) / 900));
     c.lerp(haze, Math.min(0.88, 0.36 + hz * 0.95));

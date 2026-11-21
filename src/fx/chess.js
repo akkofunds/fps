@@ -259,7 +259,7 @@ export class ChessWorld {
     this.on = true; this.c = c.clone(); this.k = 0;
     this.mat.uniforms.uC.value.copy(c);
     this.saved = { fog: [m.scene.fog.color.clone(), m.scene.fog.near, m.scene.fog.far], hemi: map.hemi.intensity, sun: map.sun.intensity, terrain: map.terrain.material, vis: [] };
-    for (const o of [map.sky, map.mountains, map.vista, map.ambient, map.grass, map.flowers, map.bushes, map.water, map.landmarks, map.props]) if (o) { this.saved.vis.push([o, o.visible]); o.visible = false; }
+    for (const o of [map.sky, map.mountains, map.vista, map.ambient, map.waterfalls, map.grass, map.flowers, map.bushes, map.water, map.landmarks, map.props]) if (o) { this.saved.vis.push([o, o.visible]); o.visible = false; }
     map.terrain.material = this.mat;
     m.scene.fog.color.setRGB(0.9, 0.9, 0.92); m.scene.fog.near = 40; m.scene.fog.far = 420;
     map.hemi.intensity *= 1.15;

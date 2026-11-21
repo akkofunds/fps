@@ -177,7 +177,7 @@ export class UnlimitedVoid {
     const m = this.map;
     this.inside = inside;
     this.sky.visible = inside;
-    for (const o of [m.sky, m.mountains, m.vista, m.ambient, m.grass, m.flowers, m.bushes, m.water, m.landmarks]) if (o) o.visible = !inside;
+    for (const o of [m.sky, m.mountains, m.vista, m.ambient, m.waterfalls, m.grass, m.flowers, m.bushes, m.water, m.landmarks]) if (o) o.visible = !inside;
     if (inside) {
       this.saved = { fog: [m.scene.fog.color.clone(), m.scene.fog.near, m.scene.fog.far], hemi: m.hemi.intensity, sun: m.sun.intensity, mats: new Map() };
       m.scene.fog.color.setRGB(0.003, 0.005, 0.016); m.scene.fog.near = 30; m.scene.fog.far = 140;

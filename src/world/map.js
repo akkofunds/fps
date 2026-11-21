@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { buildTerrain, groundH, H as terrainH, WATER_Y, LAKE, PLAY_RADIUS, MAP_SCALE } from './terrain.js';
+import './fog.js';
 import { buildVista } from './scenery.js';
 import { buildAmbient } from './ambient.js';
+import { buildWaterfalls } from './waterfalls.js';
 import { buildSky, buildMountains, SUN_DIR, SKY } from './sky.js';
 import { buildWater } from './water.js';
 import { buildGrass, buildFlowers, buildBushes, WIND } from './vegetation.js';
@@ -27,16 +29,16 @@ export class GameMap {
     const Q = QUALITY[quality] || QUALITY.high;
     this.quality = quality;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(SKY.fog, 140, 1100);
+    this.scene.fog = new THREE.Fog(SKY.fog, 70, 900);
     this.world = new CollisionWorld();
     this.world.water = { x: LAKE.x, z: LAKE.z, r: LAKE.r + 8, y: WATER_Y };
     this.waterY = WATER_Y;
     const s = this.scene;
 
     // lighting: warm low sun, sky/ground bounce
-    this.hemi = new THREE.HemisphereLight(0xbcd4ff, 0x5a6a2c, 1.25);
+    this.hemi = new THREE.HemisphereLight(0xb6a8ec, 0x7a6038, 1.35);
     s.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffe2b8, 2.6);
+    this.sun = new THREE.DirectionalLight(0xffbe80, 3.7);
     this.sun.position.copy(SUN_DIR).multiplyScalar(80);
     this.sun.castShadow = Q.shadows;
     if (Q.shadows) {
@@ -50,6 +52,7 @@ export class GameMap {
     this.sky = buildSky(); s.add(this.sky);
     this.mountains = buildMountains(); s.add(this.mountains);
     this.vista = buildVista(Q, (x, z) => terrainH(x, z)); s.add(this.vista);
+    this.waterfalls = buildWaterfalls(Q); s.add(this.waterfalls);
     this.Q = Q;
     this.terrain = buildTerrain(Q.terrainStep); s.add(this.terrain);
     this.water = buildWater(); s.add(this.water);
@@ -131,6 +134,7 @@ export class GameMap {
     if (this.village) this.village.userData.update(this.time);
     this.landmarks.userData.update(this.time);
     this.vista.userData.update(this.time);
+    this.waterfalls.userData.update(this.time);
     this.ambient.userData.update(this.time, camera.position);
     this.sky.material.uniforms.uTime.value = this.time;
     this.sky.position.copy(camera.position);

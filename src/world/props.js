@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { groundH, groundNormal, LAKE, PLAY_RADIUS, MAP_SCALE as MS, pathDist, riverDist, CLIFF, terrainNoise as N } from './terrain.js';
-import { mulberry32 } from './noise.js';
+import { mulberry32, smoothstep } from './noise.js';
 import { windPatch } from './vegetation.js';
 import { stylize } from './stylize.js';
 import { landmarkFootprints } from './landmarks.js';
@@ -107,6 +107,47 @@ class Builder {
 
 // ---------------------------------------------------------------- trees
 let LEAF_DETAIL = 2;
+// painted leaf-cluster texture: dozens of small overlapping leaves in a round clump (white, tinted
+// per vertex), alpha-cut — every canopy is built from cards of this round a dark inner hull
+let LEAF_TEX = null;
+function leafTexture() {
+  if (LEAF_TEX) return LEAF_TEX;
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  const r = mulberry32(77);
+  g.fillStyle = 'rgb(150,150,150)'; g.beginPath(); g.arc(S / 2, S / 2, 46, 0, 7); g.fill();
+  for (let i = 0; i < 230; i++) {
+    const a = r() * 6.283, d = Math.pow(r(), 0.75) * 104, x = S / 2 + Math.cos(a) * d, y = S / 2 + Math.sin(a) * d * 0.92;
+    const L = 13 + r() * 9, W = 6 + r() * 3.5, rot = r() * 6.283;
+    const v = Math.round(150 + r() * 105 - (y - S / 2) * 0.25);
+    g.save(); g.translate(x, y); g.rotate(rot);
+    g.fillStyle = `rgb(${v},${v},${v})`;
+    g.beginPath(); g.moveTo(-L / 2, 0); g.quadraticCurveTo(0, -W, L / 2, 0); g.quadraticCurveTo(0, W, -L / 2, 0); g.fill();
+    g.strokeStyle = `rgba(0,0,0,0.25)`; g.lineWidth = 1; g.beginPath(); g.moveTo(-L / 2, 0); g.lineTo(L / 2 - 2, 0); g.stroke();
+    g.restore();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.generateMipmaps = true;
+  return (LEAF_TEX = t);
+}
+const solidUV = (g) => { const n = g.attributes.position.count, uv = new Float32Array(n * 2).fill(0.5); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); return g; };
+// one foliage clump: a dark inner hull + leaf cards scattered over its surface, facing outward
+function foliage(out, s, x, y, z, sy, seed) {
+  const r = mulberry32(seed);
+  if (LEAF_DETAIL <= 0) { const g = jitter(new THREE.IcosahedronGeometry(s, 0), 0.12, seed); g.scale(1, sy, 1); g.translate(x, y, z); out.push(solidUV(ni(g))); return; }
+  const hull = new THREE.IcosahedronGeometry(s * 0.74, 0); hull.scale(1, sy, 1); hull.translate(x, y, z); out.push(solidUV(ni(hull)));
+  const n = LEAF_DETAIL >= 2 ? 11 : 6;
+  const u = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
+  for (let k = 0; k < n; k++) {
+    u.set(r() * 2 - 1, r() * 1.6 - 0.45, r() * 2 - 1).normalize();
+    const cs = s * (1.05 + r() * 0.5), d = s * (0.45 + r() * 0.4);
+    const card = new THREE.PlaneGeometry(cs, cs);
+    q.setFromUnitVectors(Z, u).multiply(new THREE.Quaternion().setFromAxisAngle(Z, r() * 6.283));
+    m.compose(new THREE.Vector3(x + u.x * d, y + u.y * d * sy, z + u.z * d), q, new THREE.Vector3(1, 1, 1));
+    card.applyMatrix4(m);
+    out.push(ni(card));
+  }
+}
 function oakGeometry(seed) {
   // a broad, characterful oak: a thick trunk that forks into 4 limbs, each carrying its own cloud of
   // foliage, plus a crown cluster — reads as a real tree silhouette instead of a lollipop
@@ -131,14 +172,11 @@ function oakGeometry(seed) {
     const nb = ci === tips.length - 1 ? 6 : 5;
     for (let i = 0; i < nb; i++) {
       const s = (i === 0 ? 1.55 : 1.0 + r() * 0.6) * k;
-      const lg = jitter(new THREE.IcosahedronGeometry(s, i === 0 ? LEAF_DETAIL : Math.max(0, LEAF_DETAIL - 1)), 0.14, seed + ci * 10 + i);
-      lg.scale(1, 0.9, 1);
       const a = r() * 6.28, d = i === 0 ? 0 : 0.8 + r() * 0.7;
-      lg.translate(tx + Math.cos(a) * d, ty + 0.3 + (r() - 0.25) * 1.1, tz + Math.sin(a) * d);
-      leaves.push(lg);
+      foliage(leaves, s, tx + Math.cos(a) * d, ty + 0.3 + (r() - 0.25) * 1.1, tz + Math.sin(a) * d, 0.9, seed + ci * 10 + i);
     }
   });
-  return { trunk: mergeGeometries(trunk.map((g) => ni(g))), leaves: mergeGeometries(leaves.map((g) => ni(g))), h: 7 };
+  return { trunk: mergeGeometries(trunk.map((g) => ni(g))), leaves: mergeGeometries(leaves), h: 7 };
 }
 function sakuraGeometry(seed) {
   // cherry blossom: a dark, leaning, gnarled trunk splitting into wide spreading limbs under a
@@ -161,14 +199,11 @@ function sakuraGeometry(seed) {
   tips.forEach(([tx, ty, tz], ci) => {
     for (let i = 0; i < 6; i++) {
       const s = (i === 0 ? 1.25 : 0.75 + r() * 0.55);
-      const lg = jitter(new THREE.IcosahedronGeometry(s, Math.max(1, LEAF_DETAIL - 1)), 0.16, seed + ci * 7 + i);
-      lg.scale(1.1, 0.95, 1.1);
       const a = r() * 6.28, d = i === 0 ? 0 : 0.6 + r() * 0.8;
-      lg.translate(tx + Math.cos(a) * d, ty + 0.5 + (r() - 0.3) * 0.9, tz + Math.sin(a) * d);
-      leaves.push(lg);
+      foliage(leaves, s * 1.05, tx + Math.cos(a) * d, ty + 0.5 + (r() - 0.3) * 0.9, tz + Math.sin(a) * d, 0.9, seed + ci * 7 + i);
     }
   });
-  return { trunk: mergeGeometries(trunk.map((g) => ni(g))), leaves: mergeGeometries(leaves.map((g) => ni(g))), h: 5.6, sakura: true };
+  return { trunk: mergeGeometries(trunk.map((g) => ni(g))), leaves: mergeGeometries(leaves), h: 5.6, sakura: true };
 }
 function pineGeometry(seed) {
   const r = mulberry32(seed);
@@ -180,18 +215,16 @@ function pineGeometry(seed) {
     cg.rotateY(r() * 3); cg.translate(0, y + 1.1, 0);
     leaves.push(cg); y += 1.25; w *= 0.78;
   }
-  return { trunk: ni(tg), leaves: mergeGeometries(leaves.map((g) => ni(g))), h: 8.5 };
+  return { trunk: ni(tg), leaves: mergeGeometries(leaves.map((g) => solidUV(ni(g)))), h: 8.5 };
 }
 function birchGeometry(seed) {
   const r = mulberry32(seed);
   const tg = jitter(new THREE.CylinderGeometry(0.12, 0.2, 4.6, 6, 4), 0.05, seed); tg.translate(0, 2.3, 0);
   const leaves = [];
   for (let i = 0; i < 5; i++) {
-    const lg = jitter(new THREE.IcosahedronGeometry(0.9 + r() * 0.5, 1), 0.25, seed + i);
-    lg.scale(1, 1.25, 1); lg.translate((r() - 0.5) * 1.6, 4 + r() * 1.8, (r() - 0.5) * 1.6);
-    leaves.push(lg);
+    foliage(leaves, 0.95 + r() * 0.5, (r() - 0.5) * 1.6, 4 + r() * 1.8, (r() - 0.5) * 1.6, 1.25, seed + i);
   }
-  return { trunk: ni(tg), leaves: mergeGeometries(leaves.map((g) => ni(g))), h: 6.5, birch: true };
+  return { trunk: ni(tg), leaves: mergeGeometries(leaves), h: 6.5, birch: true };
 }
 
 function treeColors(def, kind) {
@@ -200,8 +233,8 @@ function treeColors(def, kind) {
     else if (def.sakura) c.setRGB(0.24, 0.16, 0.15).multiplyScalar(0.85 + N.n2(y * 3, x * 5) * 0.2);
     else c.setRGB(0.36, 0.25, 0.16).multiplyScalar(0.85 + N.n2(y * 3, x * 5) * 0.15);
   });
-  const top = kind === 'pine' ? new THREE.Color(0.2, 0.42, 0.24) : kind === 'birch' ? new THREE.Color(0.62, 0.78, 0.24) : kind === 'sakura' ? new THREE.Color(1.0, 0.86, 0.92) : new THREE.Color(0.44, 0.74, 0.2);
-  const bot = kind === 'pine' ? new THREE.Color(0.06, 0.2, 0.12) : kind === 'birch' ? new THREE.Color(0.24, 0.4, 0.1) : kind === 'sakura' ? new THREE.Color(0.9, 0.56, 0.7) : new THREE.Color(0.1, 0.32, 0.1);
+  const top = kind === 'pine' ? new THREE.Color(0.2, 0.42, 0.24) : kind === 'birch' ? new THREE.Color(0.62, 0.78, 0.24) : kind === 'sakura' ? new THREE.Color(1.3, 1.02, 1.14) : new THREE.Color(0.44, 0.74, 0.2);
+  const bot = kind === 'pine' ? new THREE.Color(0.06, 0.2, 0.12) : kind === 'birch' ? new THREE.Color(0.24, 0.4, 0.1) : kind === 'sakura' ? new THREE.Color(1.25, 0.82, 0.98) : new THREE.Color(0.1, 0.32, 0.1);
   colorize(def.leaves, (x, y, z, c) => {
     const t = Math.min(1, Math.max(0, (y - 2.5) / (def.h - 2.5)));
     c.copy(bot).lerp(top, Math.pow(t, 0.8));
@@ -232,12 +265,13 @@ function canopyNormals(g, k, upBias = 0.12) {
 }
 
 function leafMaterial() {
-  const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const m = new THREE.MeshLambertMaterial({ vertexColors: true, map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide });
   // canopy sway: scale the wind by height (position.y in tree space, ~0-9 m)
   m.onBeforeCompile = (sh) => {
     const parent = windPatch;
     void parent;
     sh.uniforms.uTime = treeTime;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.24; // painted foliage never goes muddy in shade');
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         #ifdef USE_INSTANCING
@@ -256,23 +290,42 @@ export const treeTime = { value: 0 };
 
 // ---------------------------------------------------------------- rocks
 function rockGeometry(seed) {
-  // smooth, rounded grey boulder (reference: soft weathered stones half sunk in the grass)
-  const g = new THREE.IcosahedronGeometry(1, 2); // 320 tris (detail 3 = 1280): same silhouette at game range
-  const r = mulberry32(seed), p = g.attributes.position, v = new THREE.Vector3();
-  const o = [r() * 10, r() * 10, r() * 10];
+  // a chunky sedimentary boulder (reference: square-ish stones with flat tops and layered sides):
+  // a sphere pushed toward a rounded cube, lumped with noise, terraced into strata, base and top
+  // flattened, welded so it shades smooth instead of faceted
+  const r = mulberry32(seed);
+  const g0 = new THREE.IcosahedronGeometry(1, 4); g0.deleteAttribute('normal'); g0.deleteAttribute('uv');
+  const g = mergeVertices(g0, 1e-4);
+  const p = g.attributes.position, v = new THREE.Vector3(), cube = new THREE.Vector3();
+  const sx = 1.15 + r() * 0.45, sz = 0.85 + r() * 0.35, step = 0.26 + r() * 0.08, o = r() * 10;
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
-    const k = 1 + 0.18 * N.n2(v.x * 1.4 + o[0], v.y * 1.4 + v.z * 0.9 + o[1]) + 0.07 * N.n2(v.x * 4 + o[2], v.z * 4);
-    v.multiplyScalar(k); if (v.y < -0.2) v.y = -0.2 + (v.y + 0.2) * 0.4; // flatter base
-    p.setXYZ(i, v.x, v.y, v.z);
+    const m = Math.max(Math.abs(v.x), Math.abs(v.y), Math.abs(v.z));
+    cube.copy(v).divideScalar(m).multiplyScalar(0.92);
+    v.lerp(cube, 0.5);
+    v.multiplyScalar(1 + 0.15 * N.n2(v.x * 1.2 + o, v.y * 1.1 + v.z * 0.8) + 0.05 * N.n2(v.x * 3.5, v.z * 3.5 + o));
+    // strata: flat ledges with short risers, each layer stepping in a little
+    const f = (v.y + 1) / step, fl = Math.floor(f), t = f - fl;
+    v.y = (fl + smoothstep(0.62, 1, t)) * step - 1;
+    const inset = 1 - 0.05 * Math.abs(N.n2(fl * 3.1 + o, 1.7));
+    v.x *= inset; v.z *= inset;
+    if (v.y < -0.3) v.y = -0.3 + (v.y + 0.3) * 0.25;
+    if (v.y > 0.6) v.y = 0.6 + (v.y - 0.6) * 0.3;
+    p.setXYZ(i, v.x * sx, v.y * 0.8, v.z * sz);
   }
-  g.scale(1.2, 0.66, 0.95);
-  colorize(g, (x, y, z, c) => {
-    c.setRGB(0.45, 0.46, 0.46).multiplyScalar(0.84 + N.n2(x * 2 + seed, z * 2 + y) * 0.16);
-    if (y > 0.3 + N.n2(x * 3, z * 3) * 0.15) c.lerp(new THREE.Color(0.36, 0.52, 0.2), 0.45); // moss on top
-  });
   g.computeVertexNormals();
-  return g.index ? g.toNonIndexed() : g;
+  const n = g.attributes.normal, col = new Float32Array(p.count * 3), c = new THREE.Color(), moss = new THREE.Color(0.34, 0.5, 0.2);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ny = n.getY(i);
+    c.setRGB(0.58, 0.55, 0.6).multiplyScalar(0.82 + 0.18 * N.n2(x * 2 + seed, z * 2 + y));
+    // darker seams between the layers, warm lichen spots
+    c.multiplyScalar(1 - 0.18 * smoothstep(0.55, 0.95, Math.abs(Math.sin(y * Math.PI / (step * 0.8)))));
+    c.lerp(new THREE.Color(0.66, 0.6, 0.46), Math.max(0, N.n2(x * 4 + 3, z * 4) - 0.55) * 0.8);
+    c.lerp(moss, smoothstep(0.62, 0.9, ny) * (0.55 + 0.25 * N.n2(x * 3, z * 3)));
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g;
 }
 
 // ---------------------------------------------------------------- assemble
@@ -318,7 +371,8 @@ export function buildProps(world, quality = 'high', Q = {}) {
   kindsVeryFar.oak.forEach((d) => treeColors(d, 'oak'));
   const placements = [];
   const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }), { wrap: 0.4 });
-  const leafMat = stylize(leafMaterial(), { wrap: 0.55, translucency: 0.25, band: 0.16 });
+  const leafMat = stylize(leafMaterial(), { wrap: 0.55, translucency: 0.35, band: 0.16 });
+  const leafDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: leafTexture(), alphaTest: 0.5 });
   const nrmT = new THREE.Vector3();
   const tryTree = (x, z, kind, scale, collide) => {
     if (riverDist(x, z) < 7 || Math.hypot(x - LAKE.x, z - LAKE.z) < LAKE.r + 4) return false;
@@ -384,6 +438,7 @@ export function buildProps(world, quality = 'high', Q = {}) {
         m4.compose(new THREE.Vector3(p.x, groundH(p.x, p.z) - 0.15, p.z), q, new THREE.Vector3(p.scale, p.scale * R(0.9, 1.15), p.scale));
         tm.setMatrixAt(i, m4); lm.setMatrixAt(i, m4);
       });
+      lm.customDepthMaterial = leafDepth; // leaf-shaped shadows, not square cards
       for (const m of [tm, lm]) { m.castShadow = near; m.receiveShadow = near; m.computeBoundingSphere(); root.add(m); }
     });
   });

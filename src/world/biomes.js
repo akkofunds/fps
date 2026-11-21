@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { groundH, pathDist, riverDist, LAKE, PATH, PATH2, WATER_Y, MESA, terrainNoise as N } from './terrain.js';
 import { mulberry32, smoothstep } from './noise.js';
 import { stylize } from './stylize.js';
-import { spireGeometry } from './scenery.js';
+import { mesaGeometry } from './scenery.js';
 
 // Points of interest inside the valley, so every direction has something to run to:
 //   - the Sunken Colonnade: a ring of weathered pillars round a low altar in the centre
@@ -26,11 +26,36 @@ function maxGround(x, z, r) {
 }
 
 // ---------------------------------------------------------------- ruins
+function engravedTexture() {
+  const S = 1024, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), C = S / 2, r = mulberry32(99);
+  g.fillStyle = '#b8b0b4'; g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 9000; i++) { const v = 140 + r() * 70; g.fillStyle = `rgba(${v},${v - 6},${v},${0.18 + r() * 0.2})`; g.fillRect(r() * S, r() * S, 2 + r() * 6, 2 + r() * 6); }
+  // slab joints radiating out
+  g.strokeStyle = 'rgba(70,64,70,0.55)'; g.lineWidth = 3;
+  for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; g.beginPath(); g.moveTo(C + Math.cos(a) * 140, C + Math.sin(a) * 140); g.lineTo(C + Math.cos(a) * 510, C + Math.sin(a) * 510); g.stroke(); }
+  // carved rings (dark groove + light lip)
+  const ring = (rad, w) => { g.lineWidth = w; g.strokeStyle = 'rgba(60,54,62,0.85)'; g.beginPath(); g.arc(C, C, rad, 0, 7); g.stroke(); g.lineWidth = w * 0.45; g.strokeStyle = 'rgba(240,232,236,0.5)'; g.beginPath(); g.arc(C, C, rad + w * 0.8, 0, 7); g.stroke(); };
+  for (const [rad, w] of [[500, 8], [430, 5], [330, 7], [250, 4], [140, 7], [70, 5]]) ring(rad, w);
+  // runes in the outer band
+  g.fillStyle = 'rgba(60,54,62,0.85)';
+  for (let k = 0; k < 40; k++) {
+    const a = k / 40 * Math.PI * 2; g.save(); g.translate(C + Math.cos(a) * 465, C + Math.sin(a) * 465); g.rotate(a + Math.PI / 2);
+    for (let s = 0; s < 3; s++) g.fillRect(-9 + r() * 12, -14 + s * 10, 3 + r() * 10, 3);
+    g.fillRect(-2, -16, 3, 30);
+    g.restore();
+  }
+  // the compass star between the inner rings
+  g.strokeStyle = 'rgba(60,54,62,0.8)'; g.lineWidth = 5;
+  for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2, b = a + Math.PI / 8; g.beginPath(); g.moveTo(C + Math.cos(a) * 320, C + Math.sin(a) * 320); g.lineTo(C + Math.cos(b) * 150, C + Math.sin(b) * 150); g.lineTo(C + Math.cos(a + Math.PI / 4) * 320, C + Math.sin(a + Math.PI / 4) * 320); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  return t;
+}
 function colonnade(B, world, cx, cz) {
   const RAD = 15;
   const [lo, hi] = maxGround(cx, cz, RAD);
-  const top = hi + 0.25;
-  // a sunken circular floor of big slabs, with a step ring round it
+  const top = hi + 0.12;
+  // a circular floor of big slabs, almost flush with the meadow, with a low step ring round it
   const floor = new THREE.CylinderGeometry(RAD, RAD + 0.4, top - lo + 1.2, 36, 1); floor.translate(cx, (top + lo - 1.2) / 2, cz);
   B.addStone(floor, [0.7, 0.67, 0.6]);
   const step = new THREE.CylinderGeometry(RAD + 1.6, RAD + 2, 0.4, 36, 1); step.translate(cx, top - 0.55, cz);
@@ -38,6 +63,10 @@ function colonnade(B, world, cx, cz) {
   world.addCyl(cx, cz, RAD, lo - 1.2, top);
   world.addCyl(cx, cz, RAD + 1.8, lo - 1.2, top - 0.35);
   B.avoid.push({ x: cx, z: cz, r: RAD + 3 });
+  // the engraved face: concentric carved rings, a compass star and runes (the reference's circle)
+  const face = new THREE.Mesh(new THREE.CircleGeometry(RAD - 0.05, 72), stylize(new THREE.MeshLambertMaterial({ map: engravedTexture() }), { wrap: 0.35 }));
+  face.rotation.x = -Math.PI / 2; face.position.set(cx, top + 0.015, cz); face.receiveShadow = true; face.name = 'engraved';
+  B.extra = (B.extra || []).concat([face]);
   // the ring of pillars: tall ones carry lintels, others have fallen to stumps
   const n = 14, H = [7.5, 7.5, 3.2, 7.5, 5.1, 7.5, 7.5, 2.1, 7.5, 6, 7.5, 7.5, 3.8, 7.5];
   const pos = [];
@@ -176,14 +205,14 @@ export function buildBiomes(B, world, Q = {}) {
   watchtower(B, -150, 18, -0.3);
   wall(B, -138, 30, -0.3, 12, 3.4);
 
-  // karst spires near the cliffs (grassy crowns, trees on top) + their colliders
+  // rocky mesas near the cliffs (layered walls, flat grassy tops) + their colliders
   const spireParts = [];
-  for (const [ang, d, h, r] of [[0.3, 172, 28, 6], [0.95, 182, 36, 7.5], [1.42, 196, 24, 5.5], [1.88, 176, 32, 6.5], [2.62, 182, 26, 5.5], [-0.42, 160, 22, 5], [3.0, 200, 30, 6]]) {
+  for (const [ang, d, h, r] of [[0.3, 172, 14, 11], [0.95, 182, 18, 14], [1.42, 196, 11, 9], [1.88, 176, 16, 12], [2.62, 182, 12, 10], [-0.42, 160, 9, 8], [3.0, 200, 15, 12], [0.62, 120, 6, 7], [2.2, 130, 5, 6]]) {
     const x = Math.cos(ang) * d, z = Math.sin(ang) * d;
     if (!ok(x, z, r)) continue;
     const g0 = groundH(x, z);
-    spireParts.push(...spireGeometry(r, h, Math.floor(ang * 1000) + 7, x, z, g0 - 1.5));
-    world.addCyl(x, z, r * 0.92, g0 - 2, g0 + h * 0.9);
+    spireParts.push(...mesaGeometry(r, h, Math.floor(ang * 1000) + 7, x, z, g0 - 1.5));
+    world.addCyl(x, z, r * 0.82, g0 - 2, g0 + h - 1.3);
     B.avoid.push({ x, z, r: r + 2 });
   }
   // a natural stone arch on the south-east meadow
@@ -245,6 +274,7 @@ export function buildBiomes(B, world, Q = {}) {
     group.add(sm, gm);
   }
   void Q;
+  if (B.extra) for (const m of B.extra) group.add(m);
   return group;
 }
 

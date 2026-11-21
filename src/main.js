@@ -57,7 +57,7 @@ function detectQuality() {
 
 // colour grade (HDR, before tone mapping): gentle saturation/contrast lift + vignette
 const GRADE = {
-  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.1 }, uContrast: { value: 1.05 }, uVig: { value: 0.32 } },
+  uniforms: { tDiffuse: { value: null }, uSat: { value: 1.22 }, uContrast: { value: 1.07 }, uVig: { value: 0.32 } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `
     uniform sampler2D tDiffuse; uniform float uSat, uContrast, uVig; varying vec2 vUv;
@@ -87,11 +87,11 @@ const RAYS = {
       for (int i = 0; i < 24; i++) {
         uv += d;
         vec3 s = texture2D(tDiffuse, clamp(uv, 0.0, 1.0)).rgb;
-        float l = max(dot(s, vec3(0.2126, 0.7152, 0.0722)) - 0.72, 0.0);
+        float l = max(dot(s, vec3(0.2126, 0.7152, 0.0722)) - 0.9, 0.0);
         acc += s * l * dec; dec *= 0.93;
       }
       float near = smoothstep(0.95, 0.0, length((vUv - uSun) * vec2(1.6, 1.0)));
-      gl_FragColor = vec4(base.rgb + acc * uK * near * vec3(1.0, 0.9, 0.74) * 0.16, base.a);
+      gl_FragColor = vec4(base.rgb + acc * uK * near * vec3(1.0, 0.82, 0.62) * 0.09, base.a);
     }`,
 };
 
