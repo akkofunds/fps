@@ -18,6 +18,7 @@ const C = {
 const DUST0 = [0.42, 0.4, 0.36, 0.5], DUST1 = [0.5, 0.48, 0.45, 0];
 // which element a hit uses: Shoto's left fist is frost, his right fist is fire, the kick is both
 function elem(style, i, k = 0) {
+  if (style === 'chess') return 'white';
   if (style === 'cursed') return k % 3 === 0 ? 'white' : 'cursed';
   if (i === 3) return k % 2 ? 'ice' : 'fire';
   return i === 1 ? 'fire' : 'ice';

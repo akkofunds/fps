@@ -239,8 +239,9 @@ export class AdminPanel {
     const grid = el('div', 'ap-toggles');
     for (const m of MAGE_LIST.filter((x) => x.admin)) {
       const r = el('div', 'ap-mage');
-      r.insertAdjacentHTML('beforeend', ICONS.spear || '');
+      r.insertAdjacentHTML('beforeend', (m.id === 'manipulator' ? ICONS.king : ICONS.spear) || '');
       r.appendChild(el('span', 'nm', m.name));
+      if (m.forever) { r.appendChild(el('button', 'btn-side', 'ADMINS ONLY · FOREVER')); grid.appendChild(r); continue; }
       const open = cfg.open.includes(m.id);
       const b = el('button', 'btn-side' + (open ? ' on' : ''), open ? 'OPEN TO ALL' : 'ADMINS ONLY');
       b.onclick = async () => {

@@ -1076,3 +1076,35 @@ export const KS_SEVER = compileClip([
   { t: 1.3, ease: 'linear', hip: [0, -0.38, 0.12], ik: KS_SV_FEET, b: { ...KS_SV_DOWN, spine: [28, 4, 0] } },
   { t: 1.7, ease: 'smooth', hip: [0, -0.08, 0], ik: KS_FEET, b: KS_GUARD },
 ]);
+
+// ================================================================== THE MANIPULATOR
+// the reference pose: chin resting on the right fist, the left forearm folded across the body
+// under the right elbow, head tilted a touch, perfectly still
+const MN_THINK = { spine: [6, 0, 0], chest: [4, 0, 0], neck: [3, 0, 0], head: [4, 6, 4], upperArmR: [-50, -55, -14], foreArmR: [-148, 0, 0], handR: [30, 0, 0], upperArmL: [-18, -70, 18], foreArmL: [-96, 0, 0], handL: [0, -10, 0] };
+export const MN_CHIN = compileClip([
+  { t: 0, hip: [0, -0.02, 0], ik: STAND, b: GUARD },
+  { t: 0.55, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: MN_THINK },
+  { t: 3.2, ease: 'linear', hip: [0, -0.03, 0], ik: STAND, b: { ...MN_THINK, head: [11, 3, 3] } },
+  { t: 6.2, ease: 'smooth', hip: [0, -0.03, 0], ik: STAND, b: { ...MN_THINK, head: [8, 7, 5] } },
+]);
+// …then he reaches down and moves one piece on the little board
+export const MN_PLACE = compileClip([
+  { t: 0, hip: [0, -0.03, 0], ik: STAND, b: MN_THINK },
+  { t: 0.45, ease: 'smooth', hip: [0, -0.05, 0], ik: STAND, b: { spine: [16, 0, 0], chest: [8, 0, 0], neck: [4, 0, 0], head: [16, 0, 0], upperArmR: [-46, 0, -6], foreArmR: [-34, 0, 0], handR: [36, 0, 0], upperArmL: [-18, -70, 18], foreArmL: [-96, 0, 0] } },
+  { t: 0.8, ease: 'linear', hip: [0, -0.05, 0], ik: STAND, b: { spine: [16, 0, 0], chest: [8, 0, 0], neck: [4, 0, 0], head: [16, -4, 0], upperArmR: [-52, 0, -10], foreArmR: [-30, 0, 0], handR: [40, 0, 0], upperArmL: [-18, -70, 18], foreArmL: [-96, 0, 0] } },
+  { t: 1.3, ease: 'smooth', hip: [0, -0.02, 0], ik: STAND, b: { spine: [2, 0, 0], head: [-2, 0, 0], upperArmL: [-4, 0, 8], foreArmL: [-14, 0, 0], upperArmR: [-4, 0, 8], foreArmR: [-14, 0, 0] } },
+]);
+// commanding a piece: the right arm sweeps forward, two fingers pointing at the square
+export const MN_CMD = compileClip([
+  { t: 0, b: { upperArmR: [-14, 0, 16], foreArmR: [-70, 0, 0] } },
+  { t: 0.12, ease: 'out', b: { spine: [2, -10, 0], chest: [0, -14, 0], neck: [0, 10, 0], head: [-2, 12, 0], upperArmR: [-86, 0, -6], foreArmR: [-6, 0, 0], handR: [-6, 0, 0], upperArmL: [-6, 0, 10], foreArmL: [-24, 0, 0] } },
+  { t: 0.42, ease: 'linear', b: { spine: [2, -10, 0], chest: [0, -14, 0], neck: [0, 10, 0], head: [-2, 12, 0], upperArmR: [-84, 0, -4], foreArmR: [-8, 0, 0], handR: [-6, 0, 0], upperArmL: [-6, 0, 10], foreArmL: [-24, 0, 0] } },
+  { t: 0.7, ease: 'smooth', b: { upperArmR: [-8, 0, 12], foreArmR: [-24, 0, 0] } },
+]);
+// the queen: the right palm raised up and open, as if lifting her onto the board
+export const MN_RAISE = compileClip([
+  { t: 0, b: { upperArmR: [-14, 0, 16], foreArmR: [-70, 0, 0] } },
+  { t: 0.18, ease: 'out', b: { spine: [-4, -6, 0], chest: [-4, -8, 0], head: [-10, 6, 0], upperArmR: [-128, 0, -4], foreArmR: [-12, 0, 0], handR: [-30, 0, 0], upperArmL: [-4, 0, 14], foreArmL: [-20, 0, 0] } },
+  { t: 0.55, ease: 'linear', b: { spine: [-4, -6, 0], chest: [-4, -8, 0], head: [-10, 6, 0], upperArmR: [-132, 0, -4], foreArmR: [-10, 0, 0], handR: [-30, 0, 0], upperArmL: [-4, 0, 14], foreArmL: [-20, 0, 0] } },
+  { t: 0.85, ease: 'smooth', b: { upperArmR: [-8, 0, 12], foreArmR: [-24, 0, 0] } },
+]);

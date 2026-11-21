@@ -407,7 +407,7 @@ export class Hud {
   }
   // colour grade of the whole frame: '', 'warm', 'cold', 'burn'
   cineGrade(g) {
-    document.body.classList.remove('grade-warm', 'grade-cold', 'grade-burn', 'grade-void');
+    document.body.classList.remove('grade-warm', 'grade-cold', 'grade-burn', 'grade-void', 'grade-mono');
     if (g) document.body.classList.add('grade-' + g);
   }
   // a huge rotating magic circle drawn over the frame while she chants (0..1)

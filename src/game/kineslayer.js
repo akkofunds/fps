@@ -6,7 +6,7 @@ import { MeleeCombo } from './melee.js';
 // KINE SLAYER: no cursed energy at all. Heavenly Restriction traded it for a body that outruns
 // sorcery, and the Inverted Spear of Heaven cuts through any technique. No shields, no heals.
 //   Passive Heavenly Restriction · LMB Spear Strikes · E Spear Throw / Recall · C Skyfall
-//   V Severing Whirlwind · X Heavenly Severance (admin-only character)
+//   V Severing Whirlwind · X Heavenly Severance
 export const KINE = {
   id: 'kineslayer',
   name: 'KINE SLAYER',
@@ -14,15 +14,15 @@ export const KINE = {
   model: 'models/kineslayer.glb',
   color: '#d5dbe3',
   // Heavenly Restriction: a little faster than anyone, a third jump in the air
-  perk: { speed: 1.05, airJumps: 2, dashMax: 2, dashRate: 1 },
+  perk: { speed: 1.03, airJumps: 2, dashMax: 2, dashRate: 0.9 },
   bio: 'Born with zero cursed energy, he was paid back in flesh: a body so fast, strong and sharp-sensed that sorcerers never see him coming. He carries the Inverted Spear of Heaven, a blade that cancels any technique it touches.',
   abilities: [
     { key: 'LMB', id: 'm1', name: 'Spear Strikes', desc: 'M1: a 4-hit string with the Inverted Spear: forehand slash, backhand slash, rising cut, then a lunging thrust that launches. Longer reach than fists, every hit stuns, and each swing steps you in if they are right in front of you.' },
-    { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 5% faster and can jump twice in the air. Burst in the direction you are moving with Q (2 charges).' },
-    { key: 'E', id: 'throw', name: 'Spear Throw', cd: 9, desc: 'Hurl the Inverted Spear at your crosshair (26 damage). The enemy it pierces has their technique nullified, cancelling whatever they were winding up. Press E again (or wait) and it rips back to your hand, cutting everyone on its way (14) and dragging the first one toward you. No spear, no M1 until it is back.' },
-    { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 10, desc: 'Launch yourself high into the air, then dive spear-first onto the spot you aim at: the impact hits everyone around it (30 damage), stuns them and throws them up.' },
-    { key: 'V', id: 'whirl', name: 'Severing Whirlwind', cd: 11, desc: 'Plant your feet and spin the spear round yourself: five rings of red cuts (7 each) that drag everyone close into the blades. You can still creep around while spinning.' },
-    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Sink low while the air goes red, then cut the world twice: a giant horizontal crescent and a giant vertical one rip across the field in front of you, 40 m long, through everyone in their way (56 + 38 damage).' },
+    { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 3% faster and can jump twice in the air. Burst in the direction you are moving with Q (2 charges).' },
+    { key: 'E', id: 'throw', name: 'Spear Throw', cd: 9, desc: 'Hurl the Inverted Spear at your crosshair (24 damage). The enemy it pierces has their technique nullified, cancelling whatever they were winding up. Press E again (or wait) and it rips back to your hand, cutting everyone on its way (14) and dragging the first one toward you. No spear, no M1 until it is back.' },
+    { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 11, desc: 'Launch yourself high into the air, then dive spear-first onto the spot you aim at: the impact hits everyone around it (30 damage), stuns them and throws them up.' },
+    { key: 'V', id: 'whirl', name: 'Severing Whirlwind', cd: 11, desc: 'Plant your feet and spin the spear round yourself: five rings of red cuts (6 each) that drag everyone close into the blades. You can still creep around while spinning.' },
+    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Sink low while the air goes red, then cut the world twice: a giant horizontal crescent and a giant vertical one rip across the field in front of you, 40 m long, through everyone in their way (52 + 36 damage).' },
   ],
 };
 
@@ -35,12 +35,12 @@ export const SPEAR_M1 = {
   ],
   gap: 0.3, window: 1.0, endlag: 0.85, range: 3.1, cone: 0.4, seek: 3.3, seekCone: 0.82, stop: 1.75, lungeMax: 11,
 };
-export const THROW = { speed: 48, range: 34, hitR: 0.9, dmg: 26, stun: 0.35, recallSpeed: 58, recallDmg: 14, recallR: 1.3, pull: 9, auto: 4, windup: 0.2 };
+export const THROW = { speed: 48, range: 34, hitR: 0.9, dmg: 24, stun: 0.35, recallSpeed: 58, recallDmg: 14, recallR: 1.3, pull: 9, auto: 4, windup: 0.2 };
 export const SKYFALL = { up: 15, fwd: 7, apex: 0.5, range: 18, dive: 40, radius: 3.6, dmg: 30, stun: 0.55 };
-export const WHIRL = { ticks: 5, gap: 0.2, radius: 3.4, dmg: 7, pull: 4, slow: 0.4 };
-export const SEVER = { wind: 0.65, gap: 0.38, len: 40, speed: 60, width: 10, dmg1: 56, dmg2: 38, stun: 0.6 };
+export const WHIRL = { ticks: 5, gap: 0.2, radius: 3.4, dmg: 6, pull: 4, slow: 0.4 };
+export const SEVER = { wind: 0.65, gap: 0.38, len: 40, speed: 60, width: 10, dmg1: 52, dmg2: 36, stun: 0.6 };
 
-const COOLDOWN = { throw: 9, skyfall: 10, whirl: 11 };
+const COOLDOWN = { throw: 9, skyfall: 11, whirl: 11 };
 const cdOf = (base) => (BAL.noCooldowns ? 0 : base * BAL.cd);
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
