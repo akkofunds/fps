@@ -288,37 +288,200 @@ export class ChessWorld {
   dispose() { this.end(); this.m.scene.remove(this.sky); this.sky.geometry.dispose(); this.sky.material.dispose(); this.mat.dispose(); }
 }
 
-// the small floating board in front of him (the reference shot): an 8x8 board with a few pieces
-export function miniBoard(fx, c, yaw) {
+// the small board in front of him (the reference shot). It is laid out from where his own hand goes:
+// MN_GRIP are his right fingertip positions (in his root frame, measured from the MN_PLACE clip) at
+// the moment he closes his fingers on the queen (h4) and when he sets her down (e7). The square size
+// and the board's turn follow from those two points, so the queen is always exactly in his fingers.
+export const MN_GRIP = { pick: [-0.1948, 1.0932, 0.3795], drop: [0.0069, 1.083, 0.487] };
+const S0 = 0.11; // board units: square size before scaling to his reach
+export function miniBoard(fx, root) {
   const g = new THREE.Group();
-  const S = 0.11, tiles = [];
+  const S = S0;
   const w = new THREE.MeshPhongMaterial({ color: 0xdedfe3, shininess: 60, specular: 0x777777 }), b = new THREE.MeshPhongMaterial({ color: 0x1a1b20, shininess: 80, specular: 0x555a66 });
   const tile = new THREE.BoxGeometry(S, 0.02, S);
-  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const t = new THREE.Mesh(tile, (i + j) % 2 ? w : b); t.position.set((3.5 - i) * S, 0, (j - 3.5) * S); g.add(t); tiles.push(t); }
-  const rim = new THREE.Mesh(new THREE.BoxGeometry(S * 8.4, 0.03, S * 8.4), b); rim.position.y = -0.012; g.add(rim);
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const t = new THREE.Mesh(tile, (i + j) % 2 ? w : b); t.position.set((3.5 - i) * S, 0, (j - 3.5) * S); g.add(t); }
+  const rimG = new THREE.BoxGeometry(S * 8.5, 0.035, S * 8.5);
+  const rim = new THREE.Mesh(rimG, b); rim.position.y = -0.014; g.add(rim);
   const pcs = {};
-  // file i: a-h from his left to his right (x = 3.5 - i); a1 is a dark square
+  const sq = (i, j) => new THREE.Vector3((3.5 - i) * S, 0.01, (j - 3.5) * S); // file i a-h from his left to his right; a1 dark
   const put = (kind, white, i, j, h = 0.16) => {
     const m = new THREE.Mesh(pieceGeo(kind), pieceMat(white));
-    m.scale.setScalar(h); m.position.set((3.5 - i) * S, 0.01, (j - 3.5) * S); m.rotation.y = white ? 0 : Math.PI;
+    m.scale.setScalar(h); m.position.copy(sq(i, j)); m.rotation.y = white ? 0 : Math.PI;
     g.add(m); return m;
   };
-  // a real position (files a-h = i 0-7, ranks 1-8 = j 0-7, white plays up the board toward black):
-  // White Qh4 → Qe7# — the queen is guarded by the knight on f5, covers d8, f8 and d7, f7 is
-  // blocked by black's own pawn, and nothing black can take her or step in between.
+  // a real position (verified with chess.js): White plays Qh4–e7# — the queen is guarded by the knight
+  // on f5, covers d8, f8 and d7, f7 is blocked by Black's own pawn, nothing can take her or block.
   // Black: Ke8 Ra8 Nb8 Bc8, pawns a7 b7 f7 g7 h7 · White: Kg1 Rf1 Qh4 Nf5 Bc4, pawns a2 b2 f2 g2 h2
   pcs.bk = put('king', false, 4, 7, 0.19); put('rook', false, 0, 7); put('knight', false, 1, 7); put('bishop', false, 2, 7);
   for (const i of [0, 1, 5, 6, 7]) put('pawn', false, i, 6, 0.12);
   pcs.wq = put('queen', true, 7, 3, 0.18); put('king', true, 6, 0, 0.19); put('rook', true, 5, 0); put('knight', true, 5, 4); put('bishop', true, 2, 3);
   for (const i of [0, 1, 5, 6, 7]) put('pawn', true, i, 1, 0.12);
+  pcs.from = sq(7, 3); pcs.to = sq(4, 6);
+  pcs.qTop = 0.18 * 0.86; // where his fingers close on her (local units above the square)
   // the mated king's square glows red once it is over
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(S * 0.96, S * 0.96), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0, depthWrite: false, toneMapped: false }));
-  glow.rotation.x = -Math.PI / 2; glow.position.set((3.5 - 4) * S, 0.0125, (7 - 3.5) * S); g.add(glow);
+  glow.rotation.x = -Math.PI / 2; glow.position.copy(sq(4, 7)).setY(0.0125); g.add(glow);
   pcs.glow = glow;
-  g.position.copy(c); g.rotation.y = yaw;
+  // ---- fit to his reach: h4 → e7 is 3 squares along the diagonal
+  const P = new THREE.Vector3().fromArray(MN_GRIP.pick), Q = new THREE.Vector3().fromArray(MN_GRIP.drop);
+  const dx = Q.x - P.x, dz = Q.z - P.z, len = Math.hypot(dx, dz);
+  const k = len / (3 * Math.SQRT2 * S);                       // board scale
+  const th = Math.PI / 4 - Math.atan2(dz, dx);                 // turn so the diagonal runs along his reach
+  const rot = (v) => new THREE.Vector3(v.x * Math.cos(th) + v.z * Math.sin(th), v.y, -v.x * Math.sin(th) + v.z * Math.cos(th));
+  const h4 = rot(pcs.from.clone().multiplyScalar(k));
+  const local = new THREE.Vector3(P.x - h4.x, P.y - (0.01 + pcs.qTop) * k, P.z - h4.z);    // board origin in his frame
+  root.updateMatrixWorld(true);
+  g.position.copy(root.localToWorld(local.clone()));
+  g.quaternion.copy(root.getWorldQuaternion(new THREE.Quaternion())).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), th));
+  g.scale.setScalar(k);
   fx.scene.add(g);
+  g.updateMatrixWorld(true);
   return {
-    g, S, pcs,
-    dispose: () => { fx.scene.remove(g); tile.dispose(); w.dispose(); b.dispose(); g.traverse((o) => { if (o.material && o.material !== w && o.material !== b) o.material.dispose(); }); },
+    g, S: S * k, pcs,
+    // the queen in his fingers: put her so the point where he holds her is at `tip` (world)
+    holdAt: (tip) => { const p = g.worldToLocal(tip.clone()); pcs.wq.position.set(p.x, p.y - pcs.qTop, p.z); },
+    dispose: () => { fx.scene.remove(g); tile.dispose(); rimG.dispose(); w.dispose(); b.dispose(); g.traverse((o) => { if (o.material && o.material !== w && o.material !== b) o.material.dispose(); }); },
   };
 }
+
+// ------------------------------------------------------------------ the Manipulator's M1 (ink & tile)
+// Monochrome, sharp, economical: ink trails off the striking limb, shock rings that push out
+// around the line of a straight strike, glossy white/black arcs for the elbow and the kick, and on
+// contact the air cracks into little black and white board tiles.
+let TILE = null; const TILE_M = [];
+function tileMat(k) { return TILE_M[k] || (TILE_M[k] = new THREE.MeshBasicMaterial({ color: k ? 0xf2f2f4 : 0x0c0c10, toneMapped: false })); }
+const _q = new THREE.Quaternion(), _ax = new THREE.Vector3();
+Object.assign(Fx.prototype, {
+  // a ring of air pushed out around the line of a strike (plane perpendicular to dir)
+  shockRing(p, dir, r = 0.35, o = {}) {
+    const D = dir.clone().normalize(), e1 = Math.abs(D.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const e2 = new THREE.Vector3().crossVectors(D, e1).normalize(); e1.crossVectors(e2, D).normalize();
+    this.ribbon(p, e1, e2, r, Math.PI * 2 * 0.98, { pal: o.ink ? INK : MONO, w: o.w ?? r * 0.18, sweep: o.sweep ?? 0.05, life: o.life ?? 0.22, grow: o.grow ?? 1.4, flare: 0, delay: o.delay || 0 });
+  },
+  // black and white board tiles cracking off a hit
+  tileShards(p, dir, n = 10, size = 1) {
+    if (!TILE) TILE = new THREE.BoxGeometry(1, 0.18, 1);
+    for (let k = 0; k < n; k++) {
+      const m = new THREE.Mesh(TILE, tileMat(k % 2));
+      const s = (0.05 + R() * 0.07) * size;
+      m.scale.setScalar(s);
+      m.position.copy(p);
+      const sp = 4 + R() * 7;
+      const v = new THREE.Vector3(dir.x + (R() - 0.5) * 1.6, 0.35 + R() * 1.1, dir.z + (R() - 0.5) * 1.6).normalize().multiplyScalar(sp);
+      _ax.set(R() - 0.5, R() - 0.5, R() - 0.5).normalize();
+      const spin = 10 + R() * 20, life = 0.45 + R() * 0.35;
+      m.quaternion.setFromAxisAngle(_ax, R() * 6);
+      this.scene.add(m);
+      let t = 0;
+      const ax = _ax.clone();
+      this.effects.push({ update: (dt) => {
+        t += dt;
+        v.y -= 14 * dt; v.multiplyScalar(1 - 2.2 * dt);
+        m.position.addScaledVector(v, dt);
+        m.quaternion.multiply(_q.setFromAxisAngle(ax, spin * dt));
+        m.scale.setScalar(s * Math.max(0, 1 - Math.max(0, t - life * 0.5) / (life * 0.5)));
+        if (t >= life) { this.scene.remove(m); return false; }
+        return true;
+      } });
+    }
+  },
+  // the swing: o = his feet, F = flat strike direction, i = string index, getP(out) = striking limb
+  chessSwing(o, F, i, getP) {
+    const Rt = new THREE.Vector3(-F.z, 0, F.x), U = UP;
+    const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(U, y).addScaledVector(F, z);
+    // ink + light dragged off the limb (white core, black ink edge)
+    const p = new THREE.Vector3(), prev = new THREE.Vector3();
+    let t = 0, first = true;
+    const dur = i === 3 ? 0.3 : 0.2;
+    this.effects.push({ update: (dt) => {
+      t += dt; getP(p);
+      if (first) { prev.copy(p); first = false; }
+      for (let k = 0; k < 4; k++) {
+        const u = k / 4, x = prev.x + (p.x - prev.x) * u, y = prev.y + (p.y - prev.y) * u, z = prev.z + (p.z - prev.z) * u;
+        this.fire.emit(x, y, z, 0, 0, 0, 0.12, 0.07, 0.01, [1.4, 1.42, 1.5, 1], [0.6, 0.62, 0.7, 0], 0, 0);
+        if (k % 2) this.smoke.emit(x, y, z, 0, 0, 0, 0.18, 0.09, 0.02, [0.03, 0.03, 0.04, 0.9], [0.05, 0.05, 0.06, 0], 0, 0);
+      }
+      prev.copy(p);
+      return t < dur;
+    } });
+    if (i === 0) {          // right straight: a line of light along the punch, two rings off the fist
+      setTimeout(() => {
+        this.slashLine(at(-0.15, 1.42, 0.1), at(-0.05, 1.42, 1.9), 0.06, 0.18, [1.6, 1.62, 1.7]);
+        this.shockRing(at(-0.05, 1.42, 0.95), F, 0.22, { life: 0.2 });
+        this.shockRing(at(-0.05, 1.42, 1.25), F, 0.16, { ink: true, life: 0.24, delay: 0.03 });
+      }, 45);
+    } else if (i === 1) {   // turning elbow: a short flat arc and its ink shadow
+      const e1 = Rt.clone().negate().addScaledVector(F, -0.2), e2 = F.clone();
+      this.ribbon(at(0, 1.45, 0.15), e1, e2, 0.85, 2.2, { pal: MONO, w: 0.3, sweep: 0.06, life: 0.26, grow: 0.2, delay: 0.035 });
+      this.ribbon(at(0, 1.38, 0.1), e1, e2, 0.95, 2.0, { pal: INK, w: 0.12, sweep: 0.07, life: 0.3, grow: 0.25, delay: 0.06 });
+    } else if (i === 2) {   // low roundhouse: a wide arc at thigh height, dust off the planted foot
+      const e1 = Rt.clone().negate().addScaledVector(F, -0.35).addScaledVector(U, -0.1), e2 = F.clone().addScaledVector(U, 0.12);
+      this.ribbon(at(0, 0.85, 0.2), e1, e2, 1.15, 2.6, { pal: MONO, w: 0.42, sweep: 0.08, life: 0.3, grow: 0.18, helix: 0.2, delay: 0.05 });
+      this.ribbon(at(0, 0.8, 0.15), e1, e2, 1.3, 2.3, { pal: INK, w: 0.14, sweep: 0.09, life: 0.34, grow: 0.22, delay: 0.08 });
+      this.dust(at(0, 0.05, 0), 0.6);
+    } else {                // finisher: the palm drives through — a cone of rings and a long thrust line
+      setTimeout(() => {
+        this.slashLine(at(-0.1, 1.38, 0.2), at(0, 1.38, 3.2), 0.12, 0.26, [1.7, 1.72, 1.8]);
+        this.slashLine(at(-0.1, 1.3, 0.2), at(0, 1.3, 2.6), 0.05, 0.3, [0.05, 0.05, 0.06]);
+        for (let k = 0; k < 3; k++) this.shockRing(at(-0.05, 1.38, 1.0 + k * 0.45), F, 0.25 + k * 0.12, { ink: k === 1, life: 0.26 + k * 0.04, delay: k * 0.035, grow: 1.8 });
+        this.airBurst(at(0, 1.38, 1.1), F, true, null);
+      }, 150);
+    }
+  },
+  // contact
+  chessHit(p, dir, heavy) {
+    const F = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+    this.impactStar(p, heavy ? 1.0 : 0.55, [1.5, 1.52, 1.6]);
+    this.starBurst(p, heavy ? 3 : 2, heavy ? 0.42 : 0.3, INK, heavy ? 1.0 : 0.7);
+    this.tileShards(p, F, heavy ? 18 : 9, heavy ? 1.4 : 1);
+    this.shockRing(p.clone().addScaledVector(F, 0.3), F, heavy ? 0.45 : 0.3, { life: 0.22 });
+    for (let k = 0; k < (heavy ? 7 : 4); k++) {
+      const a = Math.atan2(F.z, F.x) + (R() - 0.5) * 1.1, v = (heavy ? 26 : 16) + R() * 8;
+      this.fire.emit(p.x, p.y + (R() - 0.5) * 0.4, p.z, Math.cos(a) * v, (R() - 0.5) * 3, Math.sin(a) * v, 0.09, 0.06, 0.02, [1.6, 1.6, 1.7, 1], [0.5, 0.5, 0.6, 0], 2, 0);
+    }
+    this.light(p, heavy ? 16 : 7, heavy ? 8 : 4, heavy ? 0.16 : 0.08, 0xeef0ff);
+    if (heavy) { this.liquidSlash(p.clone().addScaledVector(UP, -0.2), F, 0.9, GLOSS.white, 0.35); this.groundCrack(new THREE.Vector3(p.x, groundH(p.x, p.z) + 0.4, p.z), 2.4, MONO, 1.4); }
+  },
+});
+
+// ------------------------------------------------------------------ Checkmate extras
+Object.assign(Fx.prototype, {
+  // board tiles drifting up off the field into the white sky (slow, lazy spin)
+  riseTiles(c, n, radius, life) {
+    if (!TILE) TILE = new THREE.BoxGeometry(1, 0.18, 1);
+    for (let k = 0; k < n; k++) {
+      const m = new THREE.Mesh(TILE, tileMat(k % 2));
+      const a = R() * 6.283, r = 6 + Math.sqrt(R()) * radius, s = 0.8 + R() * 2.2;
+      const p = new THREE.Vector3(c.x + Math.cos(a) * r, 0, c.z + Math.sin(a) * r);
+      p.y = groundH(p.x, p.z) - 0.2;
+      m.position.copy(p); m.scale.set(s, s, s);
+      const ax = new THREE.Vector3(R() - 0.5, R() * 0.3, R() - 0.5).normalize(), spin = (R() - 0.5) * 1.2, up = 1.5 + R() * 4, delay = R() * 1.2;
+      this.scene.add(m);
+      let t = -delay;
+      this.effects.push({ update: (dt) => {
+        t += dt;
+        if (t > 0) { m.position.y += up * dt * Math.min(1, t * 2); m.quaternion.multiply(_q.setFromAxisAngle(ax, spin * dt)); }
+        if (t > life - 0.8) m.scale.setScalar(s * Math.max(0, (life - t) / 0.8));
+        if (t >= life) { this.scene.remove(m); return false; }
+        return true;
+      } });
+    }
+  },
+  // a pulsing red "check" ring on the ground under a victim; returns { dispose }
+  checkRing(getPos, r = 1.6) {
+    const m = new THREE.Mesh(new THREE.RingGeometry(r * 0.82, r, 48), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }));
+    m.rotation.x = -Math.PI / 2;
+    this.scene.add(m);
+    let t = 0, gone = false;
+    this.effects.push({ update: (dt) => {
+      if (gone) return false;
+      t += dt;
+      const p = getPos();
+      m.position.set(p.x, groundH(p.x, p.z) + 0.08, p.z);
+      m.material.opacity = Math.min(0.9, t * 3) * (0.65 + 0.35 * Math.sin(t * 9));
+      m.scale.setScalar(1 + 0.06 * Math.sin(t * 9));
+      return true;
+    } });
+    return { dispose: () => { if (!gone) { gone = true; this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); } } };
+  },
+});

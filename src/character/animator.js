@@ -66,6 +66,10 @@ const ACTIONS = {
   ksWhirl: { clip: C.KS_WHIRL, in: 0.05, out: 0.15, aimOff: true },
   ksSever: { clip: C.KS_SEVER, in: 0.06, out: 0.2, aimOff: true },
   // the Manipulator
+  mnA: { clip: C.MN_A, in: 0.02, out: 0.12, aimOff: true },
+  mnB: { clip: C.MN_B, in: 0.02, out: 0.12, aimOff: true },
+  mnC: { clip: C.MN_C, in: 0.03, out: 0.14, aimOff: true },
+  mnD: { clip: C.MN_D, in: 0.03, out: 0.18, aimOff: true },
   mnChin: { clip: C.MN_CHIN, in: 0.1, out: 0.3, aimOff: true },
   mnPlace: { clip: C.MN_PLACE, in: 0.08, out: 0.25, aimOff: true },
   // getting comboed: alternating staggers, and the finisher's launch

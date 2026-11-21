@@ -28,7 +28,8 @@ list.forEach((st, i) => {
   else if (kind === 'air') { s.grounded = false; s.vel.set(0, 4, 3); }
   else if (kind !== 'idle') a.play(kind, { dir: 0 });
   for (let k = 0; k < Math.round(t * 60); k++) { if (kind === 'run') s.pos.addScaledVector(s.vel, 1 / 60); a.update(1 / 60, s); }
-  m.root.position.set(0, 0, 0);
+  m.root.position.set(0, 0, 0); m.root.updateMatrixWorld(true);
+  (window.__tips = window.__tips || []).push([st, m.rig.ends.handR.getWorldPosition(new THREE.Vector3()).toArray().map((v) => +v.toFixed(4))]);
   const cam = new THREE.PerspectiveCamera(30, cw / ch, 0.05, 100);
   cam.position.set(Math.sin(yaw) * 4.6, 1.5, Math.cos(yaw) * 4.6); cam.lookAt(0, 0.95, 0);
   const x = (i % cols) * cw, y = H - (Math.floor(i / cols) + 1) * ch;
