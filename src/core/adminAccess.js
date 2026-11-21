@@ -59,7 +59,9 @@ export const adminList = () => (list ? list.admins.slice() : []);
 export const currentList = () => list;
 // owner-signed global settings carried with the list: characters opened to everyone, announcement
 export const globalCfg = () => cleanCfg(list && list.cfg);
-export const isPublicMage = (id) => globalCfg().open.includes(id);
+// the Manipulator can never be opened to everyone (admin-only forever)
+export const FOREVER_ADMIN = new Set(['manipulator']);
+export const isPublicMage = (id) => !FOREVER_ADMIN.has(id) && globalCfg().open.includes(id);
 
 // ---------------------------------------------------------------- signatures
 const cleanCfg = (c) => ({ open: Array.isArray(c && c.open) ? c.open.filter((x) => /^[a-z]{2,20}$/.test(x)).slice(0, 12) : [], motd: String((c && c.motd) || '').slice(0, 200) });

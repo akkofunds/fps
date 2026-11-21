@@ -282,6 +282,7 @@ body.grade-burn #game { filter: saturate(1.6) contrast(1.18) brightness(1.08) se
 #cineCard.void .sl { background: linear-gradient(90deg, transparent, #0b2a5a 12%, #9fdcff 50%, #0b2a5a 88%, transparent); box-shadow: 0 0 40px rgba(90, 190, 255, 0.75); }
 #cineCard.void .ct b { color: #f4fbff; text-shadow: 0 0 24px #3aa8ff, 0 0 70px #1a5cff, 4px 4px 0 #020a1e; }
 #cineCard.void .ct span { color: #bfe6ff; }
+body.grade-mono #game { filter: grayscale(0.72) contrast(1.16) brightness(1.03); }
 body.grade-void #game { filter: saturate(0.75) contrast(1.22) brightness(0.95) hue-rotate(6deg); }
 #overload { position: fixed; inset: 0; z-index: 41; pointer-events: none; opacity: 0; mix-blend-mode: screen;
   background: radial-gradient(ellipse at 50% 50%, rgba(220, 240, 255, 0.35), rgba(120, 190, 255, 0.15) 60%, transparent 100%); }

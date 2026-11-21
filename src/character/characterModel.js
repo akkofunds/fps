@@ -123,14 +123,35 @@ export class MageInstance {
   setFlash(v) {
     if (v === this._tint) return;
     this._tint = v;
-    for (const m of this.meshes) if (!m.userData.outline) m.material.emissive.setRGB(0.62 + v * 1.4, 0.6 + v * 0.35, 0.6 + v * 0.2);
+    for (const m of this.meshes) if (!m.userData.outline) (m.userData._mat || m.material).emissive.setRGB(0.62 + v * 1.4, 0.6 + v * 0.35, 0.6 + v * 0.2);
+  }
+
+  // impact frame: the whole body flat-filled with one colour (ink outlines stay); null restores
+  silhouette(col) {
+    if (!col) {
+      if (!this._silOn) return;
+      this._silOn = false;
+      for (const m of this.meshes) if (m.userData._mat) { m.material = m.userData._mat; m.userData._mat = null; }
+      return;
+    }
+    if (!this._silMat) this._silMat = new THREE.MeshBasicMaterial({ fog: false, toneMapped: false });
+    this._silMat.color.setRGB(col[0], col[1], col[2]);
+    if (this._silOn) return;
+    this._silOn = true;
+    for (const m of this.meshes) if (!m.userData.outline) { m.userData._mat = m.material; m.material = this._silMat; }
   }
 
   setVisible(v) { this.root.visible = v; }
+  // show / hide a hand-held weapon (the Kine Slayer's spear while it is thrown)
+  setWeaponVisible(on) {
+    this._weaponHidden = !on;
+    for (const m of this.meshes) if (/spear/i.test(m.name)) m.visible = on && (!m.userData.outline || this._outl !== false);
+  }
+
   setOutlines(on) {
     if (this._outl === on) return;
     this._outl = on;
-    for (const m of this.meshes) if (m.userData.outline) m.visible = on;
+    for (const m of this.meshes) if (m.userData.outline) m.visible = on && !(this._weaponHidden && /spear/i.test(m.name));
   }
 
   // swap to the simplified meshes (far away, or always on Low)

@@ -10,6 +10,8 @@ import '../fx/frost.js';
 import '../fx/limitless.js';
 import '../fx/melee.js';
 import '../fx/heavenly.js';
+import { ChessWorld, miniBoard } from '../fx/chess.js';
+import { CHECKMATE, ROOK, QUEEN } from './manipulator.js';
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
@@ -81,7 +83,17 @@ export class Match {
     this._ready = false; this._queue = [];
     if (isHost) {
       this._offs = [
-        net.on('msg', (pid, msg) => { if (this._ready) { const e = this.byId.get(pid); if (e) this.hostHandle(e, msg); } else this._queue.push(['h', pid, msg]); }),
+        net.on('msg', (pid, msg) => {
+          if (!this._ready) { this._queue.push(['h', pid, msg]); return; }
+          let e = this.byId.get(pid);
+          // a player the host lost track of asks to be spawned: add them from the session roster
+          if (!e && msg && msg.t === 'needSpawn' && this.cfg.queue) {
+            const h = (this.app.session.humans || []).find((x) => x.id === pid);
+            if (h) { this.hostAddPlayer({ ...h }); e = this.byId.get(pid); }
+            return;
+          }
+          if (e) this.hostHandle(e, msg);
+        }),
         net.on('leave', (pid) => { if (this._ready) this.onLeave(pid); else this._queue.push(['l', pid]); }),
       ];
     } else {
@@ -111,6 +123,7 @@ export class Match {
     if (!anyT) throw new Error('no character models could be loaded');
     for (const md of MAGE_LIST) if (!this.templates[md.id]) this.templates[md.id] = anyT;
     this.voidFx = new UnlimitedVoid(this.map);
+    this.chessWorld = new ChessWorld(this);
     this.domain = null;
     this._warmupShaders();
     const list = [...this.players];
@@ -152,7 +165,7 @@ export class Match {
     if (!g) {
       if (this.ghosts.length >= 10) return;
       const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
-      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : e.mage === 'sorcerer' ? new THREE.Color(0.6, 1.4, 3.0) : e.mage === 'kineslayer' ? new THREE.Color(0.9, 0.95, 1.1) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+      const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : e.mage === 'sorcerer' ? new THREE.Color(0.6, 1.4, 3.0) : (e.mage === 'kineslayer' || e.mage === 'manipulator') ? new THREE.Color(0.9, 0.95, 1.1) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
       for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
       inst.setLod(true);
       this.scene.add(inst.root);
@@ -206,16 +219,38 @@ export class Match {
     const e = this._makeEnt(p);
     this.players.push(p);
     this.net.broadcast({ t: 'join', p }, p.id);
-    // catch the newcomer up: where everyone is, the phase, the board
-    for (const o of this.ents.values()) {
-      if (o === e || !o.alive) continue;
-      const pos = o.isLocal ? this.body.pos : o.pos;
-      this.net.send(p.id, { t: 'spawn', n: o.n, x: pos.x, y: pos.y, z: pos.z, yaw: o.isLocal ? this.body.yaw : o.yaw, quiet: 1 });
-    }
-    this.net.send(p.id, { t: 'phase', p: this.rules.phase, tl: 0 });
+    this._catchUp(p.id, e);
     this.rules.spawn(e);
     this.rules.sendBoard();
     this.app.chat.system(`${p.name} joined the ${this.mode.quickplay ? 'match' : 'lobby'}.`);
+  }
+
+  // Never leave a client standing in an empty world: if the host's spawn hasn't arrived a few
+  // seconds after loading in, ask for it (again and again); if the host stops talking entirely, or
+  // we still aren't in after a long while, go back to the queue instead of hanging.
+  _joinWatchdog(dt) {
+    if (this.ended) return;
+    this._hostQuiet = (this._hostQuiet || 0) + dt;
+    if (this._hostQuiet > 12) { this.app.leaveMatch('Lost contact with the match host — searching again…', { requeue: !!this.cfg.queue }); return; }
+    if (this._spawned) return;
+    this._askT = (this._askT || 0) - dt;
+    if (this.time > 3 && this._askT <= 0) {
+      this._askT = 2.5;
+      const me = this.local;
+      this.net.send({ t: 'needSpawn', p: { id: me.id, name: me.name, tag: me.tag, mage: me.mage } });
+    }
+    if (this.time > 20) this.app.leaveMatch('Could not join the match — searching again…', { requeue: !!this.cfg.queue });
+  }
+
+  // catch a (re)joining player up: where everyone else is, the phase
+  _catchUp(pid, e) {
+    for (const o of this.ents.values()) {
+      if (o === e || !o.alive) continue;
+      const pos = o.isLocal ? this.body.pos : o.pos;
+      this.net.send(pid, { t: 'spawn', n: o.n, x: pos.x, y: pos.y, z: pos.z, yaw: o.isLocal ? this.body.yaw : o.yaw, quiet: 1 });
+    }
+    this.net.send(pid, { t: 'phase', p: this.rules.phase, tl: Math.max(0, this.rules.phaseEnd - this.rules.now) });
+    this.rules.sendBoard();
   }
 
   _placeCamera() {
@@ -258,7 +293,7 @@ export class Match {
     this.app.hud.hitMarker(extra.head, dmg);
     this.app.hud.damageNumber(extra.at || target.pos, dmg, extra.head);
     Audio.play(extra.head ? 'head' : 'hit', 0.6);
-    if (!/^(nova|meteor|adolla|zero|sever)/.test(ab)) this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
+    if (!/^(nova|meteor|adolla|zero|sever|checkmate)/.test(ab)) this.kit.addUlt(Math.min(dmg, 40) * (target.dummy ? 0.12 : 0.22) * BAL.ult);
   }
 
   // owner-side area damage with linear falloff; opts: { burn:[dps, secs], kb: speed, up }
@@ -325,6 +360,9 @@ export class Match {
         if (v && v.alive && v.view && v !== e) {
           v.view.anim.play(fin ? 'launched' : 'stagger');
           v.view.anim.hitStop(fin ? 0.12 : 0.07);
+          // impact frame: the victim flat-filled in the striker's colour for a few frames
+          const sil = d.s === 'cursed' ? [0.03, 0.22, 1.0] : d.s === 'spear' ? [0.95, 0.05, 0.05] : d.s === 'chess' ? [0.02, 0.02, 0.025] : (i === 1 || (fin && Math.random() < 0.5)) ? [1.0, 0.45, 0.05] : [0.3, 0.85, 1.0];
+          this.fx.hitSilhouette(v.view, sil, fin ? 0.11 : 0.07);
           if (v === this.local) this.fx.shake(fin ? 0.35 : 0.12);
         }
         break;
@@ -344,7 +382,7 @@ export class Match {
         else { this.fx.slashImpact(p, dir, !!d.h); this.sound(d.h ? 'slashHeavy' : 'slashHit', p, 0.8, 30); }
         if (e.view) e.view.anim.hitStop(nul ? 0.1 : 0.05);
         const v = this.ents.get(d.v);
-        if (v && v.alive && v.view && v !== e) { v.view.anim.play(nul || d.h ? 'launched' : 'stagger'); v.view.anim.hitStop(0.07); if (v === this.local) this.fx.shake(nul ? 0.4 : 0.15); }
+        if (v && v.alive && v.view && v !== e) { v.view.anim.play(nul || d.h ? 'launched' : 'stagger'); v.view.anim.hitStop(0.07); this.fx.hitSilhouette(v.view, nul ? [0.75, 0.85, 1.0] : [0.95, 0.05, 0.05], d.h ? 0.11 : 0.07); if (v === this.local) this.fx.shake(nul ? 0.4 : 0.15); }
         break;
       }
       case 'flashMark': {
@@ -381,6 +419,59 @@ export class Match {
       }
       case 'skySlam': { const c = new THREE.Vector3().fromArray(d.c); this.fx.skySlam(c); this.sound('slam', c, 1, 60); if (!local) this.fx.shake(Math.max(0, 0.4 - this.local.pos.distanceTo(c) * 0.02)); break; }
       case 'nullCast': { this.fx.nullCast((k, out) => e.view.weaponTip(out, k)); this.sound('slash', e.pos, 0.6, 25); break; }
+      // ---- Kine Slayer v2: thrown spear, whirlwind, world-cutting ultimate
+      case 'spearThrow': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3().fromArray(d.d).normalize();
+        if (e.view) e.view.setWeaponVisible(false);
+        if (e.spearFx) e.spearFx.dispose();
+        e.spearFx = this.fx.flyingSpear(o, dir, 48);
+        if (!local) this.sound('slash', o, 0.9, 30);
+        break;
+      }
+      case 'spearStick': { if (e.spearFx) e.spearFx.stick(new THREE.Vector3().fromArray(d.p)); this.sound('slashHit', tmpV.fromArray(d.p), 0.7, 30); break; }
+      case 'spearRecall': { if (e.spearFx) e.spearFx.recall(() => (e.view ? e.view.handWorld('R', new THREE.Vector3()) : e.pos.clone()), 58); this.sound('blink', tmpV.fromArray(d.p), 0.8, 30); break; }
+      case 'spearCatch': { if (e.spearFx) { e.spearFx.dispose(); e.spearFx = null; } if (e.view) e.view.setWeaponVisible(true); this.sound('slash', e.pos, 0.6, 20); break; }
+      case 'whirl': {
+        const n = Number(d.n) || 5, g = Number(d.g) || 0.2;
+        this.fx.whirlwind(() => e.pos, n, g);
+        this.sound('sever', e.pos, 0.7, 40);
+        break;
+      }
+      case 'severWind': {
+        const o = new THREE.Vector3().fromArray(d.o);
+        this.fx.severWind(o, 0.65);
+        this.sound('sever', o, 1, 70);
+        if (!local && e.view) e.view.anim.play('ksSever');
+        break;
+      }
+      // ---------------- the Manipulator
+      case 'knight': {
+        const a = new THREE.Vector3().fromArray(d.a), c = new THREE.Vector3().fromArray(d.c), b = new THREE.Vector3().fromArray(d.b);
+        this.fx.knightFork(a, c, b);
+        if (!local) { if (e.view) e.view.anim.play('leap', { dir: 0 }); this.sound('blink', a, 0.8, 30); }
+        setTimeout(() => this.sound('slam', b, 1, 45), 330);
+        break;
+      }
+      case 'rook': {
+        const c = new THREE.Vector3().fromArray(d.c), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).normalize();
+        this.fx.rookFile(c, dir, ROOK.len, ROOK.dur);
+        setTimeout(() => this.sound('slam', c, 1.1, 55), ROOK.drop * 1000);
+        break;
+      }
+      case 'queen': {
+        const c = new THREE.Vector3().fromArray(d.c);
+        this.fx.queenGambit(c, Number(d.yaw) || 0, QUEEN.len, QUEEN.delay);
+        setTimeout(() => this.sound('slashHeavy', c, 1, 55), QUEEN.delay * 1000);
+        break;
+      }
+      case 'checkmate': this._openCheckmate(e, d, local); break;
+      case 'severWave': {
+        const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
+        this.fx.severWave(o, dir, !!d.v, 40, 60, 10);
+        this.sound('slashHeavy', o, 1.3, 90);
+        if (o.distanceTo(this.local.pos) < 30 && e !== this.local) { this.fx.shake(0.4); this.app.hud.dashImpact(); }
+        break;
+      }
       case 'severStart': { const o = new THREE.Vector3().fromArray(d.o); this.fx.severStart(o); this.sound('sever', o, 1, 60); e.dashFx = 1.0; break; }
       case 'severCut': {
         const from = new THREE.Vector3().fromArray(d.f), to = new THREE.Vector3().fromArray(d.o), p = new THREE.Vector3().fromArray(d.p);
@@ -420,7 +511,13 @@ export class Match {
           const fx = Math.sin(yw), fz = Math.cos(yw);
           return out.set(p.x + fx * PURPLE.front + fz * side, p.y + PURPLE.height, p.z + fz * PURPLE.front - fx * side);
         };
-        this.fx.purpleCharge(at(PURPLE.spread), at(-PURPLE.spread), at(0), PURPLE.charge, PURPLE.orbsAt, PURPLE.formR);
+        // …but first they appear behind him, Red over his right shoulder, Blue over his left
+        const behind = (side) => (out) => {
+          const yw = e === this.local ? this.body.yaw : e.yaw, p = e === this.local ? this.body.pos : e.pos;
+          const fx = Math.sin(yw), fz = Math.cos(yw);
+          return out.set(p.x - fx * PURPLE.back + fz * side, p.y + PURPLE.backH, p.z - fz * PURPLE.back - fx * side);
+        };
+        this.fx.purpleCharge(at(PURPLE.spread), at(-PURPLE.spread), at(0), PURPLE.charge, PURPLE.orbsAt, PURPLE.formR, behind(PURPLE.backSpread), behind(-PURPLE.backSpread));
         this.sound('purpleCharge', e.pos, 1, 50);
         break;
       case 'purple': {
@@ -1036,6 +1133,14 @@ export class Match {
         break;
       }
       case 'hit': if (this.rules) this.rules.onHit(e, msg); break;
+      case 'needSpawn': {
+        // a client loaded in but never got (or lost) its spawn: catch it up and spawn it now
+        if (!this.rules || e === this.local || this.ended) break;
+        this._catchUp(e.id, e);
+        if (!e.alive && !this.rules.respawnAt.has(e.n)) this.rules.spawn(e);
+        else if (e.alive) this.net.send(e.id, { t: 'spawn', n: e.n, x: e.pos.x, y: e.pos.y, z: e.pos.z, yaw: e.yaw, quiet: 1 });
+        break;
+      }
       case 'chat': {
         const text = String(msg.msg || '').slice(0, 120);
         if (!text) return;
@@ -1059,6 +1164,7 @@ export class Match {
 
   // ---------------------------------------------------------------- client side (also runs on host)
   clientHandle(msg) {
+    this._hostQuiet = 0;
     if (!msg || typeof msg !== 'object') return;
     const hud = this.app.hud;
     switch (msg.t) {
@@ -1165,6 +1271,7 @@ export class Match {
         if (!msg.quiet) { e.view.anim.play('respawn'); this.fx.spawnPillar(e.pos); e.spawnProt = this.time + 1.5; }
         e.view.setVisible(true);
         if (e === this.local) {
+          this._spawned = true;
           this.body.teleport(msg.x, msg.y, msg.z, msg.yaw);
           this.cam.yaw = msg.yaw; this.cam.pitch = -0.08; this.cam.pivotY = null;
           this.kit.reset();
@@ -1229,6 +1336,158 @@ export class Match {
     V.sky.visible = vis[0]; V.dome.visible = vis[1];
     g.visible = false;
     this._warm = g;
+  }
+
+  // ---------------------------------------------------------------- Checkmate (the Manipulator)
+  // An 11 s cutscene every player watches: he rests his chin on his fist over a little board, the
+  // field turns into a giant chessboard, his white pieces rise round every enemy and close in, he
+  // moves one piece… their kings topple, and every one of them dies.
+  _openCheckmate(e, d, local) {
+    const c = new THREE.Vector3().fromArray(d.c), yaw = Number(d.yaw) || 0;
+    const f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), side = new THREE.Vector3(-f.z, 0, f.x);
+    if (this.cine) this._endCine(); // checkmate overrides anything else on screen
+    if (this._mate) this._mateCleanup();
+    const victims = [...this.ents.values()].filter((t) => t !== e && t.alive).sort((a, b) => a.pos.distanceToSquared(c) - b.pos.distanceToSquared(c));
+    const board = miniBoard(this.fx, new THREE.Vector3(c.x + f.x * 0.6, c.y + 1.0, c.z + f.z * 0.6), yaw);
+    this._mate = { c, f, side, yaw, caster: e, victims, pieces: [], kings: [], board, local, killed: false };
+    if (e.view) e.view.anim.play('mnChin');
+    this.cine = { t: 0, dur: CHECKMATE.dur, caster: e, c: c.clone(), o: c.clone(), f, side, cue: 0, local,
+      update: this._mateCineUpdate, camera: this._mateCineCamera, end: this._mateCineEnd };
+    this.app.hud.cineStart('CHECKMATE', 'mono');
+    this.sound('domainCast', c, 1, 120);
+  }
+  // his pieces rise round a victim (on the squares next to theirs), their king behind them
+  _mateSurround(v, k) {
+    const M = this._mate, SQ = 6, vp = v.pos;
+    const cx = Math.floor((vp.x - M.c.x) / SQ + 0.5) * SQ + M.c.x, cz = Math.floor((vp.z - M.c.z) / SQ + 0.5) * SQ + M.c.z;
+    const kinds = ['rook', 'bishop', 'knight', 'queen', 'rook', 'bishop'];
+    const offs = [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, -1]];
+    offs.forEach(([ox, oz], i) => {
+      const p = new THREE.Vector3(cx + ox * SQ, 0, cz + oz * SQ);
+      if (Math.hypot(p.x - M.c.x, p.z - M.c.z) < 4) return; // never on his own square
+      const toV = Math.atan2(vp.x - p.x, vp.z - p.z);
+      const H = this.fx.chessPiece(kinds[i], p, { white: true, h: 4.4 + (kinds[i] === 'queen' ? 0.8 : 0), mode: 'rise', t: 0.5 + i * 0.07, hold: Infinity, yaw: toV });
+      H.home = p; H.vp = vp;
+      M.pieces.push(H);
+    });
+    const away = new THREE.Vector3(vp.x - M.c.x, 0, vp.z - M.c.z).normalize();
+    const kp = new THREE.Vector3(vp.x + away.x * 2.6, 0, vp.z + away.z * 2.6);
+    const king = this.fx.chessPiece('king', kp, { white: false, h: 4.2, mode: 'rise', t: 0.6, hold: Infinity, yaw: Math.atan2(-away.x, -away.z) });
+    king.away = away; M.kings.push(king);
+    void k;
+  }
+  _mateCineUpdate(dt) {
+    const C = this.cine, M = this._mate, hud = this.app.hud;
+    C.t += dt;
+    const t = C.t;
+    this.chessWorld.update(dt);
+    const cues = [
+      [0.15, () => hud.cineSub('Everyone here is a piece on my board.')],
+      [1.75, () => hud.cineSub('')],
+      [1.9, () => { hud.flash(1); hud.cineGrade('mono'); this.chessWorld.start(M.c); M.victims.forEach((v, k) => this._mateSurround(v, k)); this.fx.shake(0.4); this.sound('domain', M.c, 1.3, 160); }],
+      [3.7, () => hud.cineSub('You were never playing against me.')],
+      [5.5, () => { hud.cineSub(''); for (const H of M.pieces) H.slideTo(H.vp.clone().add(H.home.clone().sub(H.vp).setY(0).setLength(3.4)), 0.8); this.sound('slam', M.c, 0.8, 200); }],
+      [6.35, () => { if (M.caster.view) M.caster.view.anim.play('mnPlace'); }],
+      [7.25, () => { hud.cineSub(''); hud.cineCard('CHECKMATE', '詰 み', 'mono'); this.sound('slashHeavy', M.c, 1, 200); }],
+      [7.9, () => { for (const K of M.kings) K.topple(K.away, 0.7); }],
+      [CHECKMATE.kill, () => this._mateKill()],
+      [9.6, () => { hud.cineSub(''); for (const H of [...M.pieces, ...M.kings]) H.sink(0.7); }],
+      [10.55, () => { hud.flash(0.9); this.chessWorld.end(); hud.cineGrade(''); for (const H of [...M.pieces, ...M.kings]) H.dispose(); M.pieces.length = M.kings.length = 0; }],
+    ];
+    while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
+    // on the little board, his white queen glides across to stand over their king
+    if (M.board && t > 6.75 && t < 7.3) {
+      // Qh4–e7 (three squares along the diagonal): checkmate
+      const k = Math.min(1, (t - 6.75) / 0.45), e = k * k * (3 - 2 * k), q = M.board.pcs.wq, S = M.board.S;
+      q.position.set((3.5 - (7 - 3 * e)) * S, 0.01 + Math.sin(k * Math.PI) * 0.06, ((3 + 3 * e) - 3.5) * S);
+    }
+    if (M.board && t > 7.3) M.board.pcs.glow.material.opacity = Math.min(0.85, (t - 7.3) * 3) * (0.75 + 0.25 * Math.sin(t * 10));
+    if (M.board && t > 7.9 && t < 8.6) { const k = Math.min(1, (t - 7.9) / 0.5); M.board.pcs.bk.rotation.z = k * k * Math.PI * 0.5; }
+    hud.cineDark(t < 1.9 ? 0.25 : t < 7.25 ? 0.12 : 0.3);
+    if (t >= C.dur) this._endCine();
+  }
+  // the end of the game: every victim is struck down where they stand (the caster resolves it)
+  _mateKill() {
+    const M = this._mate;
+    if (!M || M.killed) return;
+    M.killed = true;
+    this.app.hud.flash(1);
+    this.fx.shake(0.9);
+    for (const v of M.victims) {
+      if (!v.alive) continue;
+      const p = new THREE.Vector3(v.pos.x, v.pos.y + 1.2, v.pos.z);
+      this.fx.chessImpact(v.pos, 1.4, false);
+      this.fx.vortex(p, { size: 1.3, pal: { rim: [1.3, 1.3, 1.35], core: [0.85, 0.86, 0.9], deep: [0.04, 0.04, 0.05], star: [1.1, 1.15, 1.4] }, dur: 0.8, ribbons: 10, crack: false });
+      if (v.view) this.fx.hitSilhouette(v.view, [0.02, 0.02, 0.025], 0.6);
+      if (M.local) this.reportHit(v, 99999, 'checkmate', { at: p });
+    }
+    this.sound('slam', M.c, 1.4, 300);
+  }
+  _mateCineEnd() {
+    const M = this._mate;
+    if (M && !M.killed) this._mateKill(); // cut short: the game still ends
+    this._mateCleanup();
+    this.app.hud.cineGrade('');
+    for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;
+  }
+  _mateCleanup() {
+    const M = this._mate;
+    if (!M) return;
+    this.chessWorld.end();
+    for (const H of [...M.pieces, ...M.kings]) H.dispose();
+    if (M.board) M.board.dispose();
+    this._mate = null;
+  }
+  _mateCineCamera() {
+    const C = this.cine, M = this._mate, t = C.t, o = M.c, f = M.f, sd = M.side, cam = this.camera;
+    const P = tmpV, L = tmpV2;
+    const ease = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
+    const view = M.caster.view;
+    const head = view ? view.head.getWorldPosition(this._cv1 || (this._cv1 = new THREE.Vector3())) : this._cv1 || (this._cv1 = new THREE.Vector3(o.x, o.y + 1.6, o.z));
+    let fov = 40, roll = 0;
+    const vics = M.victims.filter((v) => v.view);
+    if (t < 1.9) { // across the little board, low, his chin on his fist (the reference shot)
+      const k = ease(t / 1.9), r = 2.05 - k * 0.3;
+      P.set(o.x + f.x * r + sd.x * 0.42, o.y + 1.3, o.z + f.z * r + sd.z * 0.42);
+      L.set(head.x, head.y - 0.18, head.z); fov = 34 - k * 4;
+    } else if (t < 3.7) { // the board spreads to the horizon: rising wide behind him
+      const k = ease((t - 1.9) / 1.8);
+      P.set(o.x - f.x * (4 + 6 * k) + sd.x * (2 + k), o.y + 2 + 9 * k, o.z - f.z * (4 + 6 * k) + sd.z * (2 + k));
+      L.set(o.x + f.x * 22, o.y + 1, o.z + f.z * 22); fov = 52; roll = -0.02;
+    } else if (t < 6.35 && vics.length) { // each victim, frozen, his pieces towering over them
+      const seg = (6.35 - 3.7) / Math.min(3, vics.length), i = Math.min(Math.floor((t - 3.7) / seg), Math.min(3, vics.length) - 1);
+      const v = vics[i], vp = v.pos, k = ease(((t - 3.7) - i * seg) / seg);
+      const to = new THREE.Vector3(o.x - vp.x, 0, o.z - vp.z).normalize();
+      const a = Math.atan2(to.x, to.z) + 0.6 - k * 0.5;
+      P.set(vp.x + Math.sin(a) * 3.2, vp.y + 0.5, vp.z + Math.cos(a) * 3.2);
+      L.set(vp.x, vp.y + 2.2, vp.z); fov = 50; roll = 0.03;
+    } else if (t < 6.35) { // nobody to fight: a slow orbit over the empty board
+      const a = Math.atan2(f.x, f.z) + (t - 3.7) * 0.4;
+      P.set(o.x + Math.sin(a) * 14, o.y + 7, o.z + Math.cos(a) * 14); L.set(o.x, o.y + 1, o.z); fov = 48;
+    } else if (t < 7.6) { // close on the little board: his hand moves the queen
+      const b = M.board.g.position, k = ease((t - 6.35) / 1.25);
+      // over his shoulder, from White's side: the whole board, Black's king on the far rank
+      P.set(b.x - f.x * (0.5 - k * 0.08) - sd.x * 0.32, b.y + 0.72 - k * 0.08, b.z - f.z * (0.5 - k * 0.08) - sd.z * 0.32);
+      L.set(b.x + f.x * 0.14, b.y, b.z + f.z * 0.14); fov = 44;
+    } else if (t < 9.6) { // high above the field: every king falls, every enemy falls with it
+      const k = ease((t - 7.6) / 2.0);
+      const cen = new THREE.Vector3(o.x, o.y, o.z);
+      for (const v of vics) cen.add(v.pos);
+      cen.divideScalar(vics.length + 1);
+      const spread = Math.max(16, ...vics.map((v) => Math.hypot(v.pos.x - cen.x, v.pos.z - cen.z) * 1.6));
+      P.set(cen.x - f.x * spread * 0.35, cen.y + spread * (1.05 - 0.15 * k), cen.z - f.z * spread * 0.35);
+      L.set(cen.x, cen.y, cen.z); fov = 50;
+    } else { // he turns away from the board as if nothing happened
+      const k = ease((t - 9.6) / 1.6);
+      const a = Math.atan2(f.x, f.z) + 1.2 + k * 0.5;
+      P.set(o.x + Math.sin(a) * 2.4, o.y + 1.5, o.z + Math.cos(a) * 2.4);
+      L.set(head.x, head.y - 0.1, head.z); fov = 36;
+    }
+    P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 20) + 0.3);
+    cam.position.copy(P); cam.lookAt(L);
+    if (roll) cam.rotateZ(roll);
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    return L;
   }
 
   // ---------------------------------------------------------------- Domain Expansion: Unlimited Void
@@ -1376,6 +1635,7 @@ export class Match {
   update(dt) {
     const app = this.app, input = app.input;
     this.time += dt;
+    if (!this.isHost) this._joinWatchdog(dt);
     if (this.phaseEnd) this.timeLeft = Math.max(0, this.phaseEnd - this.time);
     const st = input.poll();
     const [dx, dy] = input.consumeLook();
@@ -1569,6 +1829,7 @@ export class Match {
   sendChat(text) { this.sendToHost({ t: 'chat', msg: text }); }
 
   dispose() {
+    for (const e of this.ents.values()) if (e.spearFx) { e.spearFx.dispose(); e.spearFx = null; }
     if (this.cine) this._endCine();
     for (const off of this._offs || []) off();
     for (const ar of this.areas) if (ar.kind === 'wall') Audio.stopLoop('wall' + ar.id);
@@ -1577,10 +1838,13 @@ export class Match {
     applyBalance(null);
     this.fx.dispose();
     if (this.voidFx) this.voidFx.dispose();
+    if (this.chessWorld) this.chessWorld.dispose();
+    if (this._mate) this._mateCleanup();
     this.proj.clear();
     // the map is shared with the lobby: only remove what the match added
     for (const e of this.ents.values()) {
       this.scene.remove(e.view.root);
+      if (e.view.silhouette) e.view.silhouette(null);
       for (const mesh of e.view.meshes) mesh.material.dispose();
     }
     for (const g of this.ghosts || []) { this.scene.remove(g.inst.root); g.mat.dispose(); }

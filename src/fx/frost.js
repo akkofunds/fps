@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Fx } from './fire.js';
+import { GLOSS } from './glossy.js';
 
 // Shoto's ice + fire VFX: crystalline ice spikes (erupting along a path or flooding an area),
 // ice blocks that encase frozen enemies, ice shrapnel, a sweeping heatwave, the Hellfire Lance
@@ -212,6 +213,8 @@ Object.assign(Fx.prototype, {
     if (R() < 0.5) this.smoke.emit(p.x, p.y + 0.1, p.z, -ux, 0.4, -uz, 0.7, 0.4, 1.2, [0.85, 0.93, 1, 0.35], [0.9, 0.95, 1, 0], 1, 0);
   },
   uppercutBurst(c) {
+    this.ribbonCombo(new THREE.Vector3(c.x, c.y - 1, c.z), new THREE.Vector3(R() - 0.5, 0, R() - 0.5), 'u', GLOSS.ice, 1.2);
+    this.starBurst(c, 3, 0.45, GLOSS.ice, 1.2);
     for (let i = 0; i < 40; i++) { const a = R() * 6.283, sp = 2 + R() * 4; this.fire.emit(c.x, c.y - 0.4, c.z, Math.cos(a) * sp, 8 + R() * 8, Math.sin(a) * sp, 0.4 + R() * 0.3, 0.8, 0.15, i % 2 ? (R() < 0.3 ? WHITE : FLAME) : ICE, i % 2 ? DARK : CLEAR, 2, i % 2 ? 1 : -8); }
     this.fire.emit(c.x, c.y, c.z, 0, 0, 0, 0.12, 2.4, 3, WHITE, FLAME, 0, 0);
     this.ring(c, 2.6, 0.3, new THREE.Color(3, 2.2, 1.6));
@@ -220,6 +223,8 @@ Object.assign(Fx.prototype, {
 
   // ---------------------------------------------------------------- Absolute Zero-Burn
   zeroBurn(o, radius, freezeAt, boomAt, onFreeze, onBoom) {
+    setTimeout(() => this.vortex(new THREE.Vector3(o.x, o.y + 1.2, o.z), { size: 1.6, pal: GLOSS.ice, dur: Math.max(0.6, boomAt - freezeAt), ribbons: 12, crack: false }), freezeAt * 1000);
+    setTimeout(() => { this.vortex(new THREE.Vector3(o.x, o.y + 1.5, o.z), { size: 2.6, pal: GLOSS.fire, dur: 0.9, ribbons: 16 }); this.liquidSlash(new THREE.Vector3(o.x, o.y + 1, o.z), new THREE.Vector3(0, 0, 1), radius * 0.35, GLOSS.fire, 0.05); }, boomAt * 1000);
     const g = new THREE.Group(); this.scene.add(g);
     const spikes = [];
     // the glacier: rings of spikes racing outward, tallest near Shoto

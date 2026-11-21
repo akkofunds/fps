@@ -4,10 +4,10 @@ import { VOID } from './sorcerer.js';
 
 // HOST-ONLY authority: phases, HP, burning, kills, respawns, scoring, practice dummies.
 // Every state change is broadcast to clients and applied locally through Match.clientHandle.
-const MAX_HIT = { novaFrag: 20, novaShock: 24, novaBurn: 8, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 54, freeze: 14, heatwave: 40, lance: 62, uppercut: 30, zero: 18, zeroBoom: 100, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 24, sparkBig: 30, starfall: 16, sigil: 80, blink: 32, nova: 100, flick: 26, blue: 18, red: 38, redSplash: 22, purple: 68, void: 10, m1: 12, m1f: 16, flash: 26, slam: 36, nullify: 42, sever: 14, severFin: 42 };
+const MAX_HIT = { novaFrag: 20, novaShock: 24, novaBurn: 8, bolt: 30, orb: 45, wall: 10, leap: 30, meteor: 100, kick: 40, blast: 40, shard: 30, ray: 54, freeze: 14, heatwave: 40, lance: 62, uppercut: 30, zero: 18, zeroBoom: 100, ember: 14, igniteBoom: 34, step: 36, adolla: 130, trail: 10, adollaPath: 12, spark: 24, sparkBig: 30, starfall: 16, sigil: 80, blink: 32, nova: 100, flick: 26, blue: 18, red: 38, redSplash: 22, purple: 68, void: 10, m1: 12, m1f: 16, flash: 26, slam: 36, nullify: 42, sever: 14, severFin: 42, spearThrow: 28, spearRecall: 16, whirl: 9, severWave: 58, severWave2: 40, knight: 26, rookSlam: 20, rook: 26, queen: 32, checkmate: 100000 };
 // every piece of an ultimate (blast, fragments, shockwave, burning crater, freeze) adds up to at
 // most this share of max HP per victim: ultimates hit hard but never kill from full health
-const ULT_ABS = new Set(['nova', 'novaFrag', 'novaShock', 'novaBurn', 'zero', 'zeroBoom', 'adolla', 'adollaPath', 'meteor', 'void', 'sever', 'severFin']);
+const ULT_ABS = new Set(['nova', 'novaFrag', 'novaShock', 'novaBurn', 'zero', 'zeroBoom', 'adolla', 'adollaPath', 'meteor', 'void', 'sever', 'severFin', 'severWave', 'severWave2']);
 const ULT_CAP = 0.5, ULT_WINDOW = 14;
 const STUN_CHAIN = 2.2, STUN_IMMUNE = 1.6, STUN_RESET = 0.6;
 
@@ -113,9 +113,12 @@ export class Rules {
     if (this.phase !== 'live' && this.phase !== 'queue') return;
     const v = this.m.ents.get(msg.v);
     if (!v || !v.alive || v === from) return;
-    if (v.spawnProt && this.m.time < v.spawnProt) return;
     const cap = MAX_HIT[msg.ab];
     if (!cap) return;
+    // Checkmate (the Manipulator's ultimate) ends the game for everyone, spawn shield or not —
+    // and only the Manipulator can play it
+    if (msg.ab === 'checkmate' && from.mage !== 'manipulator') return;
+    if (v.spawnProt && this.m.time < v.spawnProt && msg.ab !== 'checkmate') return;
     if (BAL.godMode && this.m.cfg.mode === 'practice' && v.isLocal) return;
     let dmg = Math.max(0, Math.round(Math.min(cap, Number(msg.dmg) || 0) * BAL.dmg));
     // Unlimited Void: enemies trapped in the Sorcerer's domain hit 40% softer
@@ -163,7 +166,7 @@ export class Rules {
     st.chain += ext;
     st.until = Math.max(st.until, now) + ext;
     const left = st.until - now;
-    const finisher = /^(m1f|severFin|slam)$/.test(msg.ab) || (Array.isArray(msg.kb) && Number(msg.kb[1]) >= 6);
+    const finisher = /^(m1f|severFin|severWave2|slam)$/.test(msg.ab) || (Array.isArray(msg.kb) && Number(msg.kb[1]) >= 6);
     if (st.chain >= STUN_CHAIN - 0.02 || finisher) {
       st.imm = st.until + STUN_IMMUNE;
       this.bcast({ t: 'stunImm', n: v.n, s: left + STUN_IMMUNE });

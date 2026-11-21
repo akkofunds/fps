@@ -29,7 +29,8 @@ export class SessionController extends Emitter {
 
   // ---------------- matchmaking (FFA quickplay / Duel)
   async startQueue(modeId = 'ffa', retry = false) {
-    if (this.busy) return;
+    // a stale half-finished state (a timed-out join, a lost host) must never make PLAY do nothing
+    if (this.busy) { if (this.app.match) return; this.cancel(true); }
     const pm = this.pm;
     const mode = modeId === 'duel' ? 'duel' : 'ffa', M = MODES[mode];
     if (!retry) this._skip = new Set(); // queue slots that turned us away (full)
@@ -54,7 +55,7 @@ export class SessionController extends Emitter {
       if (this._skip.has(s)) continue;
       this._slot = s;
       const id = mmId(mode, s);
-      const res = await pm.connectMatch(id, { ...this.hello(), mode, q: true }, 3500);
+      const res = await pm.connectMatch(id, { ...this.hello(), mode, q: true }, 8000);   // WebRTC setup can be slow: don't give up and split the lobby
       if (token !== this.token) { if (res) res.conn.close(); return; }
       if (res) { this._clientQueue(res.conn, token); return; }
       const peer = await pm.claimId(id, 4000);

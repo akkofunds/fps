@@ -72,6 +72,7 @@ function fadeTail(g, span) {
   g.globalCompositeOperation = 'source-over';
 }
 void smooth;
+export function slashTex(kind) { return tex(kind); }
 function tex(kind) {
   if (TEX[kind]) return TEX[kind];
   const c = { blade: () => bladeTex(3.6, 0.26, 3), thin: () => bladeTex(3.9, 0.07, 2), shade: () => bladeTex(3.4, 0.34, 0), trail: () => trailTex(3.8) }[kind]();

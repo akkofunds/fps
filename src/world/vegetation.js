@@ -123,8 +123,9 @@ export function buildGrass(count, avoid, Q = {}) {
   const CH = 14; // small chunks → tight frustum + distance culling
   const chunks = new Map();
   const rnd = mulberry32(42);
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), nrm = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), qy = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), nrm = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   let placed = 0, tries = 0;
+  // per chunk: flat number lists (16 matrix + 3 colour per blade) — no per-blade objects
   while (placed < count && tries < count * 4) {
     tries++;
     const a = rnd() * Math.PI * 2, rr = Math.sqrt(rnd()) * R;
@@ -134,21 +135,26 @@ export function buildGrass(count, avoid, Q = {}) {
     const h = groundH(x, z);
     groundNormal(x, z, nrm);
     if (nrm.y < 0.72) continue;
-    const key = Math.floor(x / CH) + ',' + Math.floor(z / CH);
+    const key = (Math.floor(x / CH) + 512) * 1024 + Math.floor(z / CH) + 512;
     let ch = chunks.get(key); if (!ch) chunks.set(key, ch = []);
     const tall = 0.42 + rnd() * 0.32 + 0.25 * smoothstep(0, 0.7, N.fbm(x / 14, z / 14, 2));
-    q.setFromUnitVectors(up, nrm.lerp(up, 0.6).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(up, rnd() * Math.PI * 2));
+    q.setFromUnitVectors(up, nrm.lerp(up, 0.6).normalize()).multiply(qy.setFromAxisAngle(up, rnd() * Math.PI * 2));
     s.set(0.9 + rnd() * 0.5, tall * (0.85 + d * 0.15), 0.9 + rnd() * 0.5);
     p.set(x, h - 0.02, z);
     m4.compose(p, q, s);
     grassColorAt(x, z, c);
     c.offsetHSL((rnd() - 0.5) * 0.03, (rnd() - 0.5) * 0.1, (rnd() - 0.5) * 0.08);
-    ch.push([m4.clone(), c.clone()]);
+    const e = m4.elements;
+    for (let k = 0; k < 16; k++) ch.push(e[k]);
+    ch.push(c.r, c.g, c.b);
     placed++;
   }
   for (const list of chunks.values()) {
-    const im = new THREE.InstancedMesh(geo, mat, list.length);
-    list.forEach(([mm, cc], i) => { im.setMatrixAt(i, mm); im.setColorAt(i, cc); });
+    const n = list.length / 19;
+    const im = new THREE.InstancedMesh(geo, mat, n);
+    const M = im.instanceMatrix.array, C = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const o = i * 19; for (let k = 0; k < 16; k++) M[i * 16 + k] = list[o + k]; C[i * 3] = list[o + 16]; C[i * 3 + 1] = list[o + 17]; C[i * 3 + 2] = list[o + 18]; }
+    im.instanceColor = new THREE.InstancedBufferAttribute(C, 3);
     im.instanceMatrix.needsUpdate = true;
     im.computeBoundingSphere();
     im.boundingSphere.radius += 1;

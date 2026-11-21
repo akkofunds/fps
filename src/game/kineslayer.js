@@ -4,26 +4,25 @@ import { ULT_COST } from '../config.js';
 import { MeleeCombo } from './melee.js';
 
 // KINE SLAYER: no cursed energy at all. Heavenly Restriction traded it for a body that outruns
-// sorcery, and the Inverted Spear of Heaven cuts through any technique. Pure movement and offense:
-// no shields, no heals.
-//   Passive Heavenly Restriction · LMB Spear Strikes · E Flash Step · C Skyfall
-//   V Inverted Spear · X Heavenly Severance (admin-only character)
+// sorcery, and the Inverted Spear of Heaven cuts through any technique. No shields, no heals.
+//   Passive Heavenly Restriction · LMB Spear Strikes · E Spear Throw / Recall · C Skyfall
+//   V Severing Whirlwind · X Heavenly Severance
 export const KINE = {
   id: 'kineslayer',
   name: 'KINE SLAYER',
   role: 'SORCERER KILLER',
   model: 'models/kineslayer.glb',
   color: '#d5dbe3',
-  // Heavenly Restriction: runs faster, a third jump in the air, three dash charges that refill faster
-  perk: { speed: 1.08, airJumps: 2, dashMax: 3, dashRate: 1.1 },
-  bio: 'Born with zero cursed energy, he was paid back in flesh: a body so fast, strong and sharp-sensed that sorcerers never see him coming. He carries the Inverted Spear of Heaven, a blade that cancels any technique it touches, and he never stops moving.',
+  // Heavenly Restriction: a little faster than anyone, a third jump in the air
+  perk: { speed: 1.03, airJumps: 2, dashMax: 2, dashRate: 0.9 },
+  bio: 'Born with zero cursed energy, he was paid back in flesh: a body so fast, strong and sharp-sensed that sorcerers never see him coming. He carries the Inverted Spear of Heaven, a blade that cancels any technique it touches.',
   abilities: [
     { key: 'LMB', id: 'm1', name: 'Spear Strikes', desc: 'M1: a 4-hit string with the Inverted Spear: forehand slash, backhand slash, rising cut, then a lunging thrust that launches. Longer reach than fists, every hit stuns, and each swing steps you in if they are right in front of you.' },
-    { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 8% faster, have THREE dash charges, and can jump twice in the air. Burst in the direction you are moving with Q.' },
-    { key: 'E', id: 'flash', name: 'Flash Step', cd: 7, desc: 'Move faster than the eye can follow: blink 12 m toward your crosshair. Everyone you pass through only realises they were cut a beat later (24 damage, a short stun).' },
-    { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 9, desc: 'Launch yourself high into the air, then dive spear-first onto the spot you aim at: the impact hits everyone around it (34 damage), stuns them and throws them up.' },
-    { key: 'V', id: 'nullify', name: 'Inverted Spear', cd: 12, desc: 'A lunging thrust with the Inverted Spear of Heaven (28 damage) that nullifies the first enemy it pierces, cancelling whatever ability they were winding up, then a spinning backhand rips it out (12 more, launches).' },
-    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Lock onto the enemy under your crosshair (up to 16 m) and vanish. Six cuts from six sides, faster than the eye can follow, a frozen beat… then every cut lands at once and launches them (94 damage in total). You end back where you started. No target in reach: a long severing dash.' },
+    { key: 'Q', id: 'dash', name: 'Heavenly Restriction', desc: 'Passive: you move 3% faster and can jump twice in the air. Burst in the direction you are moving with Q (2 charges).' },
+    { key: 'E', id: 'throw', name: 'Spear Throw', cd: 9, desc: 'Hurl the Inverted Spear at your crosshair (24 damage). The enemy it pierces has their technique nullified, cancelling whatever they were winding up. Press E again (or wait) and it rips back to your hand, cutting everyone on its way (14) and dragging the first one toward you. No spear, no M1 until it is back.' },
+    { key: 'C', id: 'skyfall', name: 'Skyfall', cd: 11, desc: 'Launch yourself high into the air, then dive spear-first onto the spot you aim at: the impact hits everyone around it (30 damage), stuns them and throws them up.' },
+    { key: 'V', id: 'whirl', name: 'Severing Whirlwind', cd: 11, desc: 'Plant your feet and spin the spear round yourself: five rings of red cuts (6 each) that drag everyone close into the blades. You can still creep around while spinning.' },
+    { key: 'X', id: 'sever', name: 'Heavenly Severance', ult: true, cost: ULT_COST, desc: 'ULTIMATE — Sink low while the air goes red, then cut the world twice: a giant horizontal crescent and a giant vertical one rip across the field in front of you, 40 m long, through everyone in their way (52 + 36 damage).' },
   ],
 };
 
@@ -36,13 +35,12 @@ export const SPEAR_M1 = {
   ],
   gap: 0.3, window: 1.0, endlag: 0.85, range: 3.1, cone: 0.4, seek: 3.3, seekCone: 0.82, stop: 1.75, lungeMax: 11,
 };
-export const FLASH = { dist: 12, time: 0.2, hitR: 1.6, dmg: 24, stun: 0.35 };
-export const SKYFALL = { up: 15, fwd: 7, apex: 0.5, range: 18, dive: 40, radius: 3.8, dmg: 34, stun: 0.6 };
-export const NULLIFY = { charge: 0.12, dist: 8, time: 0.18, hitR: 1.5, dmg: 28, follow: 12, stun: 0.6 };
-export const SEVER = { range: 16, cone: 0.93, cuts: 6, gap: 0.13, cutDmg: 9, finDmg: 40, radius: 2.6, stun: 0.7, hold: 0.32, missDist: 16, missDmg: 40 };
-export const FLASH_REVEAL = 0.24; // the cut lands a beat after he has already passed
+export const THROW = { speed: 48, range: 34, hitR: 0.9, dmg: 24, stun: 0.35, recallSpeed: 58, recallDmg: 14, recallR: 1.3, pull: 9, auto: 4, windup: 0.2 };
+export const SKYFALL = { up: 15, fwd: 7, apex: 0.5, range: 18, dive: 40, radius: 3.6, dmg: 30, stun: 0.55 };
+export const WHIRL = { ticks: 5, gap: 0.2, radius: 3.4, dmg: 6, pull: 4, slow: 0.4 };
+export const SEVER = { wind: 0.65, gap: 0.38, len: 40, speed: 60, width: 10, dmg1: 52, dmg2: 36, stun: 0.6 };
 
-const COOLDOWN = { flash: 7, skyfall: 9, nullify: 12 };
+const COOLDOWN = { throw: 9, skyfall: 11, whirl: 11 };
 const cdOf = (base) => (BAL.noCooldowns ? 0 : base * BAL.cd);
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
@@ -50,19 +48,20 @@ export class KineSlayerKit {
   constructor(match) {
     this.m = match;
     this.def = KINE;
-    this.cd = { flash: 0, skyfall: 0, nullify: 0 };
+    this.cd = { throw: 0, skyfall: 0, whirl: 0 };
     this.max = { ...COOLDOWN };
     this.ult = 0;
     this.pending = [];
     this.busy = 0;
     this.ultReadyAnnounced = false;
     this.melee = new MeleeCombo(this, 'spear', SPEAR_M1);
-    this.sweep = null; // an active cutting dash: { kind, t, from, dir, hit:Set }
-    this.sky = null;   // Skyfall state
+    this.sky = null;    // Skyfall state
+    this.spear = null;  // the thrown spear: { st: 'fly' | 'stuck' | 'back', p, d, t, hit }
+    this.waves = [];    // Heavenly Severance crescents in flight
   }
 
-  reset() { if (this._severEnd) this._severEnd(); for (const k in this.cd) this.cd[k] = 0; this.pending.length = 0; this.busy = 0; this.sweep = null; this.sky = null; }
-  slots() { return [['flash', 'E'], ['skyfall', 'C'], ['nullify', 'V'], ['sever', 'X']]; }
+  reset() { for (const k in this.cd) this.cd[k] = 0; this.pending.length = 0; this.busy = 0; this.sky = null; if (this.spear) this._catch(); this.waves.length = 0; }
+  slots() { return [['throw', 'E'], ['skyfall', 'C'], ['whirl', 'V'], ['sever', 'X']]; }
   addUlt(v) {
     this.ult = Math.min(ULT_COST, this.ult + v);
     if (this.ult >= ULT_COST && !this.ultReadyAnnounced) { this.ultReadyAnnounced = true; this.m.onUltReady(); }
@@ -70,7 +69,7 @@ export class KineSlayerKit {
 
   update(dt, input) {
     const m = this.m;
-    for (const k in this.cd) this.cd[k] = Math.max(0, this.cd[k] - dt);
+    for (const k in this.cd) if (!(k === 'throw' && this.spear)) this.cd[k] = Math.max(0, this.cd[k] - dt);
     this.busy = Math.max(0, this.busy - dt);
     this.addUlt(dt * 0.35 * BAL.ult);
     if (BAL.infiniteUlt || ADMIN.ult) this.ult = Math.max(this.ult, 100);
@@ -79,19 +78,19 @@ export class KineSlayerKit {
       p.t -= dt;
       if (p.t <= 0) { this.pending.splice(i, 1); if (m.local.alive) p.fn(); }
     }
-    if (this.sweep) this._sweepTick(dt);
-    if (this._severEnd) { this.severT -= dt; if (this.severT <= 0 || !m.local.alive) this._severEnd(); }
+    if (this.spear) this._spearTick(dt);
+    if (this.waves.length) this._waveTick(dt);
     if (this.sky) this._skyTick(dt);
     if (!m.local.alive || !m.controlsActive) return;
     const pr = input.pressed;
     const buf = this.buf || (this.buf = { e: 0, c: 0, v: 0, x: 0 });
     for (const k in buf) buf[k] = pr[k] ? 0.4 : Math.max(0, buf[k] - dt);
     const go = (k, fn) => { if (buf[k] > 0 && this.busy <= 0) { buf[k] = 0; fn(); } };
-    go('e', () => this.flash());
+    go('e', () => (this.spear ? this._recall() : this.throwSpear()));
     go('c', () => this.skyfall());
-    go('v', () => this.nullify());
+    go('v', () => this.whirl());
     go('x', () => this.sever());
-    if (!this.sky) this.melee.update(dt, input);
+    if (!this.sky && !this.spear) this.melee.update(dt, input);
   }
 
   _ready(id) {
@@ -101,83 +100,89 @@ export class KineSlayerKit {
   }
   _flatAim(out) { const y = this.m.cam.yaw; return out.set(Math.sin(y), 0, Math.cos(y)); }
   _enemies() { const m = this.m; return [...m.ents.values()].filter((e) => e !== m.local && e.alive); }
-
-  // a cutting dash along `dir`: everyone within hitR of the path is cut once
-  _startSweep(kind, dir, speed, time, opts = {}) {
-    const m = this.m, b = m.body;
-    const o = b.pos;
-    const free = m.world.raycast(o.x, o.y + 0.9, o.z, dir.x, 0, dir.z, speed * time, 0.3);
-    const t = Math.max(0.06, Math.min(time, free / speed));
-    b.lunge(dir, speed, t);
-    this.sweep = { kind, t, from: o.clone(), dir: dir.clone(), hit: new Set(), first: opts.first, onEnd: opts.onEnd };
-    return speed * t;
+  _aimDir(o, out) {
+    out.copy(this.m.aimPoint).sub(o);
+    const d = out.length();
+    if (d < 2) out.copy(this.m.cam.fwd); else out.divideScalar(d);
+    return out;
   }
-  _sweepTick(dt) {
-    const m = this.m, b = m.body, S = this.sweep;
-    S.t -= dt;
-    const a = S.from, p = b.pos;
-    const R = S.kind === 'nullify' ? NULLIFY.hitR : FLASH.hitR;
-    for (const e of this._enemies()) {
-      if (S.hit.has(e.n)) continue;
-      if (S.kind === 'nullify' && S.hit.size) break;
-      // distance from the enemy to the path covered so far (flat), plus a little ahead
-      const abx = p.x - a.x + S.dir.x * 0.8, abz = p.z - a.z + S.dir.z * 0.8, l2 = abx * abx + abz * abz || 1e-6;
-      const u = Math.max(0, Math.min(1, ((e.pos.x - a.x) * abx + (e.pos.z - a.z) * abz) / l2));
-      const dx = e.pos.x - (a.x + abx * u), dz = e.pos.z - (a.z + abz * u);
-      if (dx * dx + dz * dz > R * R || Math.abs(e.pos.y - p.y) > 2) continue;
-      S.hit.add(e.n);
-      const at = new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z);
-      if (S.kind === 'flash') {
-        // nothing happens yet: they only realise they were cut once he is already past them
-        const dir = [S.dir.x, S.dir.z];
-        m.castAbility({ ab: 'flashMark', p: at.toArray(), d: dir, v: e.n });
-        this.pending.push({ t: FLASH_REVEAL, fn: () => {
-          if (!e.alive) return;
-          const at2 = new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z);
-          m.reportHit(e, FLASH.dmg, 'flash', { stun: FLASH.stun, kb: [dir[0] * 4, 3, dir[1] * 4], at: at2 });
-          m.castAbility({ ab: 'flashReveal', p: at2.toArray(), d: dir, v: e.n });
-          m.fx.shake(0.18); m.view.anim.hitStop(0.06);
-        } });
-      } else if (S.kind === 'nullify') {
-        m.reportHit(e, NULLIFY.dmg, 'nullify', { stun: NULLIFY.stun, nul: 1, kb: [S.dir.x * 1.5, 0.5, S.dir.z * 1.5], at });
-        m.castAbility({ ab: 'nullHit', p: at.toArray(), d: [S.dir.x, S.dir.z], v: e.n });
-        // the thrust stops in them… then he rips the spear out in a spinning backhand
-        b.lungeT = 0; b.vel.x *= 0.1; b.vel.z *= 0.1; S.t = 0;
-        m.fx.shake(0.35); m.cam.kick += 0.04;
-        const dir = [S.dir.x, S.dir.z];
-        this.busy = Math.max(this.busy, 0.6);
-        this.pending.push({ t: 0.2, fn: () => {
-          m.playAnim('ksB');
-          m.castAbility({ ab: 'm1', i: 1, s: 'spear', o: b.pos.toArray(), d: dir });
-          m.sound('slash', b.pos, 0.8, 25);
-        } });
-        this.pending.push({ t: 0.28, fn: () => {
-          if (!e.alive) return;
-          const at2 = new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z);
-          m.reportHit(e, NULLIFY.follow, 'nullify', { stun: 0.4, kb: [dir[0] * 12, 6, dir[1] * 12], at: at2 });
-          m.castAbility({ ab: 'ksHit', p: at2.toArray(), d: dir, h: 1, v: e.n });
-          m.fx.shake(0.3);
-        } });
-      } else if (S.kind === 'severMiss') {
-        m.reportHit(e, SEVER.missDmg, 'severFin', { stun: SEVER.stun, kb: [S.dir.x * 10, 5, S.dir.z * 10], at });
-        m.castAbility({ ab: 'ksHit', p: at.toArray(), d: [S.dir.x, S.dir.z], h: 1, v: e.n });
+
+  // ---------------------------------------------------------------- E: Spear Throw / Recall
+  throwSpear() {
+    if (!this._ready('throw')) return;
+    const m = this.m, b = m.body;
+    this.busy = THROW.windup + 0.15;
+    m.playAnim('cast', { anim: 'ksThrow' });
+    this.pending.push({ t: THROW.windup, fn: () => {
+      const o = m.view.handWorld('R', new THREE.Vector3()).add(new THREE.Vector3(0, 0.15, 0));
+      const d = this._aimDir(o, new THREE.Vector3());
+      this.spear = { st: 'fly', p: o.clone(), d: d.clone(), t: 0, dist: 0, hit: new Set() };
+      m.castAbility({ ab: 'spearThrow', o: o.toArray(), d: d.toArray() });
+      m.sound('slash', o, 1, 30);
+      m.cam.kick += 0.02;
+    } });
+  }
+  _spearTick(dt) {
+    const m = this.m, S = this.spear;
+    S.t += dt;
+    if (S.st === 'fly') {
+      const step = THROW.speed * dt;
+      const free = m.world.raycast(S.p.x, S.p.y, S.p.z, S.d.x, S.d.y, S.d.z, step, 0);
+      const adv = Math.min(step, free);
+      const a = S.p.clone();
+      S.p.addScaledVector(S.d, adv); S.dist += adv;
+      // pierce the first enemy on the segment travelled this frame
+      for (const e of this._enemies()) {
+        const c = tmp.set(e.pos.x, e.pos.y + 1.0, e.pos.z);
+        const ab = tmp2.subVectors(S.p, a), t = Math.max(0, Math.min(1, c.clone().sub(a).dot(ab) / Math.max(1e-6, ab.lengthSq())));
+        if (c.distanceTo(a.clone().addScaledVector(ab, t)) > THROW.hitR) continue;
+        m.reportHit(e, THROW.dmg, 'spearThrow', { stun: THROW.stun, nul: 1, kb: [S.d.x * 4, 2, S.d.z * 4], at: c.clone() });
+        m.castAbility({ ab: 'nullHit', p: [c.x, c.y, c.z], d: [S.d.x, S.d.z], v: e.n });
+        S.hit.add(e.n);
+        this._stick(c.clone().addScaledVector(S.d, 0.5));
+        return;
+      }
+      if (adv < step - 1e-3 || S.dist >= THROW.range) this._stick(S.p.clone());
+    } else if (S.st === 'stuck') {
+      if (S.t >= THROW.auto) this._recall();
+    } else if (S.st === 'back') {
+      const hand = m.view.handWorld('R', new THREE.Vector3());
+      const to = hand.clone().sub(S.p), d = to.length();
+      const step = THROW.recallSpeed * dt;
+      const a = S.p.clone();
+      if (d <= step + 0.3) { this._catch(); return; }
+      S.p.addScaledVector(to.divideScalar(d), step);
+      // the way back cuts everyone in the line and drags the first one in
+      for (const e of this._enemies()) {
+        if (S.hit.has('r' + e.n)) continue;
+        const c = tmp.set(e.pos.x, e.pos.y + 1.0, e.pos.z);
+        const ab = tmp2.subVectors(S.p, a), t = Math.max(0, Math.min(1, c.clone().sub(a).dot(ab) / Math.max(1e-6, ab.lengthSq())));
+        if (c.distanceTo(a.clone().addScaledVector(ab, t)) > THROW.recallR) continue;
+        S.hit.add('r' + e.n);
+        const pull = S.pulled ? 0 : THROW.pull; S.pulled = true;
+        const dx = hand.x - e.pos.x, dz = hand.z - e.pos.z, dl = Math.hypot(dx, dz) || 1;
+        m.reportHit(e, THROW.recallDmg, 'spearRecall', { stun: 0.3, kb: [dx / dl * pull, 3, dz / dl * pull], at: c.clone() });
+        m.castAbility({ ab: 'ksHit', p: [c.x, c.y, c.z], d: [dx / dl, dz / dl], h: 0, v: e.n });
       }
     }
-    if (S.t <= 0) { this.sweep = null; if (S.onEnd) S.onEnd(); }
   }
-
-  // ---------------------------------------------------------------- E: Flash Step
-  flash() {
-    if (!this._ready('flash')) return;
-    const m = this.m, b = m.body;
-    this.cd.flash = cdOf(COOLDOWN.flash); this.busy = FLASH.time + 0.08;
-    const dir = this._flatAim(tmp);
-    m.playAnim('ksFlash');
-    const o = b.pos.clone();
-    const len = this._startSweep('flash', dir, FLASH.dist / FLASH.time, FLASH.time);
-    b.vel.y = Math.max(b.vel.y, 0);
-    m.castAbility({ ab: 'flash', o: o.toArray(), d: [dir.x, dir.z], l: Math.round(len * 100) / 100 });
-    m.sound('blink', o, 0.9, 30);
+  _stick(p) {
+    const S = this.spear;
+    S.st = 'stuck'; S.t = 0; S.p.copy(p);
+    this.m.castAbility({ ab: 'spearStick', p: p.toArray() });
+  }
+  _recall(silent) {
+    const S = this.spear;
+    if (!S || S.st === 'back') return;
+    if (S.st === 'fly') this._stick(S.p.clone());
+    S.st = 'back'; S.t = 0;
+    this.m.castAbility({ ab: 'spearRecall', p: S.p.toArray() });
+    if (!silent) this.m.playAnim('cast', { anim: 'ksCatch' });
+  }
+  _catch() {
+    this.spear = null;
+    this.cd.throw = cdOf(COOLDOWN.throw);
+    this.m.castAbility({ ab: 'spearCatch' });
   }
 
   // ---------------------------------------------------------------- C: Skyfall
@@ -185,6 +190,7 @@ export class KineSlayerKit {
     if (!this._ready('skyfall')) return;
     const m = this.m, b = m.body;
     this.cd.skyfall = cdOf(COOLDOWN.skyfall); this.busy = 0.3;
+    if (this.spear) this._recall(true);
     const f = this._flatAim(tmp);
     b.vel.set(f.x * SKYFALL.fwd, SKYFALL.up, f.z * SKYFALL.fwd);
     b.grounded = false; b.dashT = 0; b.lungeT = 0;
@@ -242,20 +248,29 @@ export class KineSlayerKit {
     m.fx.shake(0.5); m.cam.kick += 0.05;
   }
 
-  // ---------------------------------------------------------------- V: Inverted Spear
-  nullify() {
-    if (!this._ready('nullify')) return;
+  // ---------------------------------------------------------------- V: Severing Whirlwind
+  whirl() {
+    if (!this._ready('whirl')) return;
+    if (this.spear) { this.m.app.hud.denied('whirl'); return; }
     const m = this.m, b = m.body;
-    this.cd.nullify = cdOf(COOLDOWN.nullify); this.busy = NULLIFY.charge + NULLIFY.time + 0.3;
-    m.playAnim('ksThrust');
-    b.slow = 0.2;
-    const dir = this._flatAim(new THREE.Vector3());
-    m.castAbility({ ab: 'nullCast', o: b.pos.toArray(), d: [dir.x, dir.z] });
-    this.pending.push({ t: NULLIFY.charge, fn: () => {
-      b.slow = 1;
-      this._startSweep('nullify', dir, NULLIFY.dist / NULLIFY.time, NULLIFY.time);
-      m.sound('slash', b.pos, 0.8, 25);
-    } });
+    this.cd.whirl = cdOf(COOLDOWN.whirl);
+    const dur = WHIRL.ticks * WHIRL.gap + 0.2;
+    this.busy = dur; b.slow = WHIRL.slow;
+    m.playAnim('ksWhirl');
+    m.castAbility({ ab: 'whirl', o: b.pos.toArray(), n: WHIRL.ticks, g: WHIRL.gap });
+    for (let i = 0; i < WHIRL.ticks; i++) {
+      this.pending.push({ t: 0.08 + i * WHIRL.gap, fn: () => {
+        const c = b.pos;
+        for (const e of this._enemies()) {
+          const dx = e.pos.x - c.x, dz = e.pos.z - c.z, d = Math.hypot(dx, dz);
+          if (d > WHIRL.radius || Math.abs(e.pos.y - c.y) > 2.2) continue;
+          const k = d > 0.3 ? -WHIRL.pull / d : 0;   // drawn in toward the blades
+          m.reportHit(e, WHIRL.dmg, 'whirl', { stun: 0.25, kb: [dx * k * 0.25, 1, dz * k * 0.25], at: new THREE.Vector3(e.pos.x, e.pos.y + 1.1, e.pos.z) });
+        }
+        m.fx.shake(0.08);
+      } });
+    }
+    this.pending.push({ t: dur, fn: () => { b.slow = 1; } });
   }
 
   // ---------------------------------------------------------------- X: Heavenly Severance
@@ -264,111 +279,41 @@ export class KineSlayerKit {
     if (this.ult < ULT_COST) { m.app.hud.denied('sever'); return; }
     if (this.busy > 0) return;
     this.ult = 0; this.ultReadyAnnounced = false;
-    // the enemy under the crosshair, else the one closest to where you face, within range
-    const inRange = (e) => e && e.alive && e !== m.local && Math.hypot(e.pos.x - b.pos.x, e.pos.z - b.pos.z) <= SEVER.range && Math.abs(e.pos.y - b.pos.y) < 6;
-    let tgt = inRange(m.aimEnt) ? m.aimEnt : null;
-    if (!tgt) {
-      const f = this._flatAim(tmp2);
-      let best = -9;
-      for (const e of this._enemies()) {
-        if (!inRange(e)) continue;
-        const dx = e.pos.x - b.pos.x, dz = e.pos.z - b.pos.z, d = Math.hypot(dx, dz) || 1;
-        const dot = (dx * f.x + dz * f.z) / d;
-        if (dot < SEVER.cone) continue;           // has to be (nearly) where you are looking
-        const s = dot - d / SEVER.range * 0.25;   // then the closest of those
-        if (s > best) { best = s; tgt = e; }
-      }
-    }
-    m.castAbility({ ab: 'severStart', o: b.pos.toArray(), v: tgt ? tgt.n : -1 });
-    if (!tgt) {
-      // nobody in reach: one long severing dash
-      const dir = this._flatAim(new THREE.Vector3());
-      this.busy = 0.5;
-      m.playAnim('ksFlash');
-      const o = b.pos.clone();
-      const len = this._startSweep('severMiss', dir, SEVER.missDist / 0.26, 0.26);
-      m.castAbility({ ab: 'flash', o: o.toArray(), d: [dir.x, dir.z], l: Math.round(len * 100) / 100, big: 1 });
-      return;
-    }
-    // the camera stays exactly where it was for the whole technique (no spinning around): he blinks
-    // round the target cutting from every side, everything freezes for a beat, all the cuts land
-    // at once, and he is standing back where he started
-    if (m.cine) return;
-    const start = b.pos.clone(), yaw = m.cam.yaw, pitch = m.cam.pitch;
-    const camPos = m.camera.position.clone(), camQ = m.camera.quaternion.clone(), look = tgt.pos.clone().add(new THREE.Vector3(0, 1, 0));
-    const fx = m.fx, shk = new THREE.Vector3();
-    const total = 0.1 + SEVER.cuts * SEVER.gap + SEVER.hold + 0.45;
-    this.busy = total + 0.1; b.locked = total;
-    m.cine = {
-      t: 0, caster: m.local, sever: true,
-      update(dt) { this.cine.t += dt; },
-      camera() {
-        const k = Math.min(0.35, fx.shakeAmt) * 0.25;
-        this.camera.position.copy(camPos).add(shk.set((Math.random() - 0.5) * k, (Math.random() - 0.5) * k, (Math.random() - 0.5) * k));
-        this.camera.quaternion.copy(camQ);
-        return look;
-      },
-      end() {},
-    };
-    this.severT = total + 0.6; // safety: never leave the camera frozen
-    const yaw0 = Math.atan2(b.pos.x - tgt.pos.x, b.pos.z - tgt.pos.z);
-    const ghostCuts = [];
-    for (let i = 0; i < SEVER.cuts; i++) {
-      this.pending.push({ t: 0.1 + i * SEVER.gap, fn: () => {
-        if (!tgt.alive) return;
-        // blink to a new side of the target and cut through
-        const a = yaw0 + Math.PI + (i % 2 ? 1 : -1) * (0.7 + i * 0.62);
-        const from = b.pos.clone();
-        const x = tgt.pos.x + Math.sin(a) * SEVER.radius, z = tgt.pos.z + Math.cos(a) * SEVER.radius;
-        const y = m.world.groundAt(x, z, tgt.pos.y + 2);
-        const face = Math.atan2(tgt.pos.x - x, tgt.pos.z - z);
-        b.teleport(x, Math.max(y, tgt.pos.y), z, face);
-        m.cam.yaw = face; m.cam.pitch = 0;   // only turns his body: the camera is frozen
-        m.playAnim(['ksA', 'ksB', 'ksC'][i % 3]);
-        const dir = [Math.sin(face), Math.cos(face)];
-        const at = new THREE.Vector3(tgt.pos.x, tgt.pos.y + 1.2, tgt.pos.z);
-        ghostCuts.push(i);
-        m.castAbility({ ab: 'severCut', f: from.toArray(), o: [x, b.pos.y, z], p: at.toArray(), d: dir, i, fin: 0, v: tgt.n });
-        m.reportHit(tgt, SEVER.cutDmg, 'sever', { stun: SEVER.stun, at });
-        fx.shake(0.15);
+    if (this.spear) this._recall(true);
+    const total = SEVER.wind + SEVER.gap + 0.55;
+    this.busy = total; b.locked = total; b.vel.x *= 0.2; b.vel.z *= 0.2;
+    m.playAnim('ksSever');
+    const o = b.pos.clone(), d = this._flatAim(new THREE.Vector3());
+    m.castAbility({ ab: 'severWind', o: o.toArray(), d: [d.x, d.z] });
+    // two crescents: flat, then upright, both racing down the same line
+    for (const [k, vert] of [[0, false], [1, true]]) {
+      this.pending.push({ t: SEVER.wind + k * SEVER.gap, fn: () => {
+        const p = b.pos.clone();
+        this.waves.push({ o: p, d: d.clone(), s: 0, vert, hit: new Set(), dmg: vert ? SEVER.dmg2 : SEVER.dmg1 });
+        m.castAbility({ ab: 'severWave', o: p.toArray(), d: [d.x, d.z], v: vert ? 1 : 0 });
+        m.fx.shake(vert ? 0.6 : 0.45); m.cam.kick += 0.05;
+        m.app.hud.dashImpact();
       } });
     }
-    // the hold: one last appearance in front of them, a frozen beat… then release
-    const tFin = 0.1 + SEVER.cuts * SEVER.gap;
-    this.pending.push({ t: tFin, fn: () => {
-      if (!tgt.alive) return;
-      const x = tgt.pos.x + Math.sin(yaw0) * 1.7, z = tgt.pos.z + Math.cos(yaw0) * 1.7;
-      const face = Math.atan2(tgt.pos.x - x, tgt.pos.z - z);
-      b.teleport(x, Math.max(m.world.groundAt(x, z, tgt.pos.y + 2), tgt.pos.y), z, face);
-      m.cam.yaw = face;
-      m.playAnim('ksD');
-      m.castAbility({ ab: 'severHold', p: [tgt.pos.x, tgt.pos.y + 1.2, tgt.pos.z], d: [Math.sin(face), Math.cos(face)], v: tgt.n });
-    } });
-    this.pending.push({ t: tFin + SEVER.hold, fn: () => {
-      if (tgt.alive) {
-        const dir = [Math.sin(m.cam.yaw), Math.cos(m.cam.yaw)];
-        const at = new THREE.Vector3(tgt.pos.x, tgt.pos.y + 1.2, tgt.pos.z);
-        m.reportHit(tgt, SEVER.finDmg, 'severFin', { stun: SEVER.stun, kb: [dir[0] * 16, 9, dir[1] * 16], at });
-        m.castAbility({ ab: 'severCut', f: b.pos.toArray(), o: b.pos.toArray(), p: at.toArray(), d: dir, i: SEVER.cuts, fin: 1, v: tgt.n });
-        fx.shake(0.6);
-        m.app.hud.dashImpact();
-      }
-    } });
-    // …and he is back where he was, facing where he faced
-    this.pending.push({ t: total - 0.05, fn: () => this._endSever(start, yaw, pitch) });
-    this._severEnd = () => this._endSever(start, yaw, pitch);
   }
-
-  _endSever(start, yaw, pitch) {
-    const m = this.m, b = m.body;
-    if (!this._severEnd) return;
-    this._severEnd = null; this.severT = 0;
-    const from = b.pos.clone();
-    if (m.local.alive) {
-      b.teleport(start.x, start.y, start.z, yaw);
-      m.castAbility({ ab: 'severEnd', f: from.toArray(), o: start.toArray() });
+  _waveTick(dt) {
+    const m = this.m;
+    for (let i = this.waves.length - 1; i >= 0; i--) {
+      const W = this.waves[i];
+      const s0 = W.s; W.s = Math.min(SEVER.len, W.s + SEVER.speed * dt);
+      const side = tmp2.set(-W.d.z, 0, W.d.x);
+      for (const e of this._enemies()) {
+        if (W.hit.has(e.n)) continue;
+        const rx = e.pos.x - W.o.x, rz = e.pos.z - W.o.z;
+        const along = rx * W.d.x + rz * W.d.z, lat = Math.abs(rx * side.x + rz * side.z);
+        if (along < s0 - 1 || along > W.s + 1) continue;
+        if (lat > (W.vert ? 2.2 : SEVER.width / 2) || Math.abs(e.pos.y - W.o.y) > (W.vert ? 6 : 2.6)) continue;
+        W.hit.add(e.n);
+        const at = new THREE.Vector3(e.pos.x, e.pos.y + 1.2, e.pos.z);
+        m.reportHit(e, W.dmg, W.vert ? 'severWave2' : 'severWave', { stun: SEVER.stun, kb: W.vert ? [W.d.x * 6, 11, W.d.z * 6] : [W.d.x * 12, 3, W.d.z * 12], at });
+        m.castAbility({ ab: 'ksHit', p: at.toArray(), d: [W.d.x, W.d.z], h: 1, v: e.n });
+      }
+      if (W.s >= SEVER.len) this.waves.splice(i, 1);
     }
-    m.cam.yaw = yaw; m.cam.pitch = pitch;
-    if (m.cine && m.cine.sever) m._endCine();
   }
 }

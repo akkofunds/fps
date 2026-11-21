@@ -53,3 +53,12 @@ ICONS.skyfall = '<svg viewBox="0 0 24 24"><path d="M11 2h2v12.5l3-3 1.4 1.4L12 1
 ICONS.nullify = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5.6 4.2l14.2 14.2-1.4 1.4L4.2 5.6z"/><path d="M2 12l6-1.2v2.4zM22 12l-6 1.2v-2.4z" opacity=".6"/></svg>';
 ICONS.sever = '<svg viewBox="0 0 24 24"><path d="M3 4.4L4.4 3l16.6 16.6-1.4 1.4z"/><path d="M19.6 3L21 4.4 4.4 21 3 19.6z" opacity=".75"/><path d="M11 1h2v22h-2z" opacity=".45"/><path d="M1 11h22v2H1z" opacity=".3"/></svg>';
 Object.assign(ABILITY_ICON, { flash: ICONS.flash, skyfall: ICONS.skyfall, slam: ICONS.skyfall, nullify: ICONS.nullify, sever: ICONS.sever, severFin: ICONS.sever });
+ICONS.throw = '<svg viewBox="0 0 24 24"><path d="M2.5 21.5l-1-1L14 8l1 1z"/><path d="M14.6 4.2L21 3l-1.2 6.4-2-2-1.6 1.6-1.6-1.6 1.6-1.6z"/><path d="M4 12h5v1.6H4zM7 16h4v1.6H7z" opacity=".5"/></svg>';
+ICONS.whirl = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 1 8.6 6.3l-2 .6A7 7 0 0 0 12 5z"/><path d="M21 12a9 9 0 0 1-6.3 8.6l-.6-2A7 7 0 0 0 19 12z"/><path d="M12 21a9 9 0 0 1-8.6-6.3l2-.6A7 7 0 0 0 12 19z"/><path d="M3 12a9 9 0 0 1 6.3-8.6l.6 2A7 7 0 0 0 5 12z"/><circle cx="12" cy="12" r="2.4"/></svg>';
+Object.assign(ABILITY_ICON, { throw: ICONS.throw, spearThrow: ICONS.throw, spearRecall: ICONS.throw, whirl: ICONS.whirl, severWave: ICONS.sever, severWave2: ICONS.sever });
+// the Manipulator (chess)
+ICONS.king = '<svg viewBox="0 0 24 24"><path d="M11 1.5h2v2h2v2h-2v1.6c2.3.5 4 2.3 4 4.6 0 1.6-.8 3-2 3.9l1 4.4H8l1-4.4c-1.2-.9-2-2.3-2-3.9 0-2.3 1.7-4.1 4-4.6V5.5H9v-2h2z"/><path d="M5.5 20.5h13V23h-13z"/></svg>';
+ICONS.knight = '<svg viewBox="0 0 24 24"><path d="M9 3l1.6 2.2C15.4 5 19 8.6 19 14v4H8.5l.8-3.6c-1.6-.3-3 .3-4.3 1.6L3.3 14.3C4.6 11.4 7 9 8.8 8.2L8 6.3z"/><circle cx="12" cy="9" r="1" fill="#0b1220"/><path d="M6 19.5h14V22H6z"/></svg>';
+ICONS.rook = '<svg viewBox="0 0 24 24"><path d="M5 2h3v2h2.5V2h3v2H16V2h3v5l-2 1.6V17l1.5 2.5h-13L7 17V8.6L5 7z"/><path d="M4.5 20.5h15V23h-15z"/></svg>';
+ICONS.queen = '<svg viewBox="0 0 24 24"><circle cx="4" cy="5" r="1.8"/><circle cx="9" cy="3" r="1.8"/><circle cx="15" cy="3" r="1.8"/><circle cx="20" cy="5" r="1.8"/><path d="M3.5 7l3.3 7.5L9 5.5l3 8 3-8 2.2 9L20.5 7 18 19H6z"/><path d="M5 20.3h14V23H5z"/></svg>';
+Object.assign(ABILITY_ICON, { knight: ICONS.knight, rook: ICONS.rook, rookSlam: ICONS.rook, queen: ICONS.queen, checkmate: ICONS.king });

@@ -34,7 +34,7 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, '..', '..', 'publ
 # as thick as Shoto's relative to height (measured from public/models/shoto.glb).
 HEIGHT = 1.78           # top of the hair, metres (Shoto: 1.76)
 HIP_RATIO = None        # None = keep the model's own leg length (a ratio here would shorten the legs)
-LEG_R = {'thigh': 0.0478, 'shin': 0.0376}  # median leg radius at mid-segment / height (Shoto)
+LEG_R = {'thigh': 0.05, 'shin': 0.0272}  # median leg radius at mid-segment / height (shins thinner than thighs, like real trousers)
 FOOT_THICK = 1.0
 # the torso / jacket is a touch broad for those legs: narrow it so the jacket hem lines up with the
 # pants (x = side to side, z = front to back); arms move in with the shoulders, the head is untouched
