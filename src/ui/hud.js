@@ -355,6 +355,13 @@ export class Hud {
     e.innerHTML = '<p>' + text.split(' ').map((w) => '<em>' + [...w].map((c) => `<span style="animation-delay:${(i++ * per).toFixed(3)}s">${esc(c)}</span>`).join('') + '</em>').join(`<span style="animation-delay:${(i * per).toFixed(3)}s"> </span>`) + '</p>';
     void e.offsetWidth; e.classList.add('show');
   }
+  // a step caption, top-left (what is happening, in plain words); '' hides it
+  cineStep(text, n = '') {
+    const e = this._cineLayer('cineStep');
+    if (!text) { e.classList.remove('show'); return; }
+    e.innerHTML = `${n ? `<i>${n}</i>` : ''}<b>${text}</b>`;
+    e.classList.remove('show'); void e.offsetWidth; e.classList.add('show');
+  }
   cineDark(k) { if (this.cineEl) this.cineEl.querySelector('.cine-dark').style.opacity = String(k * 0.55); }
   // anime "impact frames": a few stark, high-contrast negative frames with radial speed lines
   // right as the spell lands, then cb() (the white flash)
@@ -454,7 +461,7 @@ export class Hud {
     }
   }
 
-  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); this.cineGrade(''); this.cineGlyph(0); this.cineMono(''); }
+  cineEnd() { if (this.cineEl) this.cineEl.className = ''; document.body.classList.remove('cine-on'); this.cineGrade(''); this.cineGlyph(0); this.cineMono(''); this.cineStep(''); }
 
   // full-screen white flash (nova); 0..1
   flash(k) {

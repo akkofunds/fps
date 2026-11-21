@@ -37,9 +37,9 @@ export class GameMap {
     const s = this.scene;
 
     // lighting: warm low sun, sky/ground bounce
-    this.hemi = new THREE.HemisphereLight(0xb6a8ec, 0x7a6038, 1.35);
+    this.hemi = new THREE.HemisphereLight(0xffe4b8, 0x8a6430, 1.3);
     s.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffbe80, 3.7);
+    this.sun = new THREE.DirectionalLight(0xffc878, 4.0);
     this.sun.position.copy(SUN_DIR).multiplyScalar(80);
     this.sun.castShadow = Q.shadows;
     if (Q.shadows) {

@@ -135,7 +135,14 @@ const solidUV = (g) => { const n = g.attributes.position.count, uv = new Float32
 // Each clump shades as its own soft ball (normals bent away from the clump centre, a little away
 // from the crown centre too) and carries its own light→shadow gradient: the "cauliflower" canopy of
 // painted anime trees, bright yellow-green crowns over deep green undersides.
-const LEAF_TOP = new THREE.Color(0.6, 0.8, 0.2), LEAF_MID = new THREE.Color(0.24, 0.52, 0.12), LEAF_BOT = new THREE.Color(0.05, 0.2, 0.08);
+// autumn palettes (top / middle / underside): flame orange, rust red, gold, and an evergreen
+const LEAF_PALS = [
+  [new THREE.Color(1.15, 0.58, 0.12), new THREE.Color(0.78, 0.24, 0.05), new THREE.Color(0.24, 0.06, 0.02)],
+  [new THREE.Color(1.05, 0.4, 0.1), new THREE.Color(0.62, 0.14, 0.04), new THREE.Color(0.2, 0.04, 0.02)],
+  [new THREE.Color(1.2, 0.86, 0.2), new THREE.Color(0.86, 0.5, 0.08), new THREE.Color(0.3, 0.14, 0.03)],
+  [new THREE.Color(0.42, 0.52, 0.16), new THREE.Color(0.12, 0.26, 0.08), new THREE.Color(0.03, 0.09, 0.04)],
+];
+let LEAF_TOP = LEAF_PALS[0][0], LEAF_MID = LEAF_PALS[0][1], LEAF_BOT = LEAF_PALS[0][2];
 function foliage(out, s, x, y, z, sy, seed, ctr = [x, y - s, z], warm = 0) {
   const r = mulberry32(seed);
   const parts = [];
@@ -238,7 +245,7 @@ function leafMaterial() {
     const parent = windPatch;
     void parent;
     sh.uniforms.uTime = treeTime;
-    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.14; // painted foliage never goes muddy in shade');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.18; // painted foliage never goes muddy in shade');
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uTime;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         #ifdef USE_INSTANCING
@@ -281,7 +288,7 @@ function rockGeometry(seed) {
     p.setXYZ(i, v.x * sx, v.y * 0.8, v.z * sz);
   }
   g.computeVertexNormals();
-  const n = g.attributes.normal, col = new Float32Array(p.count * 3), c = new THREE.Color(), moss = new THREE.Color(0.34, 0.5, 0.2);
+  const n = g.attributes.normal, col = new Float32Array(p.count * 3), c = new THREE.Color(), moss = new THREE.Color(0.52, 0.42, 0.16);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), ny = n.getY(i);
     c.setRGB(0.58, 0.55, 0.6).multiplyScalar(0.82 + 0.18 * N.n2(x * 2 + seed, z * 2 + y));
@@ -327,14 +334,14 @@ export function buildProps(world, quality = 'high', Q = {}) {
   const biomes = buildBiomes(B, world, Q);
   root.add(biomes);
   // one species, the reference's big broadleaf, in three variants and three canopy LODs
-  const SEEDS = [11, 23, 37];
-  const variants = () => SEEDS.map((sd) => treeColors(bigTreeGeometry(sd)));
+  const SEEDS = [11, 23, 37, 53];
+  const variants = () => SEEDS.map((sd, i) => { [LEAF_TOP, LEAF_MID, LEAF_BOT] = LEAF_PALS[i]; return treeColors(bigTreeGeometry(sd)); });
   const kinds = { oak: variants() };
   LEAF_DETAIL = LEAF_LITE ? 0 : 1; const kindsFar = { oak: variants() }; // on the rims: fewer leaf cards (none on Low)
   LEAF_DETAIL = 0; const kindsVeryFar = { oak: variants() };    // far plateaus: a ball per clump
   const placements = [];
   const trunkMat = stylize(new THREE.MeshLambertMaterial({ vertexColors: true }), { wrap: 0.4, band: 0.12 });
-  const leafMat = stylize(leafMaterial(), { wrap: 0.45, translucency: 0.35, band: 0.16 });
+  const leafMat = stylize(leafMaterial(), { wrap: 0.45, translucency: 0.75, band: 0.16 });
   const leafDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: leafTexture(), alphaTest: 0.5 });
   const nrmT = new THREE.Vector3();
   // keep the reference shot clear: looking up the river from the south-east bank toward the falls,
@@ -368,7 +375,8 @@ export function buildProps(world, quality = 'high', Q = {}) {
     const a = rnd() * 6.28, r = R(50, PLAY_RADIUS - 8);
     if (tryTree(Math.cos(a) * r, Math.sin(a) * r, 'oak', R(1.4, 1.9), true, 22)) i++;
   }
-  root.userData.groves = [];
+  // falling leaves drift down round the trees in the valley (ambient.js)
+  root.userData.groves = placements.filter((p) => Math.hypot(p.x, p.z) < PLAY_RADIUS).slice(0, quality === 'low' ? 6 : 28).map((p) => ({ x: p.x, z: p.z, r: 3.5 * p.scale }));
   // groves along the cliff tops and the plateaus beyond (in clumps, with open ground between)
   const scenery = Math.round((Q.scenery || 230) * 0.6);
   for (let i = 0, t = 0; i < scenery && t < scenery * 30; t++) {

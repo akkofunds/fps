@@ -168,7 +168,7 @@ export function buildFlowers(count, avoid, Q = {}) {
   const group = new THREE.Group();
   group.name = 'flowers';
   // reference palette: mostly white daisies and soft lilac, a few pale yellow
-  const tints = [new THREE.Color(1, 1, 0.97), new THREE.Color(0.96, 0.96, 1), new THREE.Color(0.78, 0.66, 1), new THREE.Color(0.86, 0.7, 0.98), new THREE.Color(1, 0.94, 0.62)];
+  const tints = [new THREE.Color(1, 1, 0.94), new THREE.Color(1, 0.86, 0.42), new THREE.Color(1, 0.66, 0.26), new THREE.Color(0.96, 0.5, 0.22), new THREE.Color(1, 0.94, 0.62)];
   const rnd = mulberry32(77);
   const per = tints.map(() => []);
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
@@ -231,7 +231,7 @@ function bushGeometry(seed) {
     const y = pos[i * 3 + 1];
     const t = Math.min(1, Math.max(0, y / 1.0));
     const v = 0.85 + r() * 0.2;
-    col.push((0.1 + 0.22 * t) * v, (0.26 + 0.36 * t) * v, (0.06 + 0.08 * t) * v);
+    col.push((0.2 + 0.4 * t) * v, (0.07 + 0.17 * t) * v, (0.02 + 0.04 * t) * v);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -255,7 +255,7 @@ function fernGeometry() {
       for (const sg of [-1, 1]) {
         pos.push(ca * out - sa * w * sg, up, sa * out + ca * w * sg);
         const sh = 0.5 + 0.5 * t;
-        col.push(0.12 * sh + 0.05, 0.36 * sh + 0.08, 0.08 * sh);
+        col.push(0.5 * sh + 0.08, 0.32 * sh + 0.06, 0.06 * sh);
         nrm.push(0, 1, 0);
       }
     }
