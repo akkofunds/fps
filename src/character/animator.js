@@ -505,6 +505,7 @@ export class Animator {
     const T = lerp(Twalk, Trun, wFast) * legK * (st.stride || 1) * (this.lobby ? 1.05 : 1) * (1 - 0.28 * sideK * wFast);
     const betaRun = clamp(1.3 * Lg * (1 - 0.35 * sideK) / Math.max(speed * T, 1e-3), 0.24, 0.45);
     const beta = lerp(0.6, betaRun, wFast);
+    this.gaitBeta = beta;   // share of the stride a foot is down (read by the chest motion)
     const Ls = speed * beta * T;
     // running: the foot lands a little ahead of the hips and pushes off well behind them
     const touch = lerp(0.5, 0.42, wFast);

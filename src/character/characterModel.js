@@ -129,7 +129,7 @@ export class MageInstance {
     this._tint = 0;
     this.cape = new CapeSim(this.model);
     // soft-body secondary motion on models that carry the extra chest bones (Inkweaver)
-    this.jiggle = JiggleSim.create(this.model);
+    this.jiggle = JiggleSim.create(this.model, { anim: this.anim });
     if (!this.cape.ok) this.cape = null;
   }
 
