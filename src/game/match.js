@@ -1387,7 +1387,7 @@ export class Match {
         if (this._mate !== M) return;
         const H = this.fx.chessPiece(kinds[i], p, { white: true, h: 4.4 + (kinds[i] === 'queen' ? 0.8 : 0), mode: 'drop', t: 0.32, hold: Infinity, yaw: toV,
           onLand: () => { this.fx.dust(new THREE.Vector3(p.x, this.world.groundAt(p.x, p.z, 50), p.z), 1.6); if (i % 2 === 0) this.sound('clack', p, 1.2, 120); this.fx.shake(0.1); } });
-        H.home = p; H.vp = vp;
+        H.home = p; H.vp = new THREE.Vector3(cx, vp.y, cz);
         M.pieces.push(H);
       }, (1.0 + k * 0.15 + i * 0.16) * 1000);
     });
@@ -1396,8 +1396,9 @@ export class Match {
     setTimeout(() => {
       if (this._mate !== M) return;
       const away = new THREE.Vector3(vp.x - M.c.x, 0, vp.z - M.c.z).normalize();
-      const king = this.fx.chessPiece('king', vp.clone(), { white: false, h: 4.2, mode: 'rise', t: 0.45, hold: Infinity, yaw: Math.atan2(-away.x, -away.z) });
-      king.away = away; king.at = vp.clone(); king.v = v; M.kings.push(king);
+      const sqc = new THREE.Vector3(cx, 0, cz);              // on the centre of their square, like every other piece
+      const king = this.fx.chessPiece('king', sqc, { white: false, h: 4.2, mode: 'rise', t: 0.45, hold: Infinity, yaw: Math.atan2(-away.x, -away.z) });
+      king.away = away; king.at = sqc; king.v = v; M.kings.push(king);
       if (v.view) v.view.root.visible = false;
       this.sound('clack', vp, 1, 150);
     }, (0.3 + k * 0.15) * 1000);

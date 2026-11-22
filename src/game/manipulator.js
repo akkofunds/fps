@@ -29,12 +29,12 @@ export const MANIP = {
 // M1: the shared fist string, a touch faster and cleaner
 export const MANIP_M1 = {
   hits: [
-    { anim: 'mnA', at: 0.05, dmg: 9, stun: 0.55, kb: 2.2, up: 0, hand: 'R' },
-    { anim: 'mnB', at: 0.06, dmg: 9, stun: 0.55, kb: 2.4, up: 0, hand: 'R' },
-    { anim: 'mnC', at: 0.1, dmg: 10, stun: 0.6, kb: 2.6, up: 0, hand: 'footR' },
-    { anim: 'mnD', at: 0.15, dmg: 15, stun: 0.9, kb: 16, up: 7, hand: 'R', fin: true },
+    { anim: 'mnA', at: 0.09, dmg: 9, stun: 0.55, kb: 2.2, up: 0, hand: 'R' },
+    { anim: 'mnB', at: 0.1, dmg: 9, stun: 0.55, kb: 2.4, up: 0, hand: 'R' },
+    { anim: 'mnC', at: 0.14, dmg: 10, stun: 0.6, kb: 2.6, up: 0, hand: 'footR' },
+    { anim: 'mnD', at: 0.2, dmg: 15, stun: 0.9, kb: 16, up: 7, hand: 'R', fin: true },
   ],
-  gap: 0.28, window: 1.0, endlag: 0.8, range: 2.9, cone: 0.4, seek: 3.0, seekCone: 0.82, lungeMax: 11,
+  gap: 0.32, window: 1.0, endlag: 0.85, range: 2.9, cone: 0.4, seek: 3.0, seekCone: 0.82, lungeMax: 11,
 };
 export const KNIGHT = { range: 14, fwd: 2 / 3, minSide: 2.5, hop: 0.2, leg1: 0.2, leg2: 0.14, radius: 3.1, dmg: 24, stun: 0.6 };
 export const ROOK = { range: 24, drop: 0.26, slamR: 3.2, slam: 18, len: 18, dur: 0.6, width: 2.3, dmg: 24, kb: 14 };

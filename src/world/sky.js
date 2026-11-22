@@ -86,7 +86,7 @@ export function buildMountains(groundAt = null) {
   const seg = 720, rings = 90;
   const R0 = 245, R1 = 1480;
   const sunA = Math.atan2(SUN_DIR.z, SUN_DIR.x);
-  const peaks = [[-1.12, 980, 400, 330], [-1.42, 1120, 270, 280], [-0.88, 1150, 230, 260], [0.35, 1050, 240, 280], [2.4, 1000, 290, 300], [1.4, 1100, 250, 280], [-2.3, 1050, 270, 280], [-2.9, 1000, 230, 260]];
+  const peaks = [[-1.12, 1050, 250, 330], [-1.42, 1150, 200, 280], [-0.88, 1180, 180, 260], [0.35, 1100, 180, 280], [2.4, 1050, 210, 300], [1.4, 1150, 190, 280], [-2.3, 1100, 200, 280], [-2.9, 1050, 170, 260]];
   const valleys = [2.97, -0.32]; // where the two rivers leave the valley
   const EDGE = []; for (let i = 0; i <= 360; i++) { const a = (i / 360) * Math.PI * 2 - Math.PI; EDGE.push(groundAt ? groundAt(Math.cos(a) * 238, Math.sin(a) * 238) - 0.6 : 15); }
   const edge = (a) => { const f = (a + Math.PI) / (Math.PI * 2) * 360, i = Math.max(0, Math.min(359, Math.floor(f))); return EDGE[i] + (EDGE[i + 1] - EDGE[i]) * (f - i); };
@@ -99,7 +99,7 @@ export function buildMountains(groundAt = null) {
     // the mountain range: ridged crests, deep gullies
     const rg = Math.max(0, 1 - Math.abs(n.fbm(x / 230 - 9, z / 230 + 4, 4) * 2 - 1));
     const rg2 = Math.max(0, 1 - Math.abs(n.fbm(x / 70 + 3, z / 70 - 6, 3) * 2 - 1));
-    let mt = (30 + 140 * Math.pow(rg, 1.7) + 9 * rg2 * rg) * smoothstep(620, 900, rad) * (1 - smoothstep(1300, R1, rad));
+    let mt = (25 + 105 * Math.pow(rg, 1.7) + 9 * rg2 * rg) * smoothstep(620, 900, rad) * (1 - smoothstep(1300, R1, rad));
     mt *= 0.45 + 0.55 * smoothstep(0.0, 0.5, Math.abs(_ad(a, sunA)));        // a low gap under the sun
     for (const [pa, pd, ph, pr] of peaks) {
       const px = Math.cos(pa) * pd, pz = Math.sin(pa) * pd, d = Math.hypot(x - px, z - pz) / pr;
@@ -140,11 +140,11 @@ export function buildMountains(groundAt = null) {
     const gully = 0.85 + 0.15 * n.n2(x / 25, z / 25 + y / 40);
     t.setRGB(0.38, 0.42, 0.56).lerp(c.clone().setRGB(0.86, 0.8, 0.76), lit).multiplyScalar(gully);
     c.lerp(t, mtn);
-    c.lerp(t.setRGB(1.05, 1.02, 1.0), mtn * smoothstep(150, 260, y) * smoothstep(0.2, 0.7, ny));   // snow on the high peaks
+    c.lerp(t.setRGB(1.05, 1.02, 1.0), mtn * smoothstep(110, 200, y) * smoothstep(0.2, 0.7, ny));   // snow on the high peaks
     // aerial perspective: lighter + pinker with distance, gold toward the sun; mist pooling low
     const toward = Math.max(0, Math.cos(_ad(a, sunA)));
     const haze = t.setRGB(0.7, 0.72, 0.8).lerp(c.clone().setRGB(1.05, 0.86, 0.6), toward * toward);
-    let hk = (1 - mtn) * (0.05 + 0.45 * smoothstep(300, 900, d)) + mtn * (0.1 + 0.25 * smoothstep(700, 1400, d));
+    let hk = (1 - mtn) * (0.05 + 0.45 * smoothstep(300, 900, d)) + mtn * (0.25 + 0.3 * smoothstep(700, 1400, d));
     c.lerp(haze, Math.min(0.8, hk));
     // the same mist wall the fog puts on the terrain past the rim (fog.js), baked in
     c.lerp(SKY.fog, smoothstep(300, 700, d) * (1 - mtn) * 0.55);

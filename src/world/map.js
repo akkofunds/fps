@@ -68,7 +68,7 @@ export class GameMap {
     const AREA = Math.min(4, MAP_SCALE * MAP_SCALE * 0.75);
     this.grass = buildGrass(Math.round(Q.grass * AREA), avoid, Q); s.add(this.grass);
     this.flowers = buildFlowers(Math.round(Q.flowers * AREA), avoid, Q); s.add(this.flowers);
-    this.bushes = buildBushes(Math.round(Q.bushes * AREA), this.props.userData.anchors, avoid); s.add(this.bushes);
+    this.bushes = buildBushes(Math.round(Q.bushes * AREA * 0.3), this.props.userData.anchors, avoid); s.add(this.bushes);
     // undergrowth chunks culled by distance every frame
     this.lod = [...this.grass.children.map((m) => [m, Q.grassDist]), ...this.flowers.children.map((m) => [m, Q.grassDist * 0.9]), ...this.bushes.children.map((m) => [m, Q.grassDist * 1.6])];
     this.lodScale = 1; // lowered by the runtime auto-tuner
