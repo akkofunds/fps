@@ -21,80 +21,14 @@ function canvasTex(key, w, h, paint) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return (TEX[key] = t);
 }
-// The wing from the reference: seen from the front, it sweeps straight up and out from the shoulder
-// to a high tip (leading edge lit gold), and below that edge hangs a broad mass of dark brown-black
-// feathers in layered rows — each row's upper edge catching orange light — fading at the bottom
-// into ragged smoky wisps. Texture 1024×512 (2:1): the root is at the left edge, 56% down; the tip
-// at the top right. One wing ≈ 1.85× her height wide and ≈ her height tall (reference proportions).
-function wingTex() {
-  // clean and soft (reference): one smooth dark mass, four big feather points along the bottom,
-  // edges that fade into the air, a gold leading edge — no fringe of little spikes
-  return canvasTex('wing6', 1024, 640, (g, W, H) => {
-    const r = mulberry(29);
-    const top = (u) => H * (0.6 - 0.56 * Math.pow(u, 0.85));                 // leading edge: up to a high tip
-    // the lower edge: a shallow line with four big feather points hanging from it
-    const lobes = [[0.15, 0.15, 0.2], [0.4, 0.15, 0.23], [0.64, 0.15, 0.21], [0.87, 0.14, 0.17]];  // [centre u, half-width, depth (×H)]
-    const base = (u) => H * (0.76 - 0.14 * u) - (u > 0.92 ? (u - 0.92) / 0.08 * H * 0.3 : 0);
-    const bot = (u) => {
-      let y = base(u);
-      for (const [c, w, d] of lobes) { const k = 1 - Math.abs(u - c) / w; if (k > 0) y = Math.max(y, base(u) + H * d * Math.pow(k, 0.8) * (1 - 0.3 * (u - c + w) / (2 * w))); }
-      return Math.min(H * 0.99, y);
-    };
-    // 1. the silhouette, filled with a soft vertical gradient (warm brown up top, near-black below)
-    const path = () => {
-      g.beginPath(); g.moveTo(0, top(0));
-      for (let k = 1; k <= 120; k++) { const u = k / 120; g.lineTo(u * W, top(u)); }
-      for (let k = 120; k >= 0; k--) { const u = k / 120; g.lineTo(u * W + (bot(u) - base(u)) * 0.18, bot(u)); }   // the points sweep outward a little
-      g.closePath();
-    };
-    const grd = g.createLinearGradient(0, 0, 0, H);
-    grd.addColorStop(0, 'rgba(70,40,24,0.95)'); grd.addColorStop(0.45, 'rgba(38,22,15,0.95)'); grd.addColorStop(1, 'rgba(18,11,9,0.92)');
-    g.filter = 'blur(5px)'; g.fillStyle = grd; path(); g.fill();
-    g.filter = 'blur(1.5px)'; g.fillStyle = grd; g.globalAlpha = 0.85; path(); g.fill(); g.globalAlpha = 1;
-    // 2. a few long, soft feather strokes inside, following each point (barely there, like the reference)
-    g.filter = 'blur(3px)';
-    for (const [c] of lobes) {
-      for (let k = 0; k < 4; k++) {
-        const u = c + (k - 1.5) * 0.035, x0 = u * W, y0 = top(u) + 20, x1 = c * W + (bot(c) - base(c)) * 0.18, y1 = bot(c) - 10;
-        g.strokeStyle = `rgba(${k % 2 ? 90 : 20},${k % 2 ? 52 : 12},${k % 2 ? 30 : 8},0.35)`; g.lineWidth = 10 + R2(r) * 8;
-        g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2 + 20, (y0 + y1) / 2, x1, y1); g.stroke();
-      }
-    }
-    // 3. fade the lower part into the air (clean, faded edges)
-    g.filter = 'none';
-    g.globalCompositeOperation = 'destination-in';
-    const fade = g.createLinearGradient(0, 0, 0, H);
-    fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(0.55, 'rgba(0,0,0,0.95)'); fade.addColorStop(1, 'rgba(0,0,0,0.45)');
-    g.fillStyle = fade; g.fillRect(0, 0, W, H);
-    const fadeX = g.createLinearGradient(0, 0, W, 0);
-    fadeX.addColorStop(0, 'rgba(0,0,0,1)'); fadeX.addColorStop(0.8, 'rgba(0,0,0,0.95)'); fadeX.addColorStop(1, 'rgba(0,0,0,0.55)');
-    g.fillStyle = fadeX; g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = 'source-over';
-    // 4. warm orange light glancing through the upper plumage, a few soft streaks
-    g.globalCompositeOperation = 'lighter';
-    g.filter = 'blur(4px)';
-    for (let k = 0; k < 9; k++) {
-      const u = 0.04 + k * 0.1 + R2(r) * 0.04, y = top(u) + 14, len = 70 + R2(r) * 80;
-      g.strokeStyle = `rgba(255,${120 + R2(r) * 50 | 0},50,${0.3 * (1 - u * 0.6)})`; g.lineWidth = 6 + R2(r) * 6;
-      g.beginPath(); g.moveTo(u * W, y); g.quadraticCurveTo(u * W + len * 0.3, y + len * 0.5, u * W + len * 0.15, y + len); g.stroke();
-    }
-    // 5. the gold leading edge: wide soft glow, bright core, brightest at the root
-    for (const [w, a, blur] of [[34, 0.3, 16], [12, 0.6, 6], [4, 1, 0]]) {
-      g.filter = blur ? `blur(${blur}px)` : 'none'; g.lineWidth = w; g.lineCap = 'round';
-      for (let k = 0; k < 70; k++) {
-        const u0 = k / 70, u1 = (k + 1) / 70, f = Math.max(0.15, 1 - u0 * 0.8);
-        g.strokeStyle = `rgba(255,${160 + 60 * f | 0},${60 + 50 * f | 0},${a * f})`;
-        g.beginPath(); g.moveTo(u0 * W, top(u0) + 3); g.lineTo(u1 * W, top(u1) + 3); g.stroke();
-      }
-    }
-    g.filter = 'none';
-    // a warm glow at the root, and a few embers
-    const rg = g.createRadialGradient(0, H * 0.62, 0, 0, H * 0.62, H * 0.5);
-    rg.addColorStop(0, 'rgba(255,170,80,0.55)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
-    g.fillStyle = rg; g.fillRect(0, 0, W * 0.35, H);
-    for (let k = 0; k < 40; k++) { const u = R2(r), x = u * W, y = top(u) + (bot(u) - top(u)) * R2(r) * 0.8; g.fillStyle = `rgba(255,${170 + R2(r) * 70 | 0},90,${0.35 + R2(r) * 0.55})`; g.beginPath(); g.arc(x, y, 1 + R2(r) * 2.4, 0, 7); g.fill(); }
-    g.globalCompositeOperation = 'source-over';
-  });
+// The wings themselves are cut straight from the reference art (public/fx/wing_l.png / wing_r.png,
+// tools/fx/cut_wings.py): w × h in metres at her scale, and where the wing meets her back (ru, rv:
+// 0..1 across / down the image). Both images have the root on their left edge.
+const WING = {"L": {"w": 2.9, "h": 2.28, "ru": 0.0034, "rv": 0.5833}, "R": {"w": 2.74, "h": 2.165, "ru": 0.0036, "rv": 0.5427}};
+const WTEX = {};
+function wingImg(side) {
+  if (!WTEX[side]) { WTEX[side] = new THREE.TextureLoader().load(side === 'L' ? 'fx/wing_l.png' : 'fx/wing_r.png'); WTEX[side].colorSpace = THREE.SRGBColorSpace; WTEX[side].anisotropy = 4; }
+  return WTEX[side];
 }
 // soft radial glow (halo light behind her)
 function glowTex() {
@@ -180,9 +114,8 @@ Object.assign(Fx.prototype, {
   // ---------------------------------------------------------------- wings
   // two brushed-ink wings spreading from a point on the back (anchor() → world point; yaw → facing)
   inkWings(anchor, yawOf, size = 3, life = 1.2, o = {}) {
-    const tex = wingTex();
-    const mk = () => new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.25, 1.15, 1.05) }));
-    const L = mk(), Rw = mk();
+    const mk = (side) => new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: wingImg(side), transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.12, 1.08, 1.04) }));
+    const L = mk('L'), Rw = mk('R');
     const g = new THREE.Group(); g.add(L, Rw); this.scene.add(g);
     // a warm glow behind her back and a thin halo ring (the reference's backlight)
     const glow = o.halo ? new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(1.6, 1.25, 0.8) })) : null;
@@ -198,17 +131,17 @@ Object.assign(Fx.prototype, {
       const fade = life === Infinity ? 1 : Math.min(1, Math.max(0, (life - t) / 0.3));
       anchor(_v); g.position.copy(_v);
       g.rotation.set(0, yawOf(), 0);
+      // size: 1 = the reference's proportions to her body
       const s = size * (0.35 + 0.65 * e), f = Math.sin(t * 2.4) * flap;
-      // each wing: a 2:1 plane, its root (texture left edge, 36% down) on the spine, slightly behind
-      // the back; the wings open from folded (pointing back) to spread wide
       const open = 0.15 + 0.85 * e;
-      for (const [w, sd] of [[L, 1], [Rw, -1]]) {
-        w.scale.set(sd * s * 2, s * 1.25, 1);
-        const a = sd * ((1 - open) * 1.3 + 0.1 + f);                      // swing about the root (folded → open)
+      for (const [w, sd, M] of [[L, 1, WING.L], [Rw, -1, WING.R]]) {
+        // her left wing extends to her left (+x); the right one is the mirrored image
+        w.scale.set(sd * M.w * s, M.h * s, 1);
+        const a = sd * ((1 - open) * 1.3 + 0.08 + f);                     // swing about the root (folded → open)
         w.rotation.set(0, a, 0);
-        // the texture's root (left edge, 56% down) sits on the spine just behind the shoulder blades
-        const ox = s, oy = 0.15 * s;
-        w.position.set(sd * ox * Math.cos(a), oy + 0.08, -0.16 - ox * Math.sin(Math.abs(a)));
+        // put the image's root point (where the wing meets her back) on the spine, behind the shoulders
+        const rx = sd * M.w * s * (M.ru - 0.5), ry = M.h * s * (0.5 - M.rv);
+        w.position.set(-rx * Math.cos(a), 0.06 - ry, -0.16 + rx * Math.sin(a));
         w.material.opacity = fade;
       }
       if (glow) {
@@ -251,7 +184,7 @@ Object.assign(Fx.prototype, {
       const c = at(0, down ? 1.6 : 1.4, 0.6);
       this.ribbon(c, e1, e2, down ? 2.3 : 2.0, down ? 2.6 : 2.9, { pal: GLOSS.inkDark, w: 0.9, sweep: 0.08, life: 0.38, grow: 0.15, flare: 0.5 });
       this.ribbon(c, e1, e2, down ? 2.45 : 2.15, down ? 2.5 : 2.8, { pal: GLOSS.ink, w: 0.22, sweep: 0.08, life: 0.34, grow: 0.15, delay: 0.02 });
-      if (view) this.inkWings((out) => view.rig.bones[3].getWorldPosition(out), () => Math.atan2(F.x, F.z), down ? 1.6 : 1.4, 0.45, { spread: 0.12, flap: 0.18 });
+      if (view) this.inkWings((out) => view.rig.bones[3].getWorldPosition(out), () => Math.atan2(F.x, F.z), down ? 0.9 : 0.8, 0.45, { spread: 0.12, flap: 0.18 });
       for (let k = 0; k < 16; k++) {
         const a = R() * Math.PI, rr = 1.6 + R() * 0.9, p = c.clone().addScaledVector(e1.clone().normalize(), Math.cos(a) * rr).addScaledVector(e2.clone().normalize(), Math.sin(a) * rr);
         this.fire.emit(p.x, p.y, p.z, F.x * 6 + (R() - 0.5) * 3, (R() - 0.3) * 3, F.z * 6 + (R() - 0.5) * 3, 0.4, 0.07, 0.0, GOLD, GOLD0, 2, 2);

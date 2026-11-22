@@ -503,7 +503,7 @@ export class Match {
       case 'inkArray': {
         const o = new THREE.Vector3().fromArray(d.o), F = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).normalize();
         this.fx.taiChiArray(o, 4.2, INK_ERUPT.charge + 0.6, { spin: 2.2 });
-        if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(F.x, F.z), 1.6, INK_ERUPT.charge + 0.5, { spread: 0.35, flap: 0.06 });
+        if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(F.x, F.z), 0.9, INK_ERUPT.charge + 0.5, { spread: 0.35, flap: 0.06 });
         this.sound('domainCast', o, 0.6, 50);
         if (!local && e.view) e.view.anim.play('cast', { anim: 'gRed' });
         break;
@@ -1690,7 +1690,7 @@ export class Match {
     const until = () => !this._tali || this._tali.done;
     const cues = [
       [0.05, () => { this.fx.taiChiArray(T.c, 6.5, TALISMAN.cine - 0.3, { spin: 0.5 }); mono('Ink becomes wings. Wings become heaven.'); }],
-      [0.9, () => { if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.55, Infinity, { spread: 0.8, flap: 0.04, until, halo: true }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
+      [0.9, () => { if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.04, until, halo: true }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
       [1.9, () => { this.fx.talismanHalo(T.c, this.map.Q.particles <= 2000 ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown); mono(''); }],
       [2.4, () => { hud.flash(0.6); hud.cineCard('ENDLESS TALISMAN SUPPRESSION', '無 窮 符 鎮', ''); }],
       [3.0, () => mono('Heaven and earth, hear my command.')],
