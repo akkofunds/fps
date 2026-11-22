@@ -527,7 +527,9 @@ export class Animator {
     const idleSink = this.lobby ? -0.012 : -0.03;
     P.hip[1] = lerp(idleSink, lerp(-0.008, -0.03, wFast), wRun) + (walkBob + runBob) * wRun + this.dip;
     // the pelvis shifts over the stance foot: clearly when walking, barely when running
-    P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * lerp(0.022 * (st.walkSway ?? st.sway), 0.008 * (st.runSway || 1) * st.sway, wFast) * wRun;
+    // (peaking at mid-stance of each foot, whatever the gait: at a run the foot is only down for the
+    // first ~35% of the stride, so timing this for a walk put the weight over a foot already in the air)
+    P.hip[0] += Math.cos(2 * Math.PI * (this.phase - beta * 0.5)) * lerp(0.022 * (st.walkSway ?? st.sway), 0.008 * (st.runSway || 1) * st.sway, wFast) * wRun;
     const hipYawD = this.hipYaw * R2D;
     // ---- feet paths
     const feet = {};
@@ -581,7 +583,8 @@ export class Animator {
     const glance = (Math.sin(this.t * 0.31) * 0.6 + Math.sin(this.t * 0.83 + 1) * 0.4) * idleW;
     // pelvis: turns with the swinging leg (±4° walk, ±6° run) and drops on the swing side (±4°)
     const pelvisYaw = lerp(4, 6, wFast) * st.twist * stride * wRun * Math.max(0.3, Math.abs(fwdness));
-    const pelvisRoll = lerp(4 * (st.walkRoll ?? st.roll), 4.5 * st.roll, wFast) * Math.sin(2 * Math.PI * this.phase) * wRun;
+    // the swing-side hip drops most at mid-stance of the other foot (the same timing as the weight shift)
+    const pelvisRoll = lerp(4 * (st.walkRoll ?? st.roll), 4.5 * st.roll, wFast) * Math.cos(2 * Math.PI * (this.phase - beta * 0.5)) * wRun;
     setE(P, B.hips, lean * 0.25, hipYawD - pelvisYaw, bank * 0.5 + pelvisRoll - shift * 2.5);
     // the thorax counter-rotates against the pelvis so the shoulders swing opposite the hips
     const counter = -hipYawD + pelvisYaw;
@@ -607,7 +610,7 @@ export class Animator {
     for (const side of ['L', 'R']) {
       const sg = side === 'L' ? 1 : -1;
       // a smooth pendulum opposite the leg, trailing it a little (follow-through)
-      const uA = (this.phase + (side === 'R' ? 0.5 : 0) - 0.045 + 1) % 1;
+      const uA = (this.phase + (side === 'R' ? 0.5 : 0) - 0.02 + 1) % 1;
       const sw = (Ls > 1e-3 ? Math.cos(2 * Math.PI * uA) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
       const fwdSw = Math.max(0, -sw) / Math.max(1, swingAmt * 0.5); // 0..1 while the arm swings forward
       // relaxed ready stance: arms close to the body, casting hand slightly raised

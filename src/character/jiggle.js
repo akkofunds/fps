@@ -18,7 +18,7 @@ const SPEC = {
   stiff: 0.045,   // share of the gap to the posed position closed per 1/60 s: a soft ~2.8 Hz swing
   drag: 0.06,     // share of the wobble lost per 1/60 s: settles in two or three soft bounces
   inertia: 2.8,   // how hard the body's own accelerations throw the mass (its weight)
-  maxAng: 0.5,    // soft limit on the simulated swing (radians, ~29°)
+  maxAng: 0.4,    // soft limit on the simulated swing (radians, ~23°)
   gain: 1.7,      // how much further the hinge turns than the swing (the skin is only partly bound to it)
   lever: new THREE.Vector3(0, -0.045, 0.112),   // hinge → centre of the mass, in model space (metres; +z = her front)
 };
@@ -211,7 +211,7 @@ export class JiggleSim {
       const hm = new THREE.Matrix4().multiplyMatrices(mInv, th.matrixWorld);
       const lv = new THREE.Vector3(0, -0.05, 0.07);
       const lever = lv.clone().transformDirection(new THREE.Matrix4().copy(hm).invert()).multiplyScalar(lv.length() / (new THREE.Vector3().setFromMatrixScale(hm).x || 1));
-      springs.push(new SpringBone(th, th, { ...SPEC, stiff: 0.08, drag: 0.11, inertia: 2.2, maxAng: 0.35, gain: 0.6, lever, move: true }));
+      springs.push(new SpringBone(th, th, { ...SPEC, stiff: 0.08, drag: 0.11, inertia: 2.2, maxAng: 0.35, gain: 0.45, lever, move: true }));
     }
     // hair chains: hair<lock><n>, with her head and torso as colliders
     const byName = {}; model.traverse((o) => { if (o.isBone) byName[o.name] = o; });
