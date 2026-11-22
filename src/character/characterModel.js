@@ -17,7 +17,7 @@ export function loadMageModel(url) {
   if (!cache.has(url)) {
     const once = (u) => new Promise((resolve, reject) => {
       new GLTFLoader().load(u, async (g) => {
-        prepareMaterials(g.scene, ...(/inkweaver/.test(url) ? [0.3, 0.78] : [0.62, 1]));
+        prepareMaterials(g.scene, ...(/inkweaver/.test(url) ? [0.3, 0.78, 0.75] : [0.62, 1, 0]));
         try { await buildLods(g.scene); } catch (e) { console.warn('LOD build failed', e); }
         resolve(g.scene);
       }, undefined, reject);
@@ -57,7 +57,7 @@ async function buildLods(root) {
 
 // glow: how self-lit the painted textures are, lit: how strongly scene light adds on top (Inkweaver's
 // white outfit and hair wash out to flat white at the defaults)
-function prepareMaterials(root, glow = 0.62, lit = 1) {
+function prepareMaterials(root, glow = 0.62, lit = 1, shine = 0) {
   root.traverse((o) => {
     if (!o.isMesh) return;
     const m = o.material;
@@ -78,7 +78,7 @@ function prepareMaterials(root, glow = 0.62, lit = 1) {
         transparent: !!m.transparent, depthWrite: !m.transparent, alphaTest: m.transparent ? 0.01 : 0,
       });
       o.material.name = m.name; o.material.userData.glow = glow;
-      rimLight(o.material);
+      rimLight(o.material, shine);
       o.castShadow = true;
     }
     o.frustumCulled = false;
@@ -86,16 +86,28 @@ function prepareMaterials(root, glow = 0.62, lit = 1) {
 }
 
 // anime-style rim light: a warm fresnel edge that separates characters from the background
-function rimLight(mat) {
+// rim light, plus (shine > 0) a glossy highlight from the sun: a soft sheen with a crisp anime
+// hot-spot inside it, so skin, hair and the glossy suit catch the light as she moves
+function rimLight(mat, shine = 0) {
   mat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;\nuniform float uShine;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float rimF = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 3.0);
-        totalEmissiveRadiance += uRim * rimF;`);
+        totalEmissiveRadiance += uRim * rimF;`)
+      .replace('#include <envmap_fragment>', `#include <envmap_fragment>
+        #if NUM_DIR_LIGHTS > 0
+        if (uShine > 0.0) {
+          vec3 Hs = normalize(directionalLights[0].direction + normalize(vViewPosition));
+          float nh = max(dot(normal, Hs), 0.0);
+          float sheen = pow(nh, 24.0) * 0.55 + smoothstep(0.965, 0.985, nh) * 0.6;
+          outgoingLight += directionalLights[0].color * sheen * uShine * 0.25;
+        }
+        #endif`);
     sh.uniforms.uRim = { value: new THREE.Color(0.55, 0.42, 0.32) };
+    sh.uniforms.uShine = { value: shine };
   };
-  mat.customProgramCacheKey = () => 'mage-rim';
+  mat.customProgramCacheKey = () => 'mage-rim2';
 }
 
 export class MageInstance {
