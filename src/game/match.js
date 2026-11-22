@@ -11,7 +11,9 @@ import '../fx/limitless.js';
 import '../fx/melee.js';
 import '../fx/heavenly.js';
 import { ChessWorld, miniBoard, MONO as MONO_PAL } from '../fx/chess.js';
+import '../fx/ink.js';
 import { CHECKMATE, ROOK, QUEEN } from './manipulator.js';
+import { ORB as INK_ORB, ERUPT as INK_ERUPT, TALISMAN } from './inkweaver.js';
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
@@ -476,6 +478,43 @@ export class Match {
         break;
       }
       case 'checkmate': this._openCheckmate(e, d, local); break;
+      // ---------------- Inkweaver
+      case 'inkRush': {
+        const o = new THREE.Vector3().fromArray(d.o), F = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).normalize();
+        this.fx.inkRushTrail(o, F);
+        if (!local && e.view) e.view.anim.play('dash', { dir: 0 });
+        break;
+      }
+      case 'inkBeat': {
+        const o = new THREE.Vector3().fromArray(d.o), F = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).normalize(), i = Number(d.i) || 0;
+        this.fx.inkBeat(o, F, i, e.view);
+        if (!local && e.view) e.view.anim.play(['m1a', 'm1c', 'slam'][i] || 'm1a');
+        if (!local) this.sound(i === 2 ? 'slashHeavy' : 'slash', o, i === 2 ? 0.9 : 0.6, 25);
+        break;
+      }
+      case 'inkOrb': {
+        const c = new THREE.Vector3().fromArray(d.c), o = Array.isArray(d.o) ? new THREE.Vector3().fromArray(d.o) : null;
+        this.fx.inkOrb(c, o, INK_ORB.delay, INK_ORB.life, INK_ORB.burstR);
+        this.sound('blueOn', c, 0.9, 50); this.sound('vortex', c, 0.7, 50);
+        setTimeout(() => this.sound('slam', c, 1, 60), (INK_ORB.delay + INK_ORB.life) * 1000);
+        if (!local && e.view) e.view.anim.play('cast', { anim: 'gBlue' });
+        break;
+      }
+      case 'inkArray': {
+        const o = new THREE.Vector3().fromArray(d.o), F = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).normalize();
+        this.fx.taiChiArray(o, 4.2, INK_ERUPT.charge + 0.6, { spin: 2.2 });
+        if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(F.x, F.z), 4.2, INK_ERUPT.charge + 0.5, { spread: 0.35, flap: 0.08 });
+        this.sound('domainCast', o, 0.6, 50);
+        if (!local && e.view) e.view.anim.play('cast', { anim: 'gRed' });
+        break;
+      }
+      case 'inkErupt': {
+        const o = new THREE.Vector3().fromArray(d.o), F = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1).normalize();
+        this.fx.inkErupt(o, F, INK_ERUPT.len, INK_ERUPT.width);
+        this.sound('slam', o, 1.3, 80); this.sound('slashHeavy', o, 1, 80);
+        break;
+      }
+      case 'talisman': this._openTalisman(e, d, local); break;
       case 'severWave': {
         const o = new THREE.Vector3().fromArray(d.o), dir = new THREE.Vector3(Number(d.d[0]) || 0, 0, Number(d.d[1]) || 1);
         this.fx.severWave(o, dir, !!d.v, 40, 60, 10);
@@ -1610,6 +1649,111 @@ export class Match {
     return L;
   }
 
+  // ---------------------------------------------------------------- Endless Talisman Suppression (Inkweaver)
+  // A 9 s cutscene everyone watches: a golden Tai Chi array opens under her, ink wings unfurl and
+  // she rises into the sky inside a ring of hanging talismans; then the talismans come down across
+  // the whole field as pillars of light, and it all ends in one colossal explosion of ink and gold.
+  _openTalisman(e, d, local) {
+    const c = new THREE.Vector3().fromArray(d.c), yaw = Number(d.yaw) || 0;
+    const f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), side = new THREE.Vector3(-f.z, 0, f.x);
+    if (this.cine) this._endCine();
+    const victims = [...this.ents.values()].filter((t) => t !== e && t.alive && Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < TALISMAN.radius);
+    this._tali = { c, f, side, caster: e, victims, done: false, rainT: 0 };
+    if (e.view) e.view.anim.play('nova');
+    this.cine = { t: 0, dur: TALISMAN.cine, caster: e, c: c.clone(), o: c.clone(), f, side, cue: 0, local,
+      update: this._taliCineUpdate, camera: this._taliCineCamera, end: this._taliCineEnd };
+    this.app.hud.cineStart('ENDLESS TALISMAN SUPPRESSION', '');
+    this.sound('domainCast', c, 1, 120);
+  }
+  _taliCineUpdate(dt) {
+    const C = this.cine, T = this._tali, hud = this.app.hud, e = T.caster;
+    C.t += dt;
+    const t = C.t, [r0, r1] = TALISMAN.rain;
+    const mono = (s, big) => hud.cineMono(s, 'gold', big);
+    const until = () => !this._tali || this._tali.done;
+    const cues = [
+      [0.05, () => { this.fx.taiChiArray(T.c, 6.5, TALISMAN.cine - 0.3, { spin: 0.5 }); mono('Ink becomes wings. Wings become heaven.'); }],
+      [0.9, () => { if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 5.2, Infinity, { spread: 0.6, flap: 0.1, until }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
+      [1.9, () => { this.fx.talismanHalo(T.c, this.map.Q.particles <= 2000 ? 36 : 80, 24, 15, until); mono(''); }],
+      [2.4, () => { hud.flash(0.6); hud.cineCard('ENDLESS TALISMAN SUPPRESSION', '無 窮 符 鎮', ''); }],
+      [3.0, () => mono('Heaven and earth, hear my command.')],
+      [4.7, () => mono('Every talisman a seal. Every seal a sentence.')],
+      [6.3, () => mono('Be still.')],
+      [TALISMAN.boom - 0.12, () => { mono(''); hud.impactFrames(() => hud.flash(1)); }],
+      [TALISMAN.boom, () => { this.fx.inkNova(new THREE.Vector3(T.c.x, T.c.y + 1, T.c.z), TALISMAN.boomR); this.sound('slam', T.c, 1.6, 300); this.sound('novaBoom', T.c, 1.2, 300); }],
+      [TALISMAN.cine - 0.3, () => mono('')],
+    ];
+    while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
+    // she rises on her wings, and comes back down at the end
+    e.liftY = t < 0.9 ? 0 : t < 2.4 ? 6 * (1 - Math.cos((t - 0.9) / 1.5 * Math.PI)) / 2 : t < TALISMAN.cine - 1.1 ? 6 + Math.sin(t * 1.6) * 0.25 : 6 * Math.max(0, (TALISMAN.cine - 0.1 - t) / 1.0);
+    // the rain: talismans across the whole field, more and more of them, and on every victim
+    if (t > r0 && t < r1) {
+      T.rainT -= dt;
+      while (T.rainT <= 0) {
+        T.rainT += 0.045 * (1.4 - (t - r0) / (r1 - r0));
+        const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * TALISMAN.radius;
+        this.fx.talismanStrike(new THREE.Vector3(T.c.x + Math.cos(a) * rr, 0, T.c.z + Math.sin(a) * rr), 0, 1);
+        if (Math.random() < 0.15) this.sound('slam', T.c, 0.5, 200);
+      }
+      for (let k = 0; k < TALISMAN.strikes; k++) {
+        const tk = r0 + (r1 - r0) * (k + 0.5) / TALISMAN.strikes;
+        if (t - dt < tk - 0.35 && t >= tk - 0.35) for (const v of T.victims) if (v.alive) this.fx.talismanStrike(v.pos.clone(), 0, 1.3);
+      }
+    }
+    hud.cineDark(t < 0.9 ? 0.35 : t < TALISMAN.boom ? 0.2 : 0.1);
+    if (t >= C.dur) this._endCine();
+  }
+  _taliCineEnd() {
+    const T = this._tali;
+    if (T) { T.done = true; T.caster.liftY = 0; }
+    this._tali = null;
+    for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;
+  }
+  _taliCineCamera() {
+    const C = this.cine, T = this._tali, t = C.t, o = T.c, f = T.f, sd = T.side, cam = this.camera;
+    const P = tmpV, L = tmpV2;
+    const ease = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
+    const view = T.caster.view;
+    const head = view ? view.head.getWorldPosition(this._cv1 || (this._cv1 = new THREE.Vector3())) : this._cv1 || (this._cv1 = new THREE.Vector3(o.x, o.y + 1.6, o.z));
+    let fov = 45, roll = 0;
+    const lift = T.caster.liftY || 0;
+    if (t < 0.9) { // low in front: the array blooms under her feet
+      const k = ease(t / 0.9);
+      P.set(o.x + f.x * (3.2 - k * 0.6) + sd.x * 0.8, o.y + 0.5, o.z + f.z * (3.2 - k * 0.6) + sd.z * 0.8);
+      L.set(head.x, head.y - 0.4, head.z); fov = 44;
+    } else if (t < 2.4) { // from behind and below: the wings unfurl and she rises
+      const k = ease((t - 0.9) / 1.5);
+      P.set(o.x - f.x * (4 + k * 2) + sd.x * 1.4, o.y + 0.6, o.z - f.z * (4 + k * 2) + sd.z * 1.4);
+      L.set(head.x, head.y + 0.6, head.z); fov = 52; roll = -0.03;
+    } else if (t < 3.2) { // wide, from in front: hanging in the sky inside her ring of talismans
+      const k = ease((t - 2.4) / 0.8);
+      P.set(o.x + f.x * (16 + k * 4), o.y + 3 + lift * 0.5, o.z + f.z * (16 + k * 4));
+      L.set(o.x, o.y + 4 + lift, o.z); fov = 50;
+    } else if (t < 5.0) { // high over her shoulder: the talismans come down across the whole field
+      const k = ease((t - 3.2) / 1.8), a = Math.atan2(f.x, f.z) + Math.PI + k * 0.5;
+      P.set(o.x + Math.sin(a) * 6, o.y + lift + 4 + k * 3, o.z + Math.cos(a) * 6);
+      L.set(o.x + f.x * 18, o.y, o.z + f.z * 18); fov = 60;
+    } else if (t < 6.3) { // on the ground among the pillars, looking up at her
+      const v = T.victims.find((x) => x.view) || null, g = v ? v.pos : new THREE.Vector3(o.x + f.x * 12, o.y, o.z + f.z * 12);
+      const k = ease((t - 5.0) / 1.3);
+      P.set(g.x + sd.x * (2 - k), g.y + 0.8, g.z + sd.z * (2 - k));
+      L.set(head.x, head.y + 0.5, head.z); fov = 50; roll = 0.04;
+    } else if (t < TALISMAN.boom) { // her face, close: calm, eyes half closed
+      const k = ease((t - 6.3) / (TALISMAN.boom - 6.3));
+      P.set(head.x + f.x * (0.9 - k * 0.25) + sd.x * 0.15, head.y + 0.02, head.z + f.z * (0.9 - k * 0.25) + sd.z * 0.15);
+      L.set(head.x, head.y, head.z); fov = 28;
+    } else { // high and wide: the explosion swallows the field
+      const k = ease((t - TALISMAN.boom) / (TALISMAN.cine - TALISMAN.boom));
+      P.set(o.x - f.x * 26 + sd.x * 10, o.y + 18 - k * 4, o.z - f.z * 26 + sd.z * 10);
+      L.set(o.x, o.y + 3, o.z); fov = 58;
+    }
+    P.y = Math.max(P.y, this.world.groundAt(P.x, P.z, P.y + 20) + 0.3);
+    cam.position.copy(P); cam.lookAt(L);
+    if (roll) cam.rotateZ(roll);
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    return L;
+  }
+
   // ---------------------------------------------------------------- Domain Expansion: Unlimited Void
   _openDomain(e, d, local) {
     const c = new THREE.Vector3().fromArray(d.c);
@@ -1824,6 +1968,7 @@ export class Match {
       if (e.hideAt && this.time > e.hideAt && !e.alive) { v.setVisible(false); e.hideAt = 0; }
       if (!v.root.visible) continue;
       v.root.position.copy(e.pos);
+      if (e.liftY) v.root.position.y += e.liftY;
       // animation LOD: full rate up close, every 2nd/4th frame far away or off-screen
       e.animAcc = (e.animAcc || 0) + dt;
       const d2 = e.isLocal ? 0 : e.pos.distanceToSquared(this.camera.position);

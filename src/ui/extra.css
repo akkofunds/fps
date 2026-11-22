@@ -308,3 +308,4 @@ body.grade-void #game { filter: saturate(0.75) contrast(1.22) brightness(0.95) h
 #cineStep.show { opacity: 1; transform: none; }
 #cineStep i { font: 700 clamp(12px, 1.2vw, 15px)/1 'Rajdhani', sans-serif; font-style: normal; letter-spacing: 0.2em; color: #111; background: #f1f1f3; padding: 0.45em 0.6em; }
 #cineStep b { font: 600 clamp(14px, 1.6vw, 21px)/1.2 'Cinzel', Georgia, serif; letter-spacing: 0.14em; color: #fff; text-shadow: 0 1px 2px #000; border-left: 3px solid #e2463a; padding: 0.45em 0.9em; background: rgba(8, 8, 10, 0.72); }
+#cineMono.gold p { color: #fff1cf; text-shadow: 0 0 16px rgba(255,190,70,0.9), 0 0 40px rgba(255,150,30,0.45), 0 2px 3px #000; }

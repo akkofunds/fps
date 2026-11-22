@@ -239,7 +239,7 @@ export class AdminPanel {
     const grid = el('div', 'ap-toggles');
     for (const m of MAGE_LIST.filter((x) => x.admin)) {
       const r = el('div', 'ap-mage');
-      r.insertAdjacentHTML('beforeend', (m.id === 'manipulator' ? ICONS.king : ICONS.spear) || '');
+      r.insertAdjacentHTML('beforeend', (m.id === 'manipulator' ? ICONS.king : m.id === 'inkweaver' ? ICONS.talisman : ICONS.spear) || '');
       r.appendChild(el('span', 'nm', m.name));
       if (m.forever) { r.appendChild(el('button', 'btn-side', 'ADMINS ONLY · FOREVER')); grid.appendChild(r); continue; }
       const open = cfg.open.includes(m.id);
