@@ -27,85 +27,72 @@ function canvasTex(key, w, h, paint) {
 // into ragged smoky wisps. Texture 1024×512 (2:1): the root is at the left edge, 56% down; the tip
 // at the top right. One wing ≈ 1.85× her height wide and ≈ her height tall (reference proportions).
 function wingTex() {
-  return canvasTex('wing5', 1024, 640, (g, W, H) => {
-    const r = mulberry(23);
-    const top = (u) => H * (0.62 - 0.59 * Math.pow(u, 0.85));                // leading edge (y): rises to a high tip
-    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-    const bot = (u) => H * (0.97 - 0.16 * u - 0.12 * Math.pow(u, 4) - 0.62 * Math.pow(sm(0.8, 1.0, u), 1.4)); // deep all the way out, rounding up into the tip
-    const lerp = (a, b, k) => a + (b - a) * k;
-    // 1. the solid dark silhouette of the wing (soft edged)
-    g.filter = 'blur(3px)';
-    g.fillStyle = 'rgba(30,18,13,0.94)';
-    g.beginPath(); g.moveTo(0, top(0));
-    for (let k = 1; k <= 60; k++) { const u = k / 60; g.lineTo(u * W, top(u)); }
-    for (let k = 60; k >= 0; k--) { const u = k / 60; g.lineTo(u * W, bot(u)); }
-    g.closePath(); g.fill();
-    g.filter = 'none';
-    // one rounded feather: pointing down-outward from (x, y), lit along one edge
-    const feather = (x, y, ang, len, wid, base, lit, blur = 0) => {
-      g.save(); g.translate(x, y); g.rotate(ang); g.filter = blur ? `blur(${blur}px)` : 'none';
-      g.beginPath(); g.moveTo(0, -wid * 0.45);
-      g.bezierCurveTo(len * 0.55, -wid * 0.6, len * 0.95, -wid * 0.35, len, 0);
-      g.bezierCurveTo(len * 0.95, wid * 0.35, len * 0.55, wid * 0.6, 0, wid * 0.45); g.closePath();
-      const grd = g.createLinearGradient(0, 0, len, 0);
-      grd.addColorStop(0, `rgba(${base[0]},${base[1]},${base[2]},0.96)`); grd.addColorStop(1, `rgba(${base[0] * 0.7 | 0},${base[1] * 0.7 | 0},${base[2] * 0.7 | 0},0.9)`);
-      g.fillStyle = grd; g.fill();
-      if (lit) { g.strokeStyle = `rgba(150,82,40,${lit})`; g.lineWidth = 1.6; g.beginPath(); g.moveTo(len * 0.08, -wid * 0.48); g.bezierCurveTo(len * 0.55, -wid * 0.6, len * 0.95, -wid * 0.35, len, 0); g.stroke(); }
-      g.strokeStyle = 'rgba(12,8,6,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(2, 0); g.lineTo(len * 0.9, 0); g.stroke();
-      g.restore(); g.filter = 'none';
+  // clean and soft (reference): one smooth dark mass, four big feather points along the bottom,
+  // edges that fade into the air, a gold leading edge — no fringe of little spikes
+  return canvasTex('wing6', 1024, 640, (g, W, H) => {
+    const r = mulberry(29);
+    const top = (u) => H * (0.6 - 0.56 * Math.pow(u, 0.85));                 // leading edge: up to a high tip
+    // the lower edge: a shallow line with four big feather points hanging from it
+    const lobes = [[0.15, 0.15, 0.2], [0.4, 0.15, 0.23], [0.64, 0.15, 0.21], [0.87, 0.14, 0.17]];  // [centre u, half-width, depth (×H)]
+    const base = (u) => H * (0.76 - 0.14 * u) - (u > 0.92 ? (u - 0.92) / 0.08 * H * 0.3 : 0);
+    const bot = (u) => {
+      let y = base(u);
+      for (const [c, w, d] of lobes) { const k = 1 - Math.abs(u - c) / w; if (k > 0) y = Math.max(y, base(u) + H * d * Math.pow(k, 0.8) * (1 - 0.3 * (u - c + w) / (2 * w))); }
+      return Math.min(H * 0.99, y);
     };
-    // 2. long primaries / secondaries along the bottom, overhanging the edge into the air
-    for (let k = 0; k < 64; k++) {
-      const u = k / 63, x = u * W * 0.98, yb = bot(u), yt = top(u), h = yb - yt;
-      const len = Math.max(50, h * 0.42) * (0.9 + R2(r) * 0.3), ang = Math.PI * 0.5 - 0.12 - u * 0.55 + (R2(r) - 0.5) * 0.1;
-      feather(x + (R2(r) - 0.5) * 8, yb - len * 0.62 * Math.sin(ang), ang, len, 34 - u * 12, [34, 20, 14], 0.25, 1);
-    }
-    // 3. rows of overlapping coverts, bottom row first so each upper row lies over the one below
-    const rows = 4;
-    for (let ri = rows - 1; ri >= 0; ri--) {
-      const n = 46 - ri * 4;
-      for (let k = 0; k < n; k++) {
-        const u = (k + (ri % 2) * 0.5) / n, x = u * W * 0.98, yt = top(u), yb = bot(u), h = yb - yt;
-        const y = lerp(yt, yb, 0.04 + ri * 0.2), len = h * (0.26 + 0.04 * ri) * (0.85 + R2(r) * 0.3);
-        const ang = Math.PI * 0.5 - 0.2 - u * 0.45 + (R2(r) - 0.5) * 0.12;
-        const shade = 1 - ri * 0.08;
-        feather(x, y, ang, len, (30 - u * 10) * (1 - ri * 0.06), [44 * shade | 0, 26 * shade | 0, 18 * shade | 0], 0.45 - ri * 0.07);
+    // 1. the silhouette, filled with a soft vertical gradient (warm brown up top, near-black below)
+    const path = () => {
+      g.beginPath(); g.moveTo(0, top(0));
+      for (let k = 1; k <= 120; k++) { const u = k / 120; g.lineTo(u * W, top(u)); }
+      for (let k = 120; k >= 0; k--) { const u = k / 120; g.lineTo(u * W + (bot(u) - base(u)) * 0.18, bot(u)); }   // the points sweep outward a little
+      g.closePath();
+    };
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0, 'rgba(70,40,24,0.95)'); grd.addColorStop(0.45, 'rgba(38,22,15,0.95)'); grd.addColorStop(1, 'rgba(18,11,9,0.92)');
+    g.filter = 'blur(5px)'; g.fillStyle = grd; path(); g.fill();
+    g.filter = 'blur(1.5px)'; g.fillStyle = grd; g.globalAlpha = 0.85; path(); g.fill(); g.globalAlpha = 1;
+    // 2. a few long, soft feather strokes inside, following each point (barely there, like the reference)
+    g.filter = 'blur(3px)';
+    for (const [c] of lobes) {
+      for (let k = 0; k < 4; k++) {
+        const u = c + (k - 1.5) * 0.035, x0 = u * W, y0 = top(u) + 20, x1 = c * W + (bot(c) - base(c)) * 0.18, y1 = bot(c) - 10;
+        g.strokeStyle = `rgba(${k % 2 ? 90 : 20},${k % 2 ? 52 : 12},${k % 2 ? 30 : 8},0.35)`; g.lineWidth = 10 + R2(r) * 8;
+        g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2 + 20, (y0 + y1) / 2, x1, y1); g.stroke();
       }
     }
-    // 4. warm light glancing through the upper plumage (the reference's orange streaks)
-    g.globalCompositeOperation = 'lighter';
-    g.filter = 'blur(1.5px)';
-    for (let k = 0; k < 70; k++) {
-      const u = R2(r) * 0.9, x = u * W, yt = top(u), yb = bot(u), y = yt + (yb - yt) * R2(r) * 0.45, len = 25 + R2(r) * 50;
-      const ang = Math.PI * 0.5 - 0.25 - u * 0.65;
-      g.strokeStyle = `rgba(255,${110 + R2(r) * 70 | 0},40,${(0.28 + R2(r) * 0.25) * (1 - u * 0.5)})`; g.lineWidth = 1.5 + R2(r) * 2;
-      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); g.stroke();
-    }
-    g.filter = 'none'; g.globalCompositeOperation = 'source-over';
-    // 5. smoky wisps trailing from the bottom edge
-    g.filter = 'blur(2.5px)';
-    for (let k = 0; k < 110; k++) {
-      const u = R2(r), x = u * W, y = bot(u) + 10;
-      g.strokeStyle = `rgba(30,18,13,${0.18 + R2(r) * 0.35})`; g.lineWidth = 3 + R2(r) * 6;
-      g.beginPath(); g.moveTo(x, y - 10); g.quadraticCurveTo(x + (R2(r) - 0.5) * 30, y + 25, x + (R2(r) - 0.2) * 40, Math.min(H - 2, y + 20 + R2(r) * 60 * (1 - u))); g.stroke();
-    }
+    // 3. fade the lower part into the air (clean, faded edges)
     g.filter = 'none';
-    // 6. the gold leading edge: wide soft glow, bright core, brightest at the root
+    g.globalCompositeOperation = 'destination-in';
+    const fade = g.createLinearGradient(0, 0, 0, H);
+    fade.addColorStop(0, 'rgba(0,0,0,1)'); fade.addColorStop(0.55, 'rgba(0,0,0,0.95)'); fade.addColorStop(1, 'rgba(0,0,0,0.45)');
+    g.fillStyle = fade; g.fillRect(0, 0, W, H);
+    const fadeX = g.createLinearGradient(0, 0, W, 0);
+    fadeX.addColorStop(0, 'rgba(0,0,0,1)'); fadeX.addColorStop(0.8, 'rgba(0,0,0,0.95)'); fadeX.addColorStop(1, 'rgba(0,0,0,0.55)');
+    g.fillStyle = fadeX; g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = 'source-over';
+    // 4. warm orange light glancing through the upper plumage, a few soft streaks
     g.globalCompositeOperation = 'lighter';
-    for (const [w, a, blur] of [[30, 0.3, 14], [11, 0.6, 5], [3.5, 1, 0]]) {
+    g.filter = 'blur(4px)';
+    for (let k = 0; k < 9; k++) {
+      const u = 0.04 + k * 0.1 + R2(r) * 0.04, y = top(u) + 14, len = 70 + R2(r) * 80;
+      g.strokeStyle = `rgba(255,${120 + R2(r) * 50 | 0},50,${0.3 * (1 - u * 0.6)})`; g.lineWidth = 6 + R2(r) * 6;
+      g.beginPath(); g.moveTo(u * W, y); g.quadraticCurveTo(u * W + len * 0.3, y + len * 0.5, u * W + len * 0.15, y + len); g.stroke();
+    }
+    // 5. the gold leading edge: wide soft glow, bright core, brightest at the root
+    for (const [w, a, blur] of [[34, 0.3, 16], [12, 0.6, 6], [4, 1, 0]]) {
       g.filter = blur ? `blur(${blur}px)` : 'none'; g.lineWidth = w; g.lineCap = 'round';
       for (let k = 0; k < 70; k++) {
-        const u0 = k / 70, u1 = (k + 1) / 70, fade = Math.max(0.15, 1 - u0 * 0.8);
-        g.strokeStyle = `rgba(255,${160 + 60 * fade | 0},${60 + 50 * fade | 0},${a * fade})`;
+        const u0 = k / 70, u1 = (k + 1) / 70, f = Math.max(0.15, 1 - u0 * 0.8);
+        g.strokeStyle = `rgba(255,${160 + 60 * f | 0},${60 + 50 * f | 0},${a * f})`;
         g.beginPath(); g.moveTo(u0 * W, top(u0) + 3); g.lineTo(u1 * W, top(u1) + 3); g.stroke();
       }
     }
     g.filter = 'none';
-    // a warm glow where the wing meets her back, and embers
-    const rg = g.createRadialGradient(0, H * 0.66, 0, 0, H * 0.66, H * 0.55);
-    rg.addColorStop(0, 'rgba(255,170,80,0.6)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
+    // a warm glow at the root, and a few embers
+    const rg = g.createRadialGradient(0, H * 0.62, 0, 0, H * 0.62, H * 0.5);
+    rg.addColorStop(0, 'rgba(255,170,80,0.55)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
     g.fillStyle = rg; g.fillRect(0, 0, W * 0.35, H);
-    for (let k = 0; k < 80; k++) { const u = R2(r), x = u * W, y = top(u) + (bot(u) - top(u)) * R2(r); g.fillStyle = `rgba(255,${170 + R2(r) * 70 | 0},90,${0.35 + R2(r) * 0.6})`; g.beginPath(); g.arc(x, y, 0.8 + R2(r) * 2.2, 0, 7); g.fill(); }
+    for (let k = 0; k < 40; k++) { const u = R2(r), x = u * W, y = top(u) + (bot(u) - top(u)) * R2(r) * 0.8; g.fillStyle = `rgba(255,${170 + R2(r) * 70 | 0},90,${0.35 + R2(r) * 0.55})`; g.beginPath(); g.arc(x, y, 1 + R2(r) * 2.4, 0, 7); g.fill(); }
     g.globalCompositeOperation = 'source-over';
   });
 }
