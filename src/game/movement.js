@@ -78,7 +78,7 @@ export function stepMovement(b, cmd, dt, world, ev) {
 
   const water = world.inWater(b.pos.x, b.pos.z);
   b.water = water;
-  const maxSpeed = MOVE.run * BAL.speed * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * b.slow * (b.boostT > 0 ? 1.45 : 1) * (b.slowT > 0 ? b.slowK : 1) * b.perk.speed;
+  const maxSpeed = MOVE.run * BAL.speed * (water > 0.25 ? MOVE.waterSlow : 1) * (cmd.aim ? 0.78 : 1) * (cmd.walk ? MOVE.walk : 1) * b.slow * (b.boostT > 0 ? 1.45 : 1) * (b.slowT > 0 ? b.slowK : 1) * b.perk.speed;
 
   if (b.lungeT > 0) {
     b.lungeT -= dt;

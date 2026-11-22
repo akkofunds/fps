@@ -1,7 +1,7 @@
 import { Emitter } from './emitter.js';
 
 // Keyboard + mouse input. Gameplay reads `state` once per frame and consumes `pressed` edges.
-// Bindings: WASD move, Space jump, Q dash, E Blaze Orb, C Firewall, V Flame Leap, X Meteor (ult),
+// Bindings: WASD move (hold Left Ctrl / Left Alt to walk), Space jump, Q dash, E Blaze Orb, C Firewall, V Flame Leap, X Meteor (ult),
 // LMB Ember Bolt, RMB tighter aim, Tab scoreboard, Enter chat, Esc menu.
 export class Input extends Emitter {
   constructor(canvas) {
@@ -77,12 +77,12 @@ export class Input extends Emitter {
       }
     }
     if (!down && code === 'Tab') this.emit('scoreboard', false);
-    if (this.enabled && (code === 'Space' || code === 'Tab' || code.startsWith('Arrow'))) e.preventDefault();
+    if (this.enabled && (code === 'Space' || code === 'Tab' || code === 'AltLeft' || code.startsWith('Arrow'))) e.preventDefault();
   }
 
   poll() {
     const s = this.state, k = this.keys;
-    if (this.typing || !this.enabled) { s.fwd = s.side = 0; s.jump = s.fire = s.aim = false; return s; }
+    if (this.typing || !this.enabled) { s.fwd = s.side = 0; s.jump = s.fire = s.aim = s.walk = false; return s; }
     if (this.mode === 'touch') {
       const t = this.touch;
       s.fwd = t.fwd; s.side = t.side; s.jump = t.jump; s.fire = t.fire; s.aim = t.aim;
@@ -93,6 +93,7 @@ export class Input extends Emitter {
     s.jump = !!k.Space;
     s.fire = this.mouseL && this.locked;
     s.aim = this.mouseR && this.locked;
+    s.walk = !!(k.ControlLeft || k.AltLeft);   // hold to walk
     return s;
   }
 

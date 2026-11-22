@@ -2061,7 +2061,7 @@ export class Match {
     if (me.alive) {
       const b = this.body;
       b.yaw = this.cam.yaw; b.pitch = this.cam.pitch;
-      const cmd = canMove ? { fwd: st.fwd, side: st.side, jumpPressed: input.pressed.jump, dashPressed: input.pressed.dash, aim: st.aim } : { fwd: 0, side: 0 };
+      const cmd = canMove ? { fwd: st.fwd, side: st.side, jumpPressed: input.pressed.jump, dashPressed: input.pressed.dash, aim: st.aim, walk: st.walk } : { fwd: 0, side: 0 };
       const steps = Math.min(4, Math.ceil(dt / (1 / 60)));
       for (let i = 0; i < steps; i++) {
         stepMovement(b, i === 0 ? cmd : { ...cmd, jumpPressed: false, dashPressed: false }, dt / steps, this.world, (k, d) => this._localEvent(k, d));
