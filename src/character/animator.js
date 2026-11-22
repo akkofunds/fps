@@ -116,7 +116,7 @@ const STYLES = {
   // sway and weight transfer, a slight forward lean with the chest up, a weighted up-and-down, steps
   // a little inside the hip line, and arms close to the body swinging cleanly opposite the legs
   femme: { swing: 1.0, swingR: 1, lean: 1.15, bounce: 0.92, sway: 1.8, runSway: 1.9, settle: 0.45, roll: 1.7, twist: 1.4, elbow: 1.05, kick: 1.05, stride: 0.95,
-    width: 0.72, armIn: 14, cross: 8, arch: -2, wrist: 6, fidget: 'fidgetP' },
+    width: 0.72, armIn: 14, cross: 8, arch: -2, wrist: 6, follow: 0.32, fidget: 'fidgetP' },
 };
 
 const BAKED = new Map(); // retargeted clips, shared by every instance of the same model
@@ -582,8 +582,12 @@ export class Animator {
     const counter = -hipYawD + pelvisYaw;
     const thorax = lerp(3, 7, wFast) * st.twist * stride * wRun;
     // the spine undoes the pelvis roll so the shoulders stay level
-    setE(P, B.spine, 1.5 + lean * 0.45 + (st.arch || 0) * wRun, counter * 0.4, bank * 0.3 - pelvisRoll * 0.85);
-    setE(P, B.chest, lean * 0.25, counter * 0.35 + thorax, -pelvisRoll * 0.15);
+    // st.follow: how much of the hip roll the spine lets through to the chest, so the weight shift of
+    // each step travels up the body (the chest sways a little with the hips) instead of the shoulders
+    // staying dead level
+    const fol = (st.follow || 0) * wRun;
+    setE(P, B.spine, 1.5 + lean * 0.45 + (st.arch || 0) * wRun, counter * 0.4, bank * 0.3 - pelvisRoll * (0.85 - fol));
+    setE(P, B.chest, lean * 0.25, counter * 0.35 + thorax, -pelvisRoll * (0.15 - fol * 0.4));
     setE(P, B.upperChest, 0, counter * 0.2 + thorax * 0.3, 0);
     // the head stays level and looking ahead (the eyes lead the run)
     setE(P, B.neck, -lean * 0.45, -thorax * 0.4 + counter * 0.05, -bank * 0.3);
