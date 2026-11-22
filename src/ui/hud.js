@@ -356,10 +356,10 @@ export class Hud {
     void e.offsetWidth; e.classList.add('show');
   }
   // a step caption, top-left (what is happening, in plain words); '' hides it
-  cineStep(text, n = '') {
+  cineStep(text, n = '', sub = '') {
     const e = this._cineLayer('cineStep');
     if (!text) { e.classList.remove('show'); return; }
-    e.innerHTML = `${n ? `<i>${n}</i>` : ''}<b>${text}</b>`;
+    e.innerHTML = `${n ? `<i>${n}</i>` : ''}<b>${text}${sub ? `<small>${sub}</small>` : ''}</b>`;
     e.classList.remove('show'); void e.offsetWidth; e.classList.add('show');
   }
   cineDark(k) { if (this.cineEl) this.cineEl.querySelector('.cine-dark').style.opacity = String(k * 0.55); }

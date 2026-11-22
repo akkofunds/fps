@@ -62,3 +62,9 @@ ICONS.knight = '<svg viewBox="0 0 24 24"><path d="M9 3l1.6 2.2C15.4 5 19 8.6 19 
 ICONS.rook = '<svg viewBox="0 0 24 24"><path d="M5 2h3v2h2.5V2h3v2H16V2h3v5l-2 1.6V17l1.5 2.5h-13L7 17V8.6L5 7z"/><path d="M4.5 20.5h15V23h-15z"/></svg>';
 ICONS.queen = '<svg viewBox="0 0 24 24"><circle cx="4" cy="5" r="1.8"/><circle cx="9" cy="3" r="1.8"/><circle cx="15" cy="3" r="1.8"/><circle cx="20" cy="5" r="1.8"/><path d="M3.5 7l3.3 7.5L9 5.5l3 8 3-8 2.2 9L20.5 7 18 19H6z"/><path d="M5 20.3h14V23H5z"/></svg>';
 Object.assign(ABILITY_ICON, { knight: ICONS.knight, rook: ICONS.rook, rookSlam: ICONS.rook, queen: ICONS.queen, checkmate: ICONS.king });
+// Inkweaver (golden ink)
+ICONS.talisman = '<svg viewBox="0 0 24 24"><path d="M7 1.5h10l-.6 21H7.6z"/><path d="M9.5 5h5M9.8 8.5h4.4M12 10.5v7M9.6 13.5l4.8 2.4M14.4 13.5l-4.8 2.4" stroke="#0b1220" stroke-width="1.3" fill="none"/></svg>';
+ICONS.wings = '<svg viewBox="0 0 24 24"><path d="M12 12C9 6 5 3 1 3c1.6 2.2 2 4 1.6 5.6 1.6-.2 3 .3 4 1.4-1.6.4-2.6 1.4-3 3 2.4-1 5-.8 8.4-1z"/><path d="M12 12c3-6 7-9 11-9-1.6 2.2-2 4-1.6 5.6-1.6-.2-3 .3-4 1.4 1.6.4 2.6 1.4 3 3-2.4-1-5-.8-8.4-1z"/><circle cx="12" cy="15" r="3.4"/></svg>';
+ICONS.inkorb = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5"/><path d="M12 2a10 10 0 0 1 10 10h-2.4A7.6 7.6 0 0 0 12 4.4zM12 22A10 10 0 0 1 2 12h2.4A7.6 7.6 0 0 0 12 19.6z"/></svg>';
+ICONS.taichi = '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 5 5 0 0 0 0-10 5 5 0 0 1 0-10z"/><circle cx="12" cy="7" r="1.6"/><circle cx="12" cy="17" r="1.6" fill="#0b1220"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>';
+Object.assign(ABILITY_ICON, { rush: ICONS.wings, inkHit: ICONS.wings, inkFin: ICONS.wings, orb: ICONS.inkorb, inkOrb: ICONS.inkorb, inkBurst: ICONS.inkorb, erupt: ICONS.taichi, inkErupt: ICONS.taichi, talisman: ICONS.talisman, talismanRain: ICONS.talisman, inkNova: ICONS.talisman });

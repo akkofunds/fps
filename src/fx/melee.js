@@ -14,11 +14,13 @@ const C = {
   fire: [[3.0, 1.2, 0.3, 1], [1.4, 0.2, 0.04, 0]],
   cursed: [[0.6, 1.6, 3.6, 1], [0.1, 0.3, 1.4, 0]],
   white: [[3.2, 3.2, 3.4, 1], [1.2, 1.4, 2.0, 0]],
+  ink: [[3.0, 2.2, 0.7, 1], [0.7, 0.35, 0.04, 0]],
 };
 const DUST0 = [0.42, 0.4, 0.36, 0.5], DUST1 = [0.5, 0.48, 0.45, 0];
 // which element a hit uses: Shoto's left fist is frost, his right fist is fire, the kick is both
 function elem(style, i, k = 0) {
   if (style === 'chess') return 'white';
+  if (style === 'ink') return 'ink';
   if (style === 'cursed') return k % 3 === 0 ? 'white' : 'cursed';
   if (i === 3) return k % 2 ? 'ice' : 'fire';
   return i === 1 ? 'fire' : 'ice';
@@ -65,7 +67,8 @@ Object.assign(Fx.prototype, {
     else {
       // roundhouse: a heavy wrap; Shoto's is fire over ice
       this.ribbonCombo(feet, F, 'x', pal, 1.05, 0.08);
-      if (style !== 'cursed') this.ribbonCombo(feet, F, 'h', GLOSS.ice, 1.2, 0.11);
+      if (style === 'ink') this.ribbonCombo(feet, F, 'h', GLOSS.inkDark, 1.2, 0.11);
+      else if (style !== 'cursed') this.ribbonCombo(feet, F, 'h', GLOSS.ice, 1.2, 0.11);
       this.windSwirl(at(0, 0, 0.5), 3.0, { life: 0.6 });
     }
     void ARC; void SLASH_PAL;
@@ -93,7 +96,7 @@ Object.assign(Fx.prototype, {
     }
     // a short white flash at the contact point
     this.fire.emit(p.x, p.y, p.z, 0, 0, 0, 0.05, heavy ? 0.5 : 0.25, heavy ? 0.9 : 0.45, C.white[0], C[el][0], 0, 0);
-    this.light(p, heavy ? 22 : 9, heavy ? 10 : 5, heavy ? 0.2 : 0.1, style === 'cursed' ? 0x6fb8ff : el === 'fire' ? 0xff7a2a : 0x9fd8ff);
+    this.light(p, heavy ? 22 : 9, heavy ? 10 : 5, heavy ? 0.2 : 0.1, style === 'cursed' ? 0x6fb8ff : el === 'fire' ? 0xff7a2a : el === 'ink' ? 0xffc85a : 0x9fd8ff);
     if (heavy) for (let k = 0; k < 12; k++) { const a = R() * 6.283; this.smoke.emit(p.x, p.y - 0.9, p.z, Math.cos(a) * 4 + dir.x * 6, 0.4 + R(), Math.sin(a) * 4 + dir.z * 6, 0.6 + R() * 0.3, 0.4, 1.6, DUST0, DUST1, 2.4, 0.1); }
   },
 

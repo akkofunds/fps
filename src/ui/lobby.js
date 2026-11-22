@@ -28,6 +28,7 @@ const ART = {
   sorcerer: ['art/sorcerer.jpg', '50% 22%'],
   kineslayer: ['art/kineslayer.jpg', '64% 6%'],
   manipulator: ['art/manipulator.jpg', '62% 8%'],
+  inkweaver: ['art/inkweaver.jpg', '52% 16%'],
 };
 const MAGES = [
   { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },
@@ -35,6 +36,7 @@ const MAGES = [
   { id: 'sorcerer', name: 'SORCERER', icon: ICONS.purple, open: true },
   { id: 'kineslayer', name: 'KINE SLAYER', icon: ICONS.spear, open: true },
   { id: 'manipulator', name: 'MANIPULATOR', icon: ICONS.king, open: true, admin: true }, // admin-only
+  { id: 'inkweaver', name: 'INKWEAVER', icon: ICONS.talisman, open: true, admin: true }, // admin-only
   { id: 'terra', name: 'TERRA', icon: ICONS.earth },
   { id: 'volt', name: 'VOLT', icon: ICONS.storm },
   { id: 'gale', name: 'GALE', icon: ICONS.wind },
