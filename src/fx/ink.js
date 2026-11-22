@@ -27,10 +27,11 @@ function canvasTex(key, w, h, paint) {
 // into ragged smoky wisps. Texture 1024×512 (2:1): the root is at the left edge, 56% down; the tip
 // at the top right. One wing ≈ 1.85× her height wide and ≈ her height tall (reference proportions).
 function wingTex() {
-  return canvasTex('wing4', 1024, 512, (g, W, H) => {
+  return canvasTex('wing5', 1024, 640, (g, W, H) => {
     const r = mulberry(23);
-    const top = (u) => H * (0.55 - 0.5 * Math.pow(u, 0.85));                 // leading edge (y)
-    const bot = (u) => H * (0.99 - 0.1 * u - 0.58 * Math.pow(u, 3));         // where the mass ends (y)
+    const top = (u) => H * (0.62 - 0.59 * Math.pow(u, 0.85));                // leading edge (y): rises to a high tip
+    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const bot = (u) => H * (0.97 - 0.16 * u - 0.12 * Math.pow(u, 4) - 0.62 * Math.pow(sm(0.8, 1.0, u), 1.4)); // deep all the way out, rounding up into the tip
     const lerp = (a, b, k) => a + (b - a) * k;
     // 1. the solid dark silhouette of the wing (soft edged)
     g.filter = 'blur(3px)';
@@ -56,7 +57,7 @@ function wingTex() {
     // 2. long primaries / secondaries along the bottom, overhanging the edge into the air
     for (let k = 0; k < 64; k++) {
       const u = k / 63, x = u * W * 0.98, yb = bot(u), yt = top(u), h = yb - yt;
-      const len = Math.max(40, h * 0.55) * (0.9 + R2(r) * 0.3), ang = Math.PI * 0.5 - 0.15 - u * 0.75 + (R2(r) - 0.5) * 0.1;
+      const len = Math.max(50, h * 0.42) * (0.9 + R2(r) * 0.3), ang = Math.PI * 0.5 - 0.12 - u * 0.55 + (R2(r) - 0.5) * 0.1;
       feather(x + (R2(r) - 0.5) * 8, yb - len * 0.62 * Math.sin(ang), ang, len, 34 - u * 12, [34, 20, 14], 0.25, 1);
     }
     // 3. rows of overlapping coverts, bottom row first so each upper row lies over the one below
@@ -65,8 +66,8 @@ function wingTex() {
       const n = 46 - ri * 4;
       for (let k = 0; k < n; k++) {
         const u = (k + (ri % 2) * 0.5) / n, x = u * W * 0.98, yt = top(u), yb = bot(u), h = yb - yt;
-        const y = lerp(yt, yb, 0.05 + ri * 0.19), len = h * (0.24 + 0.04 * ri) * (0.85 + R2(r) * 0.3);
-        const ang = Math.PI * 0.5 - 0.25 - u * 0.65 + (R2(r) - 0.5) * 0.12;
+        const y = lerp(yt, yb, 0.04 + ri * 0.2), len = h * (0.26 + 0.04 * ri) * (0.85 + R2(r) * 0.3);
+        const ang = Math.PI * 0.5 - 0.2 - u * 0.45 + (R2(r) - 0.5) * 0.12;
         const shade = 1 - ri * 0.08;
         feather(x, y, ang, len, (30 - u * 10) * (1 - ri * 0.06), [44 * shade | 0, 26 * shade | 0, 18 * shade | 0], 0.45 - ri * 0.07);
       }
@@ -101,7 +102,7 @@ function wingTex() {
     }
     g.filter = 'none';
     // a warm glow where the wing meets her back, and embers
-    const rg = g.createRadialGradient(0, H * 0.6, 0, 0, H * 0.6, H * 0.55);
+    const rg = g.createRadialGradient(0, H * 0.66, 0, 0, H * 0.66, H * 0.55);
     rg.addColorStop(0, 'rgba(255,170,80,0.6)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
     g.fillStyle = rg; g.fillRect(0, 0, W * 0.35, H);
     for (let k = 0; k < 80; k++) { const u = R2(r), x = u * W, y = top(u) + (bot(u) - top(u)) * R2(r); g.fillStyle = `rgba(255,${170 + R2(r) * 70 | 0},90,${0.35 + R2(r) * 0.6})`; g.beginPath(); g.arc(x, y, 0.8 + R2(r) * 2.2, 0, 7); g.fill(); }
@@ -215,11 +216,11 @@ Object.assign(Fx.prototype, {
       // the back; the wings open from folded (pointing back) to spread wide
       const open = 0.15 + 0.85 * e;
       for (const [w, sd] of [[L, 1], [Rw, -1]]) {
-        w.scale.set(sd * s * 2, s, 1);
+        w.scale.set(sd * s * 2, s * 1.25, 1);
         const a = sd * ((1 - open) * 1.3 + 0.1 + f);                      // swing about the root (folded → open)
         w.rotation.set(0, a, 0);
         // the texture's root (left edge, 56% down) sits on the spine just behind the shoulder blades
-        const ox = s, oy = 0.06 * s;
+        const ox = s, oy = 0.15 * s;
         w.position.set(sd * ox * Math.cos(a), oy + 0.08, -0.16 - ox * Math.sin(Math.abs(a)));
         w.material.opacity = fade;
       }
