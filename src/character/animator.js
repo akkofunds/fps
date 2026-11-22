@@ -112,12 +112,13 @@ const STYLES = {
   brawler: { swing: 1.05, swingR: 1, lean: 1, bounce: 1, sway: 0.8, settle: 0.55, roll: 1, twist: 1, elbow: 1, kick: 1, stride: 1, fidget: 'fidgetP' },
   // lighter on her feet; the staff arm stays steadier, the free arm swings naturally
   caster: { swing: 0.95, swingR: 0.45, lean: 0.9, bounce: 0.95, sway: 1, settle: 0.5, roll: 1.1, twist: 0.95, elbow: 0.95, kick: 0.95, stride: 1, fidget: 'fidgetM' },
-  // anime action-game heroine (Inkweaver): a confident, stylish stride. Big hip sway and weight shift
-  // onto every stance foot, the pelvis dropping and turning with each step and the chest countering it,
-  // chest up and shoulders back, steps placed close to one line, arms in close to the body swinging
-  // opposite the legs with a loose wrist, and a springier bounce
-  femme: { swing: 0.9, swingR: 1, lean: 0.7, bounce: 1.3, sway: 2.3, runSway: 2.4, settle: 0.42, roll: 2.1, twist: 1.7, elbow: 0.82, kick: 1.1, stride: 0.96,
-    width: 0.62, armIn: 16, arch: -4, wrist: 14, fidget: 'fidgetP' },
+  // anime action-game heroine (Inkweaver): a confident, powerful stride. Strong hip sway and weight
+  // shift onto every stance foot, the pelvis dropping and turning with each step and the chest
+  // countering it; leaning into the run with the chest up; quick, grounded steps (less up-and-down,
+  // a quicker cadence) placed close to one line; arms tucked in, elbows bent, pumping opposite the
+  // legs with a loose wrist
+  femme: { swing: 1.05, swingR: 1, lean: 1.35, bounce: 0.82, sway: 3.2, runSway: 3.4, settle: 0.42, roll: 3.0, twist: 2.1, elbow: 1.12, kick: 1.2, stride: 0.92,
+    width: 0.58, armIn: 24, cross: 16, arch: -2.5, wrist: 14, fidget: 'fidgetP' },
 };
 
 const BAKED = new Map(); // retargeted clips, shared by every instance of the same model
@@ -603,7 +604,9 @@ export class Animator {
       // relaxed ready stance: arms close to the body, casting hand slightly raised
       const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
       const ax = lerp(idleX, sw - 5 * wFast, wRun);
-      const az = lerp(idleZ, lerp(6, 9, wFast) - 4 * fwdSw * wFast - (st.armIn || 0), wRun);
+      // (the forward swing of an A-posed arm drifts outward along a cone: st.cross pulls it in toward
+      // the centre line instead, so the hand travels across the body)
+      const az = lerp(idleZ, lerp(6, 9, wFast) - 4 * fwdSw * wFast - (st.armIn || 0) - (st.cross || 0) * fwdSw, wRun);
       const ex = lerp(idleE, lerp(-24, -(78 + 10 * sstep(4.5, RUN_SPEED, speed)), wFast) * st.elbow - Math.max(0, -sw) * lerp(0.2, 0.35, wFast), wRun);
       setS(P, B['upperArm' + side], sg, ax, 8 * fwdSw * wFast, az);
       setS(P, B['foreArm' + side], sg, ex, -lerp(6, 14, wFast) * wRun, 0);

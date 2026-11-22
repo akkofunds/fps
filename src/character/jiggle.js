@@ -96,6 +96,17 @@ class SpringBone {
       cur.addVectors(_pv, _b);
     }
     this.lastT.copy(_T); this.lastP.copy(_P);
+    this.p.subVectors(cur, _T);
+    if (this.spec.move) {
+      // flesh mode (the thighs): the bone sits inside the mass it carries, so instead of turning it
+      // shifts the flesh by the simulated offset, in its parent's frame
+      const par = this.bone.parent;
+      par.getWorldQuaternion(_q).invert();
+      const sc = new THREE.Vector3().setFromMatrixScale(par.matrixWorld).x || 1;
+      _d.copy(this.p).applyQuaternion(_q).multiplyScalar(this.spec.gain * Math.max(0, strength) / sc);
+      this.bone.position.copy(this.tipPos).add(_d);
+      return;
+    }
     // turn the hinge so the mass sits where the simulation put it
     _a.subVectors(_T, _P).normalize(); _b.subVectors(cur, _P).normalize();
     _q.setFromUnitVectors(_a, _b);
@@ -116,22 +127,24 @@ class SpringBone {
 // its absolute speed, so hair streams back as she runs), sags a little under gravity, is pulled back
 // toward the styled shape, keeps its length, and is pushed out of her head and torso. Joints are
 // solved from the scalp down, each turning to aim at its particle, so the motion travels down the lock.
-const HAIR = { stiff: 0.085, drag: 0.12, gravity: 2.2, gain: 1 };
+const HAIR = { stiff: 0.085, drag: 0.12, gravity: 2.2 };
+// cloth (the long hanging sleeves, jacket flaps) and dangling ornaments: heavier, hang more, follow less
+const CLOTH = { stiff: 0.055, drag: 0.17, gravity: 5.5 };
 class HairChain {
-  constructor(bones, colliders) {
-    this.bones = bones; this.col = colliders;
+  constructor(bones, colliders, spec = HAIR) {
+    this.bones = bones; this.col = colliders; this.spec = spec;
     this.restQ = bones.map((b) => b.quaternion.clone());
     // each joint points at the next one; the last one carries on in the same direction, a bit shorter
     this.lever = bones.map((b, k) => (k + 1 < bones.length ? bones[k + 1].position.clone() : bones[k].position.clone().multiplyScalar(0.8)));
     this.cur = null; this.prev = null;
     // stiffer near the scalp, looser toward the ends
-    this.k = bones.map((_, k) => HAIR.stiff * (1.6 - 0.9 * k / Math.max(1, bones.length - 1)));
+    this.k = bones.map((_, k) => spec.stiff * (1.6 - 0.9 * k / Math.max(1, bones.length - 1)));
   }
   reset() { this.cur = null; this.bones.forEach((b, k) => b.quaternion.copy(this.restQ[k])); }
   step(dt) {
     if (dt <= 0) return;
     dt = Math.min(dt, 0.05);
-    const f = dt * 60, keep = Math.pow(1 - HAIR.drag, f), g = HAIR.gravity * dt * dt;
+    const f = dt * 60, keep = Math.pow(1 - this.spec.drag, f), g = this.spec.gravity * dt * dt;
     const first = !this.cur;
     if (first) { this.cur = this.bones.map(() => new THREE.Vector3()); this.prev = this.bones.map(() => new THREE.Vector3()); }
     for (let k = 0; k < this.bones.length; k++) {
@@ -145,7 +158,7 @@ class HairChain {
         cur.copy(_T); prev.copy(_T);
         // collide only with the spheres this joint's styled position sits outside of
         this.use = this.use || [];
-        this.use[k] = this.col.map((c) => c.bone.getWorldPosition(_tg).add(c.off).distanceTo(_T) > c.r + 0.012);
+        this.use[k] = this.col.map((c) => c.bone.localToWorld(_tg.copy(c.off)).distanceTo(_T) > c.r + 0.012);
       }
       const pull = 1 - Math.pow(1 - this.k[k], f);
       _v.subVectors(cur, prev).multiplyScalar(keep);
@@ -158,7 +171,7 @@ class HairChain {
         for (let ci = 0; ci < this.col.length; ci++) {   // keep out of her head and body
           if (!this.use[k][ci]) continue;
           const c = this.col[ci];
-          c.bone.getWorldPosition(_tg).add(c.off);
+          c.bone.localToWorld(_tg.copy(c.off));
           _d.subVectors(cur, _tg); const r = c.r + 0.012, d2 = _d.lengthSq();
           if (d2 < r * r && d2 > 1e-10) cur.copy(_tg).addScaledVector(_d, r / Math.sqrt(d2));
         }
@@ -198,7 +211,7 @@ export class JiggleSim {
       const hm = new THREE.Matrix4().multiplyMatrices(mInv, th.matrixWorld);
       const lv = new THREE.Vector3(0, -0.05, 0.07);
       const lever = lv.clone().transformDirection(new THREE.Matrix4().copy(hm).invert()).multiplyScalar(lv.length() / (new THREE.Vector3().setFromMatrixScale(hm).x || 1));
-      springs.push(new SpringBone(th, th, { ...SPEC, stiff: 0.1, drag: 0.1, inertia: 2.2, maxAng: 0.3, gain: 1.4, lever, solo: true }));
+      springs.push(new SpringBone(th, th, { ...SPEC, stiff: 0.07, drag: 0.09, inertia: 3.0, maxAng: 0.42, gain: 1.0, lever, move: true }));
     }
     // hair chains: hair<lock><n>, with her head and torso as colliders
     const byName = {}; model.traverse((o) => { if (o.isBone) byName[o.name] = o; });
@@ -211,9 +224,11 @@ export class JiggleSim {
         byName.chest && { bone: byName.chest, off: new THREE.Vector3(0, -0.04, -0.01), r: 0.12 },
         byName.hips && { bone: byName.hips, off: new THREE.Vector3(0, 0.02, -0.02), r: 0.14 },
       ].filter(Boolean);
-      const locks = {};
-      for (const n in byName) { const m = /^hair([A-Z]+)(\d+)$/.exec(n); if (m) (locks[m[1]] = locks[m[1]] || [])[+m[2] - 1] = byName[n]; }
-      for (const lock in locks) chains.push(new HairChain(locks[lock].filter(Boolean), col));
+      // the legs too, for the hanging sleeves and the jacket flaps
+      for (const sd of ['L', 'R']) if (byName['upperLeg_' + sd]) col.push({ bone: byName['upperLeg_' + sd], off: new THREE.Vector3(0, -0.2, 0.01), r: 0.085 });
+      const groups = {};
+      for (const n in byName) { const m = /^((?:hair|cloth)[A-Z]+)(\d+)$/.exec(n); if (m) (groups[m[1]] = groups[m[1]] || [])[+m[2] - 1] = byName[n]; }
+      for (const g in groups) chains.push(new HairChain(groups[g].filter(Boolean), col, g.startsWith('cloth') ? CLOTH : HAIR));
     }
     if (!springs.length && !chains.length) return null;
     const sim = new JiggleSim(springs, opts); sim.chains = chains;
