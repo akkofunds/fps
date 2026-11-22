@@ -15,7 +15,8 @@ import { PLATE, WING_ROOT } from '../fx/ink.js';
 import { CHECKMATE, ROOK, QUEEN } from './manipulator.js';
 import { ORB as INK_ORB, ERUPT as INK_ERUPT, TALISMAN, WING_SHOT } from './inkweaver.js';
 const PLATE_D = 16;        // metres from the camera to the wing shot's backdrop plate
-const CINE_BAND = 0.78;    // the part of the screen height between the cutscene bars (11vh each)
+const CINE_BAND = 0.78;
+const DUSK_FOG = new THREE.Color(0.3, 0.19, 0.1);   // the haze under the ink sky    // the part of the screen height between the cutscene bars (11vh each)
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
@@ -1677,7 +1678,7 @@ export class Match {
     const f = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)), side = new THREE.Vector3(-f.z, 0, f.x);
     if (this.cine) this._endCine();
     const victims = [...this.ents.values()].filter((t) => t !== e && t.alive && Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < TALISMAN.radius);
-    this._tali = { c, f, side, caster: e, victims, done: false, rainT: 0 };
+    this._tali = { c, f, side, caster: e, victims, done: false, rainT: 0, marks: [], bound: new Set(), dusk: 0, seal: { y: c.y + 30, s: 0, a: 0, flash: 0, done: false } };
     if (e.view) e.view.anim.play('inkAscend');
     this.cine = { t: 0, dur: TALISMAN.cine, caster: e, c: c.clone(), o: c.clone(), f, side, cue: 0, local,
       update: this._taliCineUpdate, camera: this._taliCineCamera, end: this._taliCineEnd };
@@ -1687,53 +1688,93 @@ export class Match {
   _taliCineUpdate(dt) {
     const C = this.cine, T = this._tali, hud = this.app.hud, e = T.caster;
     C.t += dt;
-    const t = C.t, [r0, r1] = TALISMAN.rain;
+    const t = C.t, [r0, r1] = TALISMAN.rain, S1 = WING_SHOT[1], B = TALISMAN.boom;
+    const low = this.map.Q.particles <= 2000;
     const mono = (s, big) => hud.cineMono(s, 'gold', big);
     const until = () => !this._tali || this._tali.done;
+    const ease = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
+    // every mark a talisman leaves stays on the ground until the finale sets it off again
+    const strike = (p, delay, size, from) => this.fx.talismanStrike(p, delay, size, from, { marks: T.marks.length < (low ? 40 : 90) ? T.marks : null, hold: Math.max(1.2, B + 0.5 - t - delay) });
+    const fromSeal = () => { const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * 20; return new THREE.Vector3(T.c.x + Math.cos(a) * rr, T.seal.y - 0.5, T.c.z + Math.sin(a) * rr); };
     const cues = [
       [0.05, () => { this.fx.taiChiArray(T.c, 6.5, TALISMAN.cine - 0.3, { spin: 0.5 }); mono('Ink becomes wings. Wings become heaven.'); }],
       [0.9, () => { if (e.view) T.wings = this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.025, until, halo: true, bare: () => !!(this._tali && this._tali.plate) }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
-      [1.9, () => { T.halo = this.fx.talismanHalo(T.c, this.map.Q.particles <= 2000 ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown, () => !!(this._tali && this._tali.plate)); mono(''); }],
+      [1.9, () => { T.halo = this.fx.talismanHalo(T.c, low ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown, () => !!(this._tali && this._tali.plate)); mono(''); }],
       // the reference shot: front-on, level, her wings filling the frame against the light behind her
       [WING_SHOT[0], () => { hud.flash(0.45); T.plate = this.fx.inkPlate(); }],
-      [WING_SHOT[1], () => { this._taliPlateOff(); hud.flash(0.35); hud.cineCard('ENDLESS TALISMAN SUPPRESSION', '無 窮 符 鎮', ''); }],
-      [WING_SHOT[1] + 0.5, () => mono('Heaven and earth, hear my command.')],
-      [WING_SHOT[1] + 2.1, () => mono('Every talisman a seal. Every seal a sentence.')],
-      [WING_SHOT[1] + 3.4, () => mono('Be still.')],
-      [TALISMAN.boom - 0.12, () => { mono(''); hud.impactFrames(() => hud.flash(1)); }],
-      // the finale: every talisman in the sky comes down at once, each one detonating where it lands
-      [TALISMAN.boom - 0.75, () => {
+      // the sky turns to ink and the great seal opens over the whole field
+      [S1, () => {
+        this._taliPlateOff(); hud.flash(0.5); hud.cineCard('ENDLESS TALISMAN SUPPRESSION', '無 窮 符 鎮', '');
+        this.fx.inkSky(T.c, () => (this._tali ? this._tali.dusk : 0), until);
+        this.fx.skySeal(T.c, 22, T.seal);
+        this.sound('domain', T.c, 0.9, 300); this.fx.shake(0.4);
+      }],
+      [S1 + 0.5, () => mono('Heaven and earth, hear my command.')],
+      [S1 + 1.7, () => mono('Every talisman a seal. Every seal a sentence.')],
+      [S1 + 3.05, () => mono('Be still.')],
+      [B - 0.12, () => { mono(''); hud.impactFrames(() => hud.flash(1)); }],
+      // the finale: the seal comes down, every talisman in the sky falls at once…
+      [B - 0.75, () => {
         T.haloDown = true;
-        const n = this.map.Q.particles <= 2000 ? 28 : 60;
+        const n = low ? 24 : 54;
         for (let k = 0; k < n; k++) {
           const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * TALISMAN.radius;
-          const from = new THREE.Vector3(T.c.x + Math.cos(a) * 18, T.c.y + 14 + Math.random() * 6, T.c.z + Math.sin(a) * 18);
-          this.fx.talismanStrike(new THREE.Vector3(T.c.x + Math.cos(a + (Math.random() - 0.5)) * rr, 0, T.c.z + Math.sin(a + (Math.random() - 0.5)) * rr), Math.random() * 0.35, 1.6, from);
+          strike(new THREE.Vector3(T.c.x + Math.cos(a + (Math.random() - 0.5)) * rr, 0, T.c.z + Math.sin(a + (Math.random() - 0.5)) * rr), Math.random() * 0.35, 1.6, fromSeal());
         }
-        for (const v of T.victims) if (v.alive) this.fx.talismanStrike(v.pos.clone(), 0.25, 2.0);
+        for (const v of T.victims) if (v.alive) strike(v.pos.clone(), 0.25, 2.0);
+        this.sound('domainCast', T.c, 1.2, 300);
       }],
-      [TALISMAN.boom, () => { this.fx.shake(0.9); this.sound('slam', T.c, 1.6, 300); this.sound('novaBoom', T.c, 1.2, 300); this.fx.groundShock(new THREE.Vector3(T.c.x, T.c.y + 0.1, T.c.z), TALISMAN.boomR, { core: [2.2, 1.6, 0.5], edge: [0.05, 0.04, 0.03] }); }],
+      // …and on the word every seal on the field goes off, in a wave racing out from under her
+      [B, () => {
+        T.boomed = true; T.seal.flash = 1.4;
+        this.fx.shake(1.0); this.sound('slam', T.c, 1.6, 300); this.sound('novaBoom', T.c, 1.2, 300);
+        this.fx.inkNova(new THREE.Vector3(T.c.x, T.c.y + 1, T.c.z), 14);
+        this.fx.talismanChain(T.c, T.marks, 44);
+        this.fx.groundShock(new THREE.Vector3(T.c.x, T.c.y + 0.1, T.c.z), TALISMAN.boomR, { core: [2.2, 1.6, 0.5], edge: [0.05, 0.04, 0.03] });
+      }],
+      [B + 0.35, () => this.sound('novaBoom', T.c, 0.8, 300)],
       [TALISMAN.cine - 0.3, () => mono('')],
     ];
     while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
     // she rises on her wings, and comes back down at the end
     e.liftY = t < 0.9 ? 0 : t < WING_SHOT[0] ? 6 * (1 - Math.cos((t - 0.9) / 1.5 * Math.PI)) / 2 : t < TALISMAN.cine - 1.1 ? 6 + Math.sin(t * 1.6) * 0.25 : 6 * Math.max(0, (TALISMAN.cine - 0.1 - t) / 1.0);
-    // the rain: talismans across the whole field, more and more of them, and on every victim
+    // the sky: dusk in after the wing shot, back to day as she lands
+    T.dusk = t < S1 ? 0 : ease((t - S1) / 0.9) * (1 - ease((t - (TALISMAN.cine - 0.9)) / 0.8));
+    this._taliDusk(T.dusk);
+    // the seal: opens high above, turns, and comes down on the finale
+    const sl = T.seal;
+    sl.s = ease((t - S1) / 1.2); sl.a = t < S1 ? 0 : Math.min(1, (t - S1) / 0.6) * (1 - ease((t - B - 0.3) / 0.8));
+    sl.y = T.c.y + 30 - 22 * ease((t - (B - 0.75)) / 0.75);
+    sl.flash = Math.max(0, (sl.flash || 0) - dt * 2.5);
+    if (t > B + 1.2) sl.done = true;
+    // the rain: talismans out of the seal across the whole field, more and more of them, and on every victim
     if (t > r0 && t < r1) {
       T.rainT -= dt;
       while (T.rainT <= 0) {
-        T.rainT += 0.045 * (1.4 - (t - r0) / (r1 - r0));
+        T.rainT += (low ? 0.07 : 0.045) * (1.4 - (t - r0) / (r1 - r0));
         const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * TALISMAN.radius;
-        this.fx.talismanStrike(new THREE.Vector3(T.c.x + Math.cos(a) * rr, 0, T.c.z + Math.sin(a) * rr), 0, 1);
+        strike(new THREE.Vector3(T.c.x + Math.cos(a) * rr, 0, T.c.z + Math.sin(a) * rr), 0, 1, fromSeal());
         if (Math.random() < 0.15) this.sound('slam', T.c, 0.5, 200);
       }
       for (let k = 0; k < TALISMAN.strikes; k++) {
         const tk = r0 + (r1 - r0) * (k + 0.5) / TALISMAN.strikes;
-        if (t - dt < tk - 0.35 && t >= tk - 0.35) for (const v of T.victims) if (v.alive) this.fx.talismanStrike(v.pos.clone(), 0, 1.3);
+        if (t - dt < tk - 0.35 && t >= tk - 0.35) for (const v of T.victims) if (v.alive) {
+          strike(v.pos.clone(), 0, 1.3);
+          // the first one seals them: a talisman on the chest, more circling, a seal under their feet
+          if (!T.bound.has(v)) { T.bound.add(v); this.fx.talismanBind((out) => (v.alive ? out.copy(v.pos) : null), () => !this._tali || this._tali.done || this._tali.boomed || !v.alive); }
+        }
       }
     }
-    hud.cineDark(T.plate ? 0 : t < 0.9 ? 0.35 : t < TALISMAN.boom ? 0.2 : 0.1);
+    hud.cineDark(T.plate ? 0 : t < 0.9 ? 0.35 : t < S1 ? 0.2 : 0.08);
     if (t >= C.dur) this._endCine();
+  }
+  // the world under the ink sky: the sun and the sky light dim, the fog turns to dark amber haze
+  _taliDusk(k) {
+    const T = this._tali, m = this.map, fog = this.scene.fog;
+    if (!T.lit) T.lit = { sun: m.sun.intensity, hemi: m.hemi.intensity, fog: fog ? fog.color.clone() : null };
+    m.sun.intensity = T.lit.sun * (1 - 0.6 * k);
+    m.hemi.intensity = T.lit.hemi * (1 - 0.45 * k);
+    if (fog) fog.color.copy(T.lit.fog).lerp(DUSK_FOG, k * 0.85);
   }
   _taliPlateOff() {
     const T = this._tali;
@@ -1742,12 +1783,13 @@ export class Match {
   _taliCineEnd() {
     this._taliPlateOff();
     const T = this._tali;
+    if (T) { if (T.lit) this._taliDusk(0); T.seal.done = true; }
     if (T) { T.done = true; T.caster.liftY = 0; if (T.caster.view) T.caster.view.anim.stopAction(['inkAscend']); }
     this._tali = null;
     for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;
   }
   _taliCineCamera() {
-    const C = this.cine, T = this._tali, t = C.t, o = T.c, f = T.f, sd = T.side, cam = this.camera;
+    const C = this.cine, T = this._tali, t = C.t, o = T.c, f = T.f, sd = T.side, cam = this.camera, S1 = WING_SHOT[1];
     const P = tmpV, L = tmpV2;
     const ease = (k) => { k = Math.min(1, Math.max(0, k)); return k * k * (3 - 2 * k); };
     const view = T.caster.view;
@@ -1764,19 +1806,27 @@ export class Match {
       L.set(head.x, head.y + 0.6, head.z); fov = 52; roll = -0.03;
     } else if (t < WING_SHOT[1] && T.plate) { // the reference shot (see _wingShot)
       fov = this._wingShot(T, t - WING_SHOT[0], P, L);
-    } else if (t < WING_SHOT[1] + 1.8) { // high over her shoulder: the talismans come down across the whole field
-      const k = ease((t - WING_SHOT[1]) / 1.8), a = Math.atan2(f.x, f.z) + Math.PI + k * 0.5;
-      P.set(o.x + Math.sin(a) * 6, o.y + lift + 4 + k * 3, o.z + Math.cos(a) * 6);
-      L.set(o.x + f.x * 18, o.y, o.z + f.z * 18); fov = 60;
-    } else if (t < WING_SHOT[1] + 3.1) { // on the ground among the pillars, looking up at her
-      const v = T.victims.find((x) => x.view) || null, g = v ? v.pos : new THREE.Vector3(o.x + f.x * 12, o.y, o.z + f.z * 12);
-      const k = ease((t - WING_SHOT[1] - 1.8) / 1.3);
-      P.set(g.x + sd.x * (2 - k), g.y + 0.8, g.z + sd.z * (2 - k));
-      L.set(head.x, head.y + 0.5, head.z); fov = 50; roll = 0.04;
-    } else if (t < TALISMAN.boom) { // her face, close: calm, eyes half closed
-      const k = ease((t - WING_SHOT[1] - 3.1) / (TALISMAN.boom - WING_SHOT[1] - 3.1));
-      P.set(head.x + f.x * (0.9 - k * 0.25) + sd.x * 0.15, head.y + 0.02, head.z + f.z * (0.9 - k * 0.25) + sd.z * 0.15);
+    } else if (t < S1 + 1.6) { // from the ground, looking up: her on her wings under the great seal, talismans streaking down
+      const k = ease((t - S1) / 1.6);
+      P.set(o.x + f.x * (10 - k * 2) + sd.x * (3 - k * 1.5), o.y + 1.1, o.z + f.z * (10 - k * 2) + sd.z * (3 - k * 1.5));
+      L.set(head.x, head.y + 1.4 + k * 0.8, head.z); fov = 50; roll = -0.05 + k * 0.03;
+    } else if (t < S1 + 2.9) { // close on a victim as the talismans seal them, her in the sky behind
+      const v = T.victims.find((x) => x.view && x.alive) || T.victims.find((x) => x.view) || null;
+      const g = v ? v.pos : this._cv3 || (this._cv3 = new THREE.Vector3(o.x + f.x * 12, o.y, o.z + f.z * 12));
+      const k = ease((t - S1 - 1.6) / 1.3);
+      const dx = o.x - g.x, dz = o.z - g.z, dl = Math.hypot(dx, dz) || 1, ux = dx / dl, uz = dz / dl;
+      // stand on the far side of the victim from her, a little off to one side
+      P.set(g.x - ux * (6 - k * 1.2) - uz * 2.2, g.y + 1.7, g.z - uz * (6 - k * 1.2) + ux * 2.2);
+      L.set(g.x + (head.x - g.x) * 0.3, g.y + 1.2 + (head.y - g.y) * 0.3, g.z + (head.z - g.z) * 0.3); fov = 50; roll = 0.04;
+    } else if (t < S1 + 3.75) { // her face, close: calm, eyes half closed — "Be still."
+      const k = ease((t - S1 - 2.9) / 0.85);
+      P.set(head.x + f.x * (0.95 - k * 0.25) + sd.x * 0.15, head.y + 0.02, head.z + f.z * (0.95 - k * 0.25) + sd.z * 0.15);
       L.set(head.x, head.y, head.z); fov = 28;
+    } else if (t < TALISMAN.boom) { // low and wide from the edge of the field: the great seal comes down on everything
+      const k = ease((t - S1 - 3.75) / (TALISMAN.boom - S1 - 3.75));
+      const a = Math.atan2(f.x, f.z) + 0.7;
+      P.set(o.x + Math.sin(a) * (30 - k * 3), o.y + 2.2, o.z + Math.cos(a) * (30 - k * 3));
+      L.set(o.x, o.y + 9 - k * 3, o.z); fov = 56; roll = -0.03;
     } else { // high and wide: the explosion swallows the field
       const k = ease((t - TALISMAN.boom) / (TALISMAN.cine - TALISMAN.boom));
       P.set(o.x - f.x * 42 + sd.x * 16, o.y + 26 - k * 4, o.z - f.z * 42 + sd.z * 16);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { loadMageModel, MageInstance } from '../src/character/characterModel.js';
 import * as C from '../src/character/clips.js';
+import { compileClip } from '../src/character/pose.js';
 
 // Dev viewer: ?state=idle|run|strafe|back|air|fall|roll|dash|slam|leap|death|bolt|orb|ult&t=0.2&yaw=0
 const q = new URLSearchParams(location.search);
@@ -52,6 +53,8 @@ function sim(inst) {
   if (['gBlue', 'gRed', 'boltL', 'ksThrow', 'ksCatch', 'mnCmd', 'mnRaise'].includes(st)) a.play('cast', { anim: st });
   if (['purple', 'domain', 'm1a', 'm1b', 'm1c', 'm1d', 'stagger', 'launched', 'ksA', 'ksB', 'ksC', 'ksD', 'ksThrust', 'ksFlash', 'ksLeap', 'ksDive', 'ksLand', 'ksWhirl', 'ksSever', 'mnChin', 'mnPlace'].includes(st)) a.play(st);
   if (st === 'mbolt2') { a.play('cast', { anim: 'mBolt' }); for (let k = 0; k < 20; k++) a.update(dtt, s); a.play('cast', { anim: 'mBolt' }); }
+  // pose variants: ?legs=[{...bone overrides}, ...] with states v0,v1,… (on top of the ult's floating pose)
+  if (st[0] === 'v' && q.get('legs')) { const ov = JSON.parse(q.get('legs'))[+st.slice(1)]; a.action = { def: { clip: compileClip([{ t: 0, b: { ...C.ASCEND, ...ov } }, { t: 9, b: { ...C.ASCEND, ...ov } }]), in: 0.01, out: 0.1, aimOff: true }, t: 0, w: 1, yaw: 0 }; }
   if (st === 'hitf') a.play('hit', { dir: 0, dmg: 30 });
   if (st === 'hitl') a.play('hit', { dir: 1.57, dmg: 30 });
   const n = Math.round(t / dtt);

@@ -1183,10 +1183,12 @@ export const MN_D = compileClip([
 // she lifts off the Tai Chi array and hangs in the air on her wings (the reference art): her right leg
 // hangs long with the toe pointed, the left knee drawn up with the foot tucked behind the right shin,
 // arms loose and a little out from her sides with open hands, head tipped gently to her left
-const ASCEND = {
-  hips: [-4, 0, 3], spine: [-3, 0, -2], chest: [-2, 0, 0], neck: [2, 0, 3], head: [6, 4, 8],
-  upperLegL: [-62, -6, 7], lowerLegL: [120, 0, 0], footL: [42, 0, 0],
-  upperLegR: [4, -2, -4], lowerLegR: [6, 0, 0], footR: [50, 0, 0],
+export const ASCEND = {
+  hips: [-4, 0, -2], spine: [-3, 0, -2], chest: [-2, 0, 0], neck: [2, 0, 3], head: [6, 4, 8],
+  // left: thigh forward and a little out, knee folded tight, the foot tucked behind the right knee
+  upperLegL: [-38, 25, 14], lowerLegL: [142, 0, 0], footL: [52, 0, 0],
+  // right: hanging long and crossing in under her centre, toe pointed
+  upperLegR: [4, -4, -12], lowerLegR: [6, 0, 0], footR: [50, 0, 0],
   upperArmL: [-4, 0, 17], foreArmL: [-34, 0, 0], handL: [8, 0, -18],
   upperArmR: [-4, 0, 17], foreArmR: [-34, 0, 0], handR: [8, 0, -18],
 };
