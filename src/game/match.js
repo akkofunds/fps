@@ -16,6 +16,7 @@ import { CHECKMATE, ROOK, QUEEN } from './manipulator.js';
 import { ORB as INK_ORB, ERUPT as INK_ERUPT, TALISMAN, WING_SHOT } from './inkweaver.js';
 const PLATE_D = 16;        // metres from the camera to the wing shot's backdrop plate
 const CINE_BAND = 0.78;
+const WING_VIEW = { yaw: 0.25, pitch: 0.27 }; // the reference camera: ~14° round to her left (right of frame), ~15° below her, looking up
 const DUSK_FOG = new THREE.Color(0.3, 0.19, 0.1);   // the haze under the ink sky    // the part of the screen height between the cutscene bars (11vh each)
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
@@ -1698,7 +1699,7 @@ export class Match {
     const fromSeal = () => { const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * 20; return new THREE.Vector3(T.c.x + Math.cos(a) * rr, T.seal.y - 0.5, T.c.z + Math.sin(a) * rr); };
     const cues = [
       [0.05, () => { this.fx.taiChiArray(T.c, 6.5, TALISMAN.cine - 0.3, { spin: 0.5 }); mono('Ink becomes wings. Wings become heaven.'); }],
-      [0.9, () => { if (e.view) T.wings = this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.025, until, halo: true, bare: () => !!(this._tali && this._tali.plate) }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
+      [0.9, () => { if (e.view) T.wings = this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.025, until, halo: true, bare: () => !!(this._tali && this._tali.plate), face: () => !!(this._tali && this._tali.plate) }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
       [1.9, () => { T.halo = this.fx.talismanHalo(T.c, low ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown, () => !!(this._tali && this._tali.plate)); mono(''); }],
       // the reference shot: front-on, level, her wings filling the frame against the light behind her
       [WING_SHOT[0], () => { hud.flash(0.45); T.plate = this.fx.inkPlate(); }],
@@ -1853,9 +1854,17 @@ export class Match {
     const xr = (PLATE.root[0] - PLATE.w / 2) * k, yr = -(PLATE.root[1] - PLATE.h / 2) * k;
     const root = this._wingRoot || (this._wingRoot = new THREE.Vector3());
     if (T.wings) T.wings.localToWorld(root.copy(WING_ROOT)); else root.set(T.c.x, T.c.y + 7.3, T.c.z);
-    const rx = f.z, rz = -f.x;                                                     // camera right (her left)
-    P.set(root.x - rx * xr + f.x * d, root.y - yr, root.z - rz * xr + f.z * d);
-    L.set(P.x - f.x, P.y, P.z - f.z);
+    // the reference looks at her from a little below and a little to the right (her left):
+    // swing the camera round her by WING_VIEW.yaw and drop it by WING_VIEW.pitch, looking up at her
+    const V = (typeof window !== 'undefined' && window.__wingView) || WING_VIEW;   // (dev: window.__wingView overrides)
+    const cy = Math.cos(V.yaw), sy = Math.sin(V.yaw), cp = Math.cos(V.pitch), sp = Math.sin(V.pitch);
+    const hx = f.x * cy + f.z * sy, hz = f.z * cy - f.x * sy;                     // f turned toward her left
+    const dx = hx * cp, dy = -sp, dz = hz * cp;                                    // from her to the camera
+    const rx = dz, rz = -dx, rl = Math.hypot(rx, rz) || 1;                         // camera right = forward × world up
+    const Rx = rx / rl, Rz = rz / rl;
+    const ux = Rz * dy, uy = Rx * dz - Rz * dx, uz = -Rx * dy;                     // camera up = right × forward
+    P.set(root.x + dx * d - Rx * xr - ux * yr, root.y + dy * d - uy * yr, root.z + dz * d - Rz * xr - uz * yr);
+    L.set(P.x - dx, P.y - dy, P.z - dz);
     return fov;
   }
   _plateSize(fov) {

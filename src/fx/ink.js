@@ -29,7 +29,7 @@ export const WING = {"L": {"w": 3.375, "h": 2.28, "ru": 0.0, "rv": 0.7149}, "R":
 // its size in pixels, the art pixel where both wings meet her back, and her height in art pixels
 export const PLATE = {"w": 1282, "h": 622, "root": [607, 360], "body_px": 332.0};
 // where the wings meet her back, in the wing group's frame
-export const WING_ROOT = new THREE.Vector3(0, 0.06, -0.16);
+export const WING_ROOT = new THREE.Vector3(0, -0.03, -0.16);
 const WTEX = {};
 let PLATE_TEX = null;
 function plateImg() {
@@ -169,12 +169,13 @@ Object.assign(Fx.prototype, {
     if (glow) { g.add(glow); g.add(ring); g.add(shaft); }
     let t = 0;
     const spread = o.spread ?? 0.22, flap = o.flap ?? 0.08;
-    this.effects.push({ update: (dt) => {
+    this.effects.push({ update: (dt, cam) => {
       t += dt;
       const k = Math.min(1, t / spread), e = 1 - (1 - k) ** 3;
       const fade = life === Infinity ? 1 : Math.min(1, Math.max(0, (life - t) / 0.3));
       anchor(_v); g.position.copy(_v);
-      g.rotation.set(0, yawOf(), 0);
+      // o.face(): the wings are flat paintings: in the reference shot they turn square to the lens
+      if (o.face && o.face() && cam) g.quaternion.copy(cam.quaternion); else g.rotation.set(0, yawOf(), 0);
       // size: 1 = the reference's proportions to her body
       const s = size * (0.35 + 0.65 * e), f = Math.sin(t * 2.4) * flap;
       const open = 0.15 + 0.85 * e;
