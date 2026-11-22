@@ -39,7 +39,7 @@ export const MANIP_M1 = {
 export const KNIGHT = { range: 14, fwd: 2 / 3, minSide: 2.5, hop: 0.2, leg1: 0.2, leg2: 0.14, radius: 3.1, dmg: 24, stun: 0.6 };
 export const ROOK = { range: 24, drop: 0.26, slamR: 3.2, slam: 18, len: 18, dur: 0.6, width: 2.3, dmg: 24, kb: 14 };
 export const QUEEN = { range: 24, delay: 0.5, len: 16, width: 1.5, dmg: 30, slow: 0.55, slowT: 1.6 };
-export const CHECKMATE = { dur: 15, kill: 11.9, move: 9.0 };
+export const CHECKMATE = { dur: 24.5, kill: 18.7, move: 15.8 };
 
 const COOLDOWN = { knight: 8, rook: 10, queen: 13 };
 const cdOf = (base) => (BAL.noCooldowns ? 0 : base * BAL.cd);

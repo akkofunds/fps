@@ -350,7 +350,7 @@ Object.assign(Fx.prototype, {
       t += dt;
       mat.uniforms.uT.value = t;
       const k = Math.min(1, t / 0.9), e = 1 - (1 - k) ** 3;
-      m.scale.setScalar(r * 0.55 * e); shell.scale.setScalar(r * 0.62 * e);
+      m.scale.setScalar(r * 0.4 * e); shell.scale.setScalar(r * 0.46 * e);
       mat.uniforms.uA.value = Math.max(0, 1 - Math.max(0, t - 0.9) / 0.8);
       shell.material.opacity = Math.max(0, 0.8 - t * 0.6);
       if (t > 1.7) { this.scene.remove(m); this.scene.remove(shell); mat.dispose(); shell.material.dispose(); return false; }
