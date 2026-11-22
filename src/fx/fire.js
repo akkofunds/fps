@@ -290,7 +290,7 @@ export class Fx {
 
   update(dt, camera, viewportH) {
     this.t += dt;
-    for (let i = this.effects.length - 1; i >= 0; i--) if (!this.effects[i].update(dt)) this.effects.splice(i, 1);
+    for (let i = this.effects.length - 1; i >= 0; i--) if (!this.effects[i].update(dt, camera)) this.effects.splice(i, 1);
     this.fire.update(dt, viewportH);
     this.smoke.update(dt, viewportH);
     for (const l of this.lights) {
