@@ -37,9 +37,9 @@ export class GameMap {
     const s = this.scene;
 
     // lighting: warm low sun, sky/ground bounce
-    this.hemi = new THREE.HemisphereLight(0xb6a8ec, 0x7a6038, 1.35);
+    this.hemi = new THREE.HemisphereLight(0xffe4b8, 0x8a6430, 1.3);
     s.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffbe80, 3.7);
+    this.sun = new THREE.DirectionalLight(0xffc878, 4.0);
     this.sun.position.copy(SUN_DIR).multiplyScalar(80);
     this.sun.castShadow = Q.shadows;
     if (Q.shadows) {
@@ -68,7 +68,7 @@ export class GameMap {
     const AREA = Math.min(4, MAP_SCALE * MAP_SCALE * 0.75);
     this.grass = buildGrass(Math.round(Q.grass * AREA), avoid, Q); s.add(this.grass);
     this.flowers = buildFlowers(Math.round(Q.flowers * AREA), avoid, Q); s.add(this.flowers);
-    this.bushes = buildBushes(Math.round(Q.bushes * AREA), this.props.userData.anchors, avoid); s.add(this.bushes);
+    this.bushes = buildBushes(Math.round(Q.bushes * AREA * 0.3), this.props.userData.anchors, avoid); s.add(this.bushes);
     // undergrowth chunks culled by distance every frame
     this.lod = [...this.grass.children.map((m) => [m, Q.grassDist]), ...this.flowers.children.map((m) => [m, Q.grassDist * 0.9]), ...this.bushes.children.map((m) => [m, Q.grassDist * 1.6])];
     this.lodScale = 1; // lowered by the runtime auto-tuner

@@ -8,9 +8,9 @@ import { makeNoise, smoothstep } from './noise.js';
 // the river toward the waterfall it hangs right of the falls, over the ruins
 export const SUN_DIR = new THREE.Vector3(Math.cos(-0.52), 0.13, Math.sin(-0.52)).normalize();
 export const SKY = {
-  zenith: new THREE.Color(0.17, 0.1, 0.42),
-  horizon: new THREE.Color(1.0, 0.5, 0.42),
-  fog: new THREE.Color(0.86, 0.6, 0.7),
+  zenith: new THREE.Color(0.44, 0.52, 0.78),
+  horizon: new THREE.Color(1.0, 0.82, 0.55),
+  fog: new THREE.Color(0.95, 0.8, 0.56),
   sun: new THREE.Color(1.0, 0.72, 0.42),
 };
 
@@ -35,11 +35,11 @@ export function buildSky() {
         float h = max(d.y, 0.0);
         float sd = max(dot(d, uSun), 0.0);
         float az = max(dot(normalize(d.xz + 1e-4), normalize(uSun.xz)), 0.0); // how much toward the sun's side
-        vec3 zen = vec3(0.16, 0.09, 0.4), mid = mix(vec3(0.72, 0.28, 0.6), vec3(1.0, 0.36, 0.34), pow(az, 1.5)), hor = mix(vec3(1.05, 0.42, 0.46), vec3(1.7, 0.78, 0.16), pow(az, 2.0));
-        vec3 col = mix(hor, mid, smoothstep(0.0, 0.2, h));
-        col = mix(col, zen, smoothstep(0.16, 0.7, h));
+        vec3 zen = vec3(0.3, 0.4, 0.74), mid = mix(vec3(0.7, 0.64, 0.7), vec3(0.92, 0.66, 0.42), pow(az, 1.5)), hor = mix(vec3(0.95, 0.7, 0.48), vec3(1.2, 0.74, 0.3), pow(az, 2.0));
+        vec3 col = mix(hor, mid, smoothstep(0.0, 0.25, h));
+        col = mix(col, zen, smoothstep(0.2, 0.85, h));
         // golden glow round the sun
-        col += vec3(1.4, 0.7, 0.2) * pow(sd, 12.0) * 0.35 + vec3(1.2, 0.45, 0.2) * pow(sd, 2.0) * 0.12 * (1.0 - h);
+        col += vec3(1.5, 1.0, 0.4) * pow(sd, 24.0) * 0.4 + vec3(1.0, 0.65, 0.3) * pow(sd, 4.0) * 0.08 * (1.0 - h);
         if (d.y > 0.0) {
           float t = uTime * 0.008;
           vec2 uv = d.xz / (d.y + 0.12) * 0.75;
@@ -47,22 +47,22 @@ export function buildSky() {
           float dens = fbm(uv * 0.55 + vec2(t, t * 0.3)) * 0.7 + fbm(uv * 2.6 - vec2(t * 1.4, 0.0)) * 0.42;
           vec2 sh = normalize(uSun.xz + 1e-4) * 0.08;
           float dens2 = fbm((uv + sh) * 0.55 + vec2(t, t * 0.3)) * 0.7 + fbm((uv + sh) * 2.6 - vec2(t * 1.4, 0.0)) * 0.42;
-          float cov = smoothstep(0.6, 0.7, dens) * smoothstep(0.02, 0.12, d.y);
+          float cov = smoothstep(0.66, 0.78, dens) * smoothstep(0.02, 0.12, d.y) * 0.6;
           float lit = clamp(0.55 + (dens - dens2) * 6.0, 0.0, 1.0);
-          vec3 shade = mix(vec3(0.5, 0.26, 0.56), vec3(0.36, 0.22, 0.58), h);
-          vec3 light = mix(vec3(1.35, 0.46, 0.44), vec3(1.7, 0.82, 0.3), pow(az, 2.0));
+          vec3 shade = mix(vec3(0.78, 0.7, 0.72), vec3(0.6, 0.64, 0.82), h);
+          vec3 light = mix(vec3(1.2, 1.0, 0.85), vec3(1.8, 1.3, 0.62), pow(az, 2.0));
           vec3 cc = mix(shade, light, lit);
           cc += vec3(1.0, 0.62, 0.36) * smoothstep(0.66, 0.58, dens) * cov * 0.6 * (0.4 + az); // bright edges
           col = mix(col, cc, cov * 0.97);
           // wispy high streaks
           vec2 su = vec2(uv.x * 0.25 + t * 2.0, uv.y * 2.2);
           float st = smoothstep(0.62, 0.8, fbm(su)) * smoothstep(0.05, 0.3, d.y) * (1.0 - cov);
-          col = mix(col, mix(vec3(1.0, 0.6, 0.66), vec3(1.25, 0.75, 0.45), az), st * 0.6);
+          col = mix(col, mix(vec3(1.0, 0.9, 0.86), vec3(1.4, 1.05, 0.6), az), st * 0.35);
         }
         // the sun: a big soft disc with a hot core
-        col = mix(col, vec3(1.7, 1.45, 0.9), smoothstep(0.99905, 0.99925, sd)); col += vec3(1.4, 0.8, 0.3) * pow(sd, 600.0) * 0.5;
+        col = mix(col, vec3(2.0, 1.75, 1.25), smoothstep(0.99895, 0.99918, sd)); col += vec3(1.4, 1.0, 0.5) * pow(sd, 700.0) * 0.5;
         // below the horizon: warm haze
-        col = mix(col, vec3(0.86, 0.56, 0.66), smoothstep(0.0, -0.06, d.y));
+        col = mix(col, vec3(0.95, 0.8, 0.58), smoothstep(0.0, -0.06, d.y));
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -86,7 +86,7 @@ export function buildMountains(groundAt = null) {
   const seg = 720, rings = 90;
   const R0 = 245, R1 = 1480;
   const sunA = Math.atan2(SUN_DIR.z, SUN_DIR.x);
-  const peaks = [[-1.12, 980, 400, 330], [-1.42, 1120, 270, 280], [-0.88, 1150, 230, 260], [0.35, 1050, 240, 280], [2.4, 1000, 290, 300], [1.4, 1100, 250, 280], [-2.3, 1050, 270, 280], [-2.9, 1000, 230, 260]];
+  const peaks = [[-1.12, 1050, 250, 330], [-1.42, 1150, 200, 280], [-0.88, 1180, 180, 260], [0.35, 1100, 180, 280], [2.4, 1050, 210, 300], [1.4, 1150, 190, 280], [-2.3, 1100, 200, 280], [-2.9, 1050, 170, 260]];
   const valleys = [2.97, -0.32]; // where the two rivers leave the valley
   const EDGE = []; for (let i = 0; i <= 360; i++) { const a = (i / 360) * Math.PI * 2 - Math.PI; EDGE.push(groundAt ? groundAt(Math.cos(a) * 238, Math.sin(a) * 238) - 0.6 : 15); }
   const edge = (a) => { const f = (a + Math.PI) / (Math.PI * 2) * 360, i = Math.max(0, Math.min(359, Math.floor(f))); return EDGE[i] + (EDGE[i + 1] - EDGE[i]) * (f - i); };
@@ -99,7 +99,7 @@ export function buildMountains(groundAt = null) {
     // the mountain range: ridged crests, deep gullies
     const rg = Math.max(0, 1 - Math.abs(n.fbm(x / 230 - 9, z / 230 + 4, 4) * 2 - 1));
     const rg2 = Math.max(0, 1 - Math.abs(n.fbm(x / 70 + 3, z / 70 - 6, 3) * 2 - 1));
-    let mt = (30 + 140 * Math.pow(rg, 1.7) + 9 * rg2 * rg) * smoothstep(620, 900, rad) * (1 - smoothstep(1300, R1, rad));
+    let mt = (25 + 105 * Math.pow(rg, 1.7) + 9 * rg2 * rg) * smoothstep(620, 900, rad) * (1 - smoothstep(1300, R1, rad));
     mt *= 0.45 + 0.55 * smoothstep(0.0, 0.5, Math.abs(_ad(a, sunA)));        // a low gap under the sun
     for (const [pa, pd, ph, pr] of peaks) {
       const px = Math.cos(pa) * pd, pz = Math.sin(pa) * pd, d = Math.hypot(x - px, z - pz) / pr;
@@ -133,17 +133,18 @@ export function buildMountains(groundAt = null) {
     const mtn = smoothstep(40, 90, y) * smoothstep(560, 760, d);
     // forest canopy mottle on the plateaus (clumps of trees, lit tops)
     const clump = n.n2(x / 7, z / 7) * 0.6 + n.n2(x / 19 + 5, z / 19) * 0.4;
-    c.setRGB(0.08, 0.2, 0.08).lerp(t.setRGB(0.36, 0.56, 0.14), smoothstep(0.35, 0.8, clump) * (0.35 + 0.65 * lit));
-    c.lerp(t.setRGB(0.3, 0.46, 0.14), smoothstep(0.55, 0.2, clump) * 0.3);
+    c.setRGB(0.26, 0.09, 0.03).lerp(t.setRGB(0.95, 0.5, 0.12), smoothstep(0.35, 0.8, clump) * (0.35 + 0.65 * lit));
+    c.lerp(t.setRGB(0.66, 0.52, 0.16), smoothstep(0.55, 0.2, clump) * 0.6);
     c.multiplyScalar(0.7 + 0.4 * lit);
     // mountain rock: violet shadow side, pink-lavender sun side, faint gullies
     const gully = 0.85 + 0.15 * n.n2(x / 25, z / 25 + y / 40);
-    t.setRGB(0.2, 0.13, 0.4).lerp(c.clone().setRGB(0.62, 0.38, 0.64), lit).multiplyScalar(gully);
+    t.setRGB(0.38, 0.42, 0.56).lerp(c.clone().setRGB(0.86, 0.8, 0.76), lit).multiplyScalar(gully);
     c.lerp(t, mtn);
+    c.lerp(t.setRGB(1.05, 1.02, 1.0), mtn * smoothstep(110, 200, y) * smoothstep(0.2, 0.7, ny));   // snow on the high peaks
     // aerial perspective: lighter + pinker with distance, gold toward the sun; mist pooling low
     const toward = Math.max(0, Math.cos(_ad(a, sunA)));
-    const haze = t.setRGB(0.5, 0.34, 0.66).lerp(c.clone().setRGB(0.98, 0.56, 0.52), toward * toward);
-    let hk = (1 - mtn) * (0.05 + 0.45 * smoothstep(300, 900, d)) + mtn * (0.1 + 0.25 * smoothstep(700, 1400, d));
+    const haze = t.setRGB(0.7, 0.72, 0.8).lerp(c.clone().setRGB(1.05, 0.86, 0.6), toward * toward);
+    let hk = (1 - mtn) * (0.05 + 0.45 * smoothstep(300, 900, d)) + mtn * (0.25 + 0.3 * smoothstep(700, 1400, d));
     c.lerp(haze, Math.min(0.8, hk));
     // the same mist wall the fog puts on the terrain past the rim (fog.js), baked in
     c.lerp(SKY.fog, smoothstep(300, 700, d) * (1 - mtn) * 0.55);

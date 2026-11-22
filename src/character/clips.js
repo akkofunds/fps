@@ -1129,21 +1129,26 @@ const MN_STEP = { L: [0.14, 0, 0.27, -10], R: [-0.14, 0.03, -0.06, 44] };
 const MN_STR = { hips: [8, 26, 0], spine: [11, 18, 0], chest: [7, 24, 0], upperChest: [0, 10, 0], neck: [1, -22, 0], head: [-3, -24, 0], upperArmR: [-97, 0, 33], foreArmR: [0, 0, 0], handR: [-8, 0, 0], ...MN_POCKET };
 export const MN_A = compileClip([
   { t: 0, hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
-  { t: 0.02, ease: 'out', hip: [0, -0.06, -0.01], ik: MN_FEET, b: { ...MN_STANCE, hips: [3, 0, 0], chest: [2, -10, 0], upperArmR: [-24, 0, -10], foreArmR: [-112, 0, 0] } },
-  { t: 0.05, ease: 'in', hip: [0, -0.07, 0.07], ik: MN_STEP, b: MN_STR },
-  { t: 0.09, ease: 'out', hip: [0, -0.07, 0.07], ik: MN_STEP, b: { ...MN_STR, chest: [7, 29, 0], upperArmR: [-93, 0, 29], foreArmR: [-6, 0, 0] } },
-  { t: 0.16, ease: 'smooth', hip: [0, -0.06, 0.04], ik: MN_STEP, b: { ...MN_STANCE, hips: [5, 14, 0], upperArmR: [-56, 0, 8], foreArmR: [-84, 0, 0] } },
-  { t: 0.3, ease: 'smooth', hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
+  // load: shoulders turn away, the fist cocks back by the cheek
+  { t: 0.06, ease: 'out', hip: [0, -0.09, -0.05], ik: MN_FEET, b: { ...MN_STANCE, hips: [4, -18, 0], spine: [5, -12, 0], chest: [3, -26, 0], neck: [0, 10, 0], head: [-2, 20, 0], upperArmR: [-22, 0, -28], foreArmR: [-132, 0, 0], handR: [-12, 0, 0] } },
+  // snap: hip, shoulder and fist arrive together on the centre line
+  { t: 0.09, ease: 'in', hip: [0, -0.09, 0.14], ik: MN_STEP, b: { ...MN_STR, hips: [8, 30, 0], spine: [11, 22, 0], chest: [8, 34, 0], upperArmR: [-98, 0, 34], foreArmR: [0, 0, 0] } },
+  { t: 0.14, ease: 'out', hip: [0, -0.09, 0.15], ik: MN_STEP, b: { ...MN_STR, hips: [8, 34, 0], spine: [11, 24, 0], chest: [9, 40, 0], upperArmR: [-96, 0, 38], foreArmR: [0, 0, 0] } },
+  // recoil: the fist comes straight back to guard
+  { t: 0.22, ease: 'smooth', hip: [0, -0.06, 0.06], ik: MN_STEP, b: { ...MN_STANCE, hips: [6, 18, 0], chest: [4, 14, 0], upperArmR: [-50, 0, 6], foreArmR: [-110, 0, 0] } },
+  { t: 0.36, ease: 'smooth', hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
 ]);
 // 2 — turning elbow: wind the shoulders back, then the elbow whips across at jaw height
 const MN_ELB = { hips: [10, 36, 0], spine: [12, 28, 0], chest: [8, 36, 0], upperChest: [0, 12, 0], neck: [1, -30, 0], head: [-4, -32, 0], upperArmR: [-88, 0, 72], foreArmR: [-150, 0, 0], handR: [0, 0, 0], ...MN_POCKET };
 export const MN_B = compileClip([
   { t: 0, hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
-  { t: 0.03, ease: 'out', hip: [0, -0.07, -0.02], ik: MN_FEET, b: { ...MN_STANCE, hips: [4, -14, 0], spine: [6, -10, 0], chest: [3, -20, 0], upperArmR: [-52, 0, -32], foreArmR: [-138, 0, 0] } },
-  { t: 0.06, ease: 'in', hip: [0, -0.08, 0.08], ik: MN_STEP, b: MN_ELB },
-  { t: 0.1, ease: 'out', hip: [0, -0.08, 0.08], ik: MN_STEP, b: { ...MN_ELB, hips: [10, 44, 0], chest: [8, 46, 0], upperArmR: [-84, 0, 80] } },
-  { t: 0.2, ease: 'smooth', hip: [0, -0.06, 0.04], ik: MN_STEP, b: { ...MN_STANCE, hips: [6, 18, 0], chest: [4, 16, 0] } },
-  { t: 0.36, ease: 'smooth', hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
+  // wind: the shoulders coil the other way, elbow drawn back high
+  { t: 0.06, ease: 'out', hip: [0, -0.08, -0.03], ik: MN_FEET, b: { ...MN_STANCE, hips: [4, -20, 0], spine: [6, -14, 0], chest: [3, -28, 0], head: [-3, 18, 0], upperArmR: [-58, 0, -40], foreArmR: [-140, 0, 0] } },
+  // the elbow whips across at jaw height, the whole torso turning through it
+  { t: 0.1, ease: 'in', hip: [0, -0.08, 0.1], ik: MN_STEP, b: { ...MN_ELB, hips: [10, 46, 0], chest: [8, 48, 0], upperArmR: [-86, 0, 84] } },
+  { t: 0.15, ease: 'out', hip: [0, -0.08, 0.11], ik: MN_STEP, b: { ...MN_ELB, hips: [10, 58, 0], spine: [12, 36, 0], chest: [8, 60, 0], upperArmR: [-80, 0, 92] } },
+  { t: 0.25, ease: 'smooth', hip: [0, -0.06, 0.05], ik: MN_STEP, b: { ...MN_STANCE, hips: [6, 22, 0], chest: [4, 18, 0] } },
+  { t: 0.4, ease: 'smooth', hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
 ]);
 // 3 — low roundhouse: chamber the right knee, the hips turn over and the shin cuts across at thigh height
 const MN_LEGS = { upperLegL: [-14, 0, 4], lowerLegL: [26, 0, 0], footL: [-8, 0, 0], upperLegR: [-6, 0, 4], lowerLegR: [22, 0, 0], footR: [-6, 0, 0] };
@@ -1151,11 +1156,13 @@ const MN_KCH = { hips: [2, 34, -8], spine: [0, -12, 6], chest: [0, -12, 4], neck
 const MN_KICK = { hips: [-4, 76, -34], spine: [4, -22, 12], chest: [2, -20, 10], upperChest: [0, -8, 0], neck: [0, -14, 8], head: [-4, -16, 10], upperLegR: [-44, 0, 70], lowerLegR: [6, 0, 0], footR: [-24, 0, 0], upperLegL: [-6, 0, 2], lowerLegL: [14, 0, 0], footL: [-6, 0, 0], upperArmR: [-12, 0, 52], foreArmR: [-40, 0, 0], ...MN_POCKET };
 export const MN_C = compileClip([
   { t: 0, hip: [0, -0.04, 0], b: { ...MN_STANCE, ...MN_LEGS } },
-  { t: 0.045, ease: 'out', hip: [0, -0.03, 0.02], b: MN_KCH },
-  { t: 0.1, ease: 'in', hip: [0, -0.06, 0.08], b: MN_KICK },
-  { t: 0.16, ease: 'out', hip: [0, -0.06, 0.08], b: { ...MN_KICK, hips: [-4, 88, -36], upperLegR: [-40, 0, 78] } },
-  { t: 0.3, ease: 'smooth', hip: [0, -0.04, 0.05], b: MN_KCH },
-  { t: 0.46, ease: 'smooth', hip: [0, -0.04, 0], b: { ...MN_STANCE, ...MN_LEGS } },
+  // chamber: the knee comes up high and turned in, the body leans away to counterweight
+  { t: 0.07, ease: 'out', hip: [0, -0.02, 0.02], b: { ...MN_KCH, upperLegR: [-80, 0, 34], lowerLegR: [118, 0, 0], spine: [0, -16, 8] } },
+  // the hips turn over and the shin cuts through at thigh height
+  { t: 0.14, ease: 'in', hip: [0, -0.06, 0.09], b: MN_KICK },
+  { t: 0.2, ease: 'out', hip: [0, -0.06, 0.09], b: { ...MN_KICK, hips: [-4, 100, -38], upperLegR: [-38, 0, 84] } },
+  { t: 0.34, ease: 'smooth', hip: [0, -0.04, 0.05], b: MN_KCH },
+  { t: 0.5, ease: 'smooth', hip: [0, -0.04, 0], b: { ...MN_STANCE, ...MN_LEGS } },
 ]);
 // 4 — finisher: sink and chamber the palm at the hip, then a long step and the whole body drives one
 // open palm through the target's centre; the left fist pulls back to the hip (hikite) for power
@@ -1163,9 +1170,11 @@ const MN_PALM = { hips: [16, 34, 0], spine: [18, 24, 0], chest: [10, 30, 0], upp
 const MN_LUNGE = { L: [0.15, 0, 0.5, -10], R: [-0.15, 0.04, -0.14, 52] };
 export const MN_D = compileClip([
   { t: 0, hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
-  { t: 0.08, ease: 'out', hip: [0, -0.15, -0.04], ik: MN_FEET, b: { ...MN_STANCE, hips: [10, -22, 0], spine: [8, -16, 0], chest: [4, -20, 0], head: [-4, 14, 0], upperArmR: [-18, 0, -18], foreArmR: [-122, 0, 0], handR: [-30, 0, 0] } },
-  { t: 0.15, ease: 'in', hip: [0, -0.17, 0.22], ik: MN_LUNGE, b: MN_PALM },
-  { t: 0.24, ease: 'linear', hip: [0, -0.17, 0.23], ik: MN_LUNGE, b: { ...MN_PALM, chest: [10, 34, 0], upperArmR: [-98, 0, 27] } },
-  { t: 0.42, ease: 'smooth', hip: [0, -0.1, 0.12], ik: MN_LUNGE, b: { ...MN_STANCE, hips: [8, 18, 0], chest: [6, 16, 0] } },
-  { t: 0.62, ease: 'smooth', hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
+  // sink deep and chamber the palm at the hip, shoulders turned right away
+  { t: 0.12, ease: 'out', hip: [0, -0.19, -0.06], ik: MN_FEET, b: { ...MN_STANCE, hips: [12, -28, 0], spine: [9, -18, 0], chest: [4, -26, 0], head: [-4, 16, 0], upperArmR: [-14, 0, -22], foreArmR: [-126, 0, 0], handR: [-34, 0, 0] } },
+  // a long step and the whole body drives the open palm through the centre
+  { t: 0.2, ease: 'in', hip: [0, -0.18, 0.26], ik: MN_LUNGE, b: MN_PALM },
+  { t: 0.3, ease: 'linear', hip: [0, -0.18, 0.27], ik: MN_LUNGE, b: { ...MN_PALM, chest: [10, 38, 0], upperArmR: [-98, 0, 27] } },
+  { t: 0.48, ease: 'smooth', hip: [0, -0.1, 0.12], ik: MN_LUNGE, b: { ...MN_STANCE, hips: [8, 18, 0], chest: [6, 16, 0] } },
+  { t: 0.7, ease: 'smooth', hip: [0, -0.04, 0], ik: MN_FEET, b: MN_STANCE },
 ]);

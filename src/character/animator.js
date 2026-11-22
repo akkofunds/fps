@@ -230,6 +230,8 @@ export class Animator {
   // hit-stop: on a connecting blow attacker and victim freeze for a few frames (the "crunch" of a
   // fighting-game hit), then snap back to full speed
   hitStop(t) { this.stopT = Math.max(this.stopT || 0, t); }
+  // end the current full-body action now (it blends out over its own fade); optional name filter
+  stopAction(names) { const a = this.action; if (!a) return; if (names && !names.some((n) => a.def === ((this.baked && this.baked[n]) || ACTIONS[n]))) return; a.t = Math.max(a.t, a.def.clip.duration); }
   get busy() { return !!(this.action && this.action.t < this.action.def.clip.duration); }
 
   // ---------------------------------------------------------------- per-frame

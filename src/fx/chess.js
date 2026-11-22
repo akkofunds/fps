@@ -387,60 +387,80 @@ Object.assign(Fx.prototype, {
   },
   // the swing: o = his feet, F = flat strike direction, i = string index, getP(out) = striking limb
   chessSwing(o, F, i, getP) {
+    // Clean and sharp (no smoke): a smear of white light that follows the striking limb through the
+    // swing, then at the moment of impact a crisp shape of displaced air in front of it.
     const Rt = new THREE.Vector3(-F.z, 0, F.x), U = UP;
     const at = (x, y, z) => new THREE.Vector3(o.x, o.y, o.z).addScaledVector(Rt, x).addScaledVector(U, y).addScaledVector(F, z);
-    // ink + light dragged off the limb (white core, black ink edge)
+    const hitMs = [90, 100, 140, 200][i];
+    // limb smear: thin bright streaks dragged behind the fist / elbow / shin while it moves fast
     const p = new THREE.Vector3(), prev = new THREE.Vector3();
     let t = 0, first = true;
-    const dur = i === 3 ? 0.3 : 0.2;
+    const t0 = hitMs / 1000 - 0.05, t1 = hitMs / 1000 + 0.05;
     this.effects.push({ update: (dt) => {
       t += dt; getP(p);
       if (first) { prev.copy(p); first = false; }
-      for (let k = 0; k < 4; k++) {
-        const u = k / 4, x = prev.x + (p.x - prev.x) * u, y = prev.y + (p.y - prev.y) * u, z = prev.z + (p.z - prev.z) * u;
-        this.fire.emit(x, y, z, 0, 0, 0, 0.12, 0.07, 0.01, [1.4, 1.42, 1.5, 1], [0.6, 0.62, 0.7, 0], 0, 0);
-        if (k % 2) this.smoke.emit(x, y, z, 0, 0, 0, 0.18, 0.09, 0.02, [0.03, 0.03, 0.04, 0.9], [0.05, 0.05, 0.06, 0], 0, 0);
+      if (t > t0 && t < t1) {
+        for (let k = 0; k < 5; k++) {
+          const u = k / 5, x = prev.x + (p.x - prev.x) * u, y = prev.y + (p.y - prev.y) * u, z = prev.z + (p.z - prev.z) * u;
+          this.fire.emit(x, y, z, 0, 0, 0, 0.05, 0.1, 0.0, [1.7, 1.72, 1.8, 1], [0.8, 0.82, 0.9, 0], 0, 0);
+        }
       }
       prev.copy(p);
-      return t < dur;
+      return t < t1 + 0.02;
     } });
-    if (i === 0) {          // right straight: a line of light along the punch, two rings off the fist
-      setTimeout(() => {
-        this.slashLine(at(-0.15, 1.42, 0.1), at(-0.05, 1.42, 1.9), 0.06, 0.18, [1.6, 1.62, 1.7]);
-        this.shockRing(at(-0.05, 1.42, 0.95), F, 0.22, { life: 0.2 });
-        this.shockRing(at(-0.05, 1.42, 1.25), F, 0.16, { ink: true, life: 0.24, delay: 0.03 });
-      }, 45);
-    } else if (i === 1) {   // turning elbow: a short flat arc and its ink shadow
-      const e1 = Rt.clone().negate().addScaledVector(F, -0.2), e2 = F.clone();
-      this.ribbon(at(0, 1.45, 0.15), e1, e2, 0.85, 2.2, { pal: MONO, w: 0.3, sweep: 0.06, life: 0.26, grow: 0.2, delay: 0.035 });
-      this.ribbon(at(0, 1.38, 0.1), e1, e2, 0.95, 2.0, { pal: INK, w: 0.12, sweep: 0.07, life: 0.3, grow: 0.25, delay: 0.06 });
-    } else if (i === 2) {   // low roundhouse: a wide arc at thigh height, dust off the planted foot
-      const e1 = Rt.clone().negate().addScaledVector(F, -0.35).addScaledVector(U, -0.1), e2 = F.clone().addScaledVector(U, 0.12);
-      this.ribbon(at(0, 0.85, 0.2), e1, e2, 1.15, 2.6, { pal: MONO, w: 0.42, sweep: 0.08, life: 0.3, grow: 0.18, helix: 0.2, delay: 0.05 });
-      this.ribbon(at(0, 0.8, 0.15), e1, e2, 1.3, 2.3, { pal: INK, w: 0.14, sweep: 0.09, life: 0.34, grow: 0.22, delay: 0.08 });
-      this.dust(at(0, 0.05, 0), 0.6);
-    } else {                // finisher: the palm drives through — a cone of rings and a long thrust line
-      setTimeout(() => {
-        this.slashLine(at(-0.1, 1.38, 0.2), at(0, 1.38, 3.2), 0.12, 0.26, [1.7, 1.72, 1.8]);
-        this.slashLine(at(-0.1, 1.3, 0.2), at(0, 1.3, 2.6), 0.05, 0.3, [0.05, 0.05, 0.06]);
-        for (let k = 0; k < 3; k++) this.shockRing(at(-0.05, 1.38, 1.0 + k * 0.45), F, 0.25 + k * 0.12, { ink: k === 1, life: 0.26 + k * 0.04, delay: k * 0.035, grow: 1.8 });
+    // forward speed lines (thin white streaks shooting out past the target)
+    const lines = (c, n, spread, v0) => {
+      for (let k = 0; k < n; k++) {
+        const a = (R() - 0.5) * spread, b = (R() - 0.5) * spread * 0.6, v = v0 * (0.7 + R() * 0.6);
+        const d = F.clone().addScaledVector(Rt, a).addScaledVector(U, b).normalize();
+        this.fire.emit(c.x + (R() - 0.5) * 0.3, c.y + (R() - 0.5) * 0.3, c.z + (R() - 0.5) * 0.3, d.x * v, d.y * v, d.z * v, 0.045, 0.16, 0.0, [1.6, 1.62, 1.7, 1], [0.7, 0.72, 0.8, 0], 0, 0);
+      }
+    };
+    setTimeout(() => {
+      if (i === 0) {          // right straight: a straight smear along the punch, a cone of air off the fist
+        this.slashLine(at(-0.12, 1.42, 0.2), at(-0.04, 1.42, 2.1), 0.07, 0.16, [1.7, 1.72, 1.8]);
+        this.slashLine(at(-0.12, 1.36, 0.2), at(-0.04, 1.36, 1.7), 0.025, 0.2, [0.04, 0.04, 0.05]);
+        this.shockRing(at(-0.04, 1.42, 1.15), F, 0.26, { life: 0.18, grow: 1.9 });
+        this.shockRing(at(-0.04, 1.42, 1.55), F, 0.18, { ink: true, life: 0.2, delay: 0.025, grow: 1.6 });
+        lines(at(-0.04, 1.42, 1.2), 7, 0.35, 22);
+      } else if (i === 1) {   // turning elbow: a flat crescent the width of the turn, its ink shadow under it
+        const e1 = Rt.clone().negate().addScaledVector(F, -0.3), e2 = F.clone();
+        this.ribbon(at(0, 1.45, 0.2), e1, e2, 0.95, 2.4, { pal: MONO, w: 0.34, sweep: 0.05, life: 0.22, grow: 0.25 });
+        this.ribbon(at(0, 1.39, 0.15), e1, e2, 1.05, 2.2, { pal: INK, w: 0.1, sweep: 0.06, life: 0.26, grow: 0.3, delay: 0.02 });
+        lines(at(0.4, 1.45, 1.0), 6, 0.9, 16);
+      } else if (i === 2) {   // low roundhouse: a wide sweeping crescent at thigh height, grass and dust kicked up
+        const e1 = Rt.clone().negate().addScaledVector(F, -0.45).addScaledVector(U, -0.12), e2 = F.clone().addScaledVector(U, 0.14);
+        this.ribbon(at(0, 0.85, 0.25), e1, e2, 1.3, 2.8, { pal: MONO, w: 0.46, sweep: 0.06, life: 0.26, grow: 0.22, helix: 0.15 });
+        this.ribbon(at(0, 0.8, 0.2), e1, e2, 1.42, 2.5, { pal: INK, w: 0.12, sweep: 0.07, life: 0.3, grow: 0.25, delay: 0.025 });
+        this.dust(at(0, 0.05, 0.3), 0.8);
+        lines(at(0.5, 0.9, 1.0), 6, 0.9, 16);
+      } else {                // finisher: the palm drives through — a long thrust, a tunnel of rings, a gust of air
+        this.slashLine(at(-0.1, 1.38, 0.2), at(0, 1.38, 3.6), 0.14, 0.24, [1.75, 1.77, 1.85]);
+        this.slashLine(at(-0.1, 1.3, 0.2), at(0, 1.3, 2.8), 0.05, 0.28, [0.04, 0.04, 0.05]);
+        for (let k = 0; k < 4; k++) this.shockRing(at(-0.05, 1.38, 1.0 + k * 0.5), F, 0.24 + k * 0.14, { ink: k === 1, life: 0.24 + k * 0.04, delay: k * 0.03, grow: 2.0 });
         this.airBurst(at(0, 1.38, 1.1), F, true, null);
-      }, 150);
-    }
+        this.groundShock(at(0, 0.06, 0.6), 1.6, { core: [1.4, 1.42, 1.5], edge: [0.1, 0.1, 0.12] });
+        lines(at(0, 1.38, 1.4), 14, 0.5, 28);
+      }
+    }, hitMs - 10);
   },
   // contact
   chessHit(p, dir, heavy) {
     const F = new THREE.Vector3(dir.x, 0, dir.z).normalize();
-    this.impactStar(p, heavy ? 1.0 : 0.55, [1.5, 1.52, 1.6]);
-    this.starBurst(p, heavy ? 3 : 2, heavy ? 0.42 : 0.3, INK, heavy ? 1.0 : 0.7);
-    this.tileShards(p, F, heavy ? 18 : 9, heavy ? 1.4 : 1);
-    this.shockRing(p.clone().addScaledVector(F, 0.3), F, heavy ? 0.45 : 0.3, { life: 0.22 });
-    for (let k = 0; k < (heavy ? 7 : 4); k++) {
-      const a = Math.atan2(F.z, F.x) + (R() - 0.5) * 1.1, v = (heavy ? 26 : 16) + R() * 8;
-      this.fire.emit(p.x, p.y + (R() - 0.5) * 0.4, p.z, Math.cos(a) * v, (R() - 0.5) * 3, Math.sin(a) * v, 0.09, 0.06, 0.02, [1.6, 1.6, 1.7, 1], [0.5, 0.5, 0.6, 0], 2, 0);
+    // a white flash star with a black ink star behind it, a ring of air bursting off the impact
+    this.impactStar(p, heavy ? 1.3 : 0.8, [1.7, 1.72, 1.8], heavy ? 0.16 : 0.11);
+    this.starBurst(p, heavy ? 4 : 2, heavy ? 0.5 : 0.34, INK, heavy ? 1.1 : 0.8);
+    this.shockRing(p.clone().addScaledVector(F, 0.2), F, heavy ? 0.55 : 0.34, { life: 0.2, grow: 2.2 });
+    if (heavy) this.shockRing(p.clone().addScaledVector(F, 0.6), F, 0.4, { ink: true, life: 0.26, grow: 2.4, delay: 0.03 });
+    // a few chess tiles cracking out of the air
+    this.tileShards(p, F, heavy ? 12 : 5, heavy ? 1.3 : 0.9);
+    // sparks of light thrown out the far side
+    for (let k = 0; k < (heavy ? 14 : 7); k++) {
+      const a = Math.atan2(F.z, F.x) + (R() - 0.5) * 1.4, v = (heavy ? 24 : 15) + R() * 10;
+      this.fire.emit(p.x, p.y + (R() - 0.5) * 0.4, p.z, Math.cos(a) * v, (R() - 0.3) * 6, Math.sin(a) * v, 0.05, 0.14, 0.0, [1.7, 1.7, 1.8, 1], [0.6, 0.6, 0.7, 0], 3, 0);
     }
-    this.light(p, heavy ? 16 : 7, heavy ? 8 : 4, heavy ? 0.16 : 0.08, 0xeef0ff);
-    if (heavy) { this.liquidSlash(p.clone().addScaledVector(UP, -0.2), F, 0.9, GLOSS.white, 0.35); this.groundCrack(new THREE.Vector3(p.x, groundH(p.x, p.z) + 0.4, p.z), 2.4, MONO, 1.4); }
+    this.light(p, heavy ? 18 : 8, heavy ? 9 : 5, heavy ? 0.16 : 0.08, 0xf4f6ff);
+    if (heavy) { this.liquidSlash(p.clone().addScaledVector(UP, -0.2), F, 1.0, GLOSS.white, 0.35); this.groundCrack(new THREE.Vector3(p.x, groundH(p.x, p.z) + 0.4, p.z), 2.6, MONO, 1.4); }
   },
 });
 

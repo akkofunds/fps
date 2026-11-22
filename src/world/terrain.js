@@ -204,9 +204,9 @@ function rockTexture() {
 export function grassColorAt(x, z, out) {
   // shared palette for the ground and grass blades
   const n1 = N.fbm(x / 23 + 40, z / 23, 3), n2 = N.n2(x / 7, z / 7);
-  const lush = new THREE.Color(0.16, 0.46, 0.08), fresh = new THREE.Color(0.38, 0.68, 0.13), dry = new THREE.Color(0.5, 0.64, 0.2);
+  const lush = new THREE.Color(0.3, 0.34, 0.07), fresh = new THREE.Color(0.68, 0.56, 0.14), dry = new THREE.Color(0.7, 0.42, 0.1);
   out.copy(lush).lerp(fresh, smoothstep(-0.4, 0.5, n1 + n2 * 0.25));
-  out.lerp(dry, smoothstep(0.3, 0.8, N.fbm(x / 40 - 30, z / 40 + 12, 2)) * 0.3);
+  out.lerp(dry, smoothstep(0.2, 0.8, N.fbm(x / 40 - 30, z / 40 + 12, 2)) * 0.5);
   return out;
 }
 
@@ -216,7 +216,7 @@ export function buildTerrain(step = 1, lite = false) {
   const pos = new Float32Array(nx * nx * 3), col = new Float32Array(nx * nx * 3), uv = new Float32Array(nx * nx * 2);
   const c = new THREE.Color(), tmp = new THREE.Color(), nrm = new THREE.Vector3();
   const dirt = new THREE.Color(0.5, 0.4, 0.26), sand = new THREE.Color(0.66, 0.6, 0.42), mud = new THREE.Color(0.3, 0.3, 0.2), rock = new THREE.Color(0.56, 0.54, 0.5), rockDark = new THREE.Color(0.34, 0.33, 0.31), moss = new THREE.Color(0.24, 0.42, 0.12), pebble = new THREE.Color(0.48, 0.45, 0.38);
-  const hillDark = new THREE.Color(0.16, 0.33, 0.1);
+  const hillDark = new THREE.Color(0.4, 0.26, 0.08);
   for (let j = 0; j < nx; j++) for (let i = 0; i < nx; i++) {
     const x = xs[i], z = xs[j];
     const inner = Math.abs(x) <= HF_HALF && Math.abs(z) <= HF_HALF;

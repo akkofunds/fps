@@ -49,7 +49,7 @@ THREE.ShaderChunk.fog_fragment = /* glsl */`
     float barrier = smoothstep( 300.0, 700.0, wr ) * smoothstep( 40.0, 160.0, fd );
     fogFactor = max( fogFactor, barrier * 0.55 * FOG_MIST );
     float sunAmt = pow( max( dot( fwd / max( fd, 1e-3 ), ${v3(SUN_DIR)} ), 0.0 ), 5.0 );
-    vec3 fc = mix( fogColor, ${v3(new THREE.Vector3(1.25, 0.78, 0.48))}, sunAmt * 0.7 * FOG_MIST );
+    vec3 fc = mix( fogColor, ${v3(new THREE.Vector3(1.15, 0.9, 0.55))}, sunAmt * 0.5 * FOG_MIST );
     gl_FragColor.rgb = mix( gl_FragColor.rgb, fc, clamp( fogFactor, 0.0, 1.0 ) );
   }
 #endif`;
