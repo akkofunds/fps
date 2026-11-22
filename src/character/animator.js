@@ -112,13 +112,11 @@ const STYLES = {
   brawler: { swing: 1.05, swingR: 1, lean: 1, bounce: 1, sway: 0.8, settle: 0.55, roll: 1, twist: 1, elbow: 1, kick: 1, stride: 1, fidget: 'fidgetP' },
   // lighter on her feet; the staff arm stays steadier, the free arm swings naturally
   caster: { swing: 0.95, swingR: 0.45, lean: 0.9, bounce: 0.95, sway: 1, settle: 0.5, roll: 1.1, twist: 0.95, elbow: 0.95, kick: 0.95, stride: 1, fidget: 'fidgetM' },
-  // anime action-game heroine (Inkweaver): a confident, powerful stride. Strong hip sway and weight
-  // shift onto every stance foot, the pelvis dropping and turning with each step and the chest
-  // countering it; leaning into the run with the chest up; quick, grounded steps (less up-and-down,
-  // a quicker cadence) placed close to one line; arms tucked in, elbows bent, pumping opposite the
-  // legs with a loose wrist
-  femme: { swing: 1.05, swingR: 1, lean: 1.35, bounce: 0.82, sway: 3.2, runSway: 3.4, settle: 0.42, roll: 3.0, twist: 2.1, elbow: 1.12, kick: 1.2, stride: 0.92,
-    width: 0.58, armIn: 24, cross: 16, arch: -2.5, wrist: 14, fidget: 'fidgetP' },
+  // anime action-game heroine (Inkweaver): a clean, controlled, confident run. Clear but natural hip
+  // sway and weight transfer, a slight forward lean with the chest up, a weighted up-and-down, steps
+  // a little inside the hip line, and arms close to the body swinging cleanly opposite the legs
+  femme: { swing: 1.0, swingR: 1, lean: 1.15, bounce: 0.92, sway: 1.8, runSway: 1.9, settle: 0.45, roll: 1.7, twist: 1.4, elbow: 1.05, kick: 1.05, stride: 0.95,
+    width: 0.72, armIn: 14, cross: 8, arch: -2, wrist: 6, fidget: 'fidgetP' },
 };
 
 const BAKED = new Map(); // retargeted clips, shared by every instance of the same model

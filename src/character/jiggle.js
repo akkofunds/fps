@@ -15,11 +15,11 @@ import * as THREE from 'three';
 // limited so a big hit can never fold the mesh.
 
 const SPEC = {
-  stiff: 0.03,    // share of the gap to the posed position closed per 1/60 s: a soft, heavy ~2.3 Hz swing
-  drag: 0.035,    // share of the wobble lost per 1/60 s: a landing rings several times, each smaller
-  inertia: 3.6,   // how hard the body's own accelerations throw the mass (its weight)
-  maxAng: 0.6,    // soft limit on the simulated swing (radians, ~34°)
-  gain: 2.0,      // how much further the hinge turns than the swing (the skin is only partly bound to it)
+  stiff: 0.045,   // share of the gap to the posed position closed per 1/60 s: a soft ~2.8 Hz swing
+  drag: 0.06,     // share of the wobble lost per 1/60 s: settles in two or three soft bounces
+  inertia: 2.4,   // how hard the body's own accelerations throw the mass (its weight)
+  maxAng: 0.5,    // soft limit on the simulated swing (radians, ~29°)
+  gain: 1.45,     // how much further the hinge turns than the swing (the skin is only partly bound to it)
   lever: new THREE.Vector3(0, -0.045, 0.112),   // hinge → centre of the mass, in model space (metres; +z = her front)
 };
 // the two sides are not quite identical, so they drift a little apart while staying attached
@@ -127,7 +127,7 @@ class SpringBone {
 // its absolute speed, so hair streams back as she runs), sags a little under gravity, is pulled back
 // toward the styled shape, keeps its length, and is pushed out of her head and torso. Joints are
 // solved from the scalp down, each turning to aim at its particle, so the motion travels down the lock.
-const HAIR = { stiff: 0.085, drag: 0.12, gravity: 2.2 };
+const HAIR = { stiff: 0.1, drag: 0.1, gravity: 2.2 };
 // cloth (the long hanging sleeves, jacket flaps) and dangling ornaments: heavier, hang more, follow less
 const CLOTH = { stiff: 0.055, drag: 0.17, gravity: 5.5 };
 class HairChain {
@@ -211,7 +211,7 @@ export class JiggleSim {
       const hm = new THREE.Matrix4().multiplyMatrices(mInv, th.matrixWorld);
       const lv = new THREE.Vector3(0, -0.05, 0.07);
       const lever = lv.clone().transformDirection(new THREE.Matrix4().copy(hm).invert()).multiplyScalar(lv.length() / (new THREE.Vector3().setFromMatrixScale(hm).x || 1));
-      springs.push(new SpringBone(th, th, { ...SPEC, stiff: 0.07, drag: 0.09, inertia: 3.0, maxAng: 0.42, gain: 1.0, lever, move: true }));
+      springs.push(new SpringBone(th, th, { ...SPEC, stiff: 0.08, drag: 0.11, inertia: 2.2, maxAng: 0.35, gain: 0.6, lever, move: true }));
     }
     // hair chains: hair<lock><n>, with her head and torso as colliders
     const byName = {}; model.traverse((o) => { if (o.isBone) byName[o.name] = o; });
