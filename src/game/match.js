@@ -170,7 +170,7 @@ export class Match {
     let g = this.ghosts.find((x) => x.t <= 0 && x.mage === e.mage);
     if (!g) {
       if (this.ghosts.length >= 10) return;
-      const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false });
+      const inst = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { lowPoly: true, outlines: false, gait: mageOf(e.mage).gait });
       const mat = new THREE.MeshBasicMaterial({ color: e.mage === 'meteora' ? new THREE.Color(2.2, 0.35, 0.6) : e.mage === 'sorcerer' ? new THREE.Color(0.6, 1.4, 3.0) : (e.mage === 'kineslayer' || e.mage === 'manipulator') ? new THREE.Color(0.9, 0.95, 1.1) : new THREE.Color(2.4, 0.9, 0.25), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
       for (const m of inst.meshes) { m.material = mat; if (m.userData.outline) m.visible = false; }
       inst.setLod(true);
@@ -203,7 +203,7 @@ export class Match {
     const Q = this.map.Q;
     const groundAt = (x, z) => this.world.groundAt(x, z, 1e9);
     const e = new Ent(p, p.id === this.localId);
-    e.view = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { groundAt, outlines: Q.outlines, lowPoly: !Q.outlines }).uniqueMaterials();
+    e.view = new MageInstance(this.templates[mageOf(e.mage).id] || this.templates.pyro, { groundAt, outlines: Q.outlines, lowPoly: !Q.outlines, gait: mageOf(e.mage).gait }).uniqueMaterials();
     if (e.dummy) for (const mesh of e.view.meshes) if (!mesh.userData.outline) { mesh.material.color.setRGB(0.55, 0.5, 0.42); mesh.material.emissive.multiplyScalar(0.45); }
     e.view.setVisible(false);
     this.scene.add(e.view.root);

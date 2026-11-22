@@ -13,6 +13,7 @@ export const INKWEAVER = {
   name: 'INKWEAVER',
   role: 'MASTER OF YUNKUI',
   model: 'models/inkweaver.glb',
+  gait: 'femme',   // her walk and run: see STYLES.femme in character/animator.js
   color: '#f2c45a',
   perk: { speed: 1.03, airJumps: 1, dashMax: 2, dashRate: 1.1 },
   bio: 'The master of Yunkui Summit. Her ink is never just ink: a stroke of it becomes wings, a swirl becomes a storm cloud, and a single talisman can hold a mountain down. Calm, unhurried, and very, very thorough.',

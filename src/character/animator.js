@@ -112,6 +112,12 @@ const STYLES = {
   brawler: { swing: 1.05, swingR: 1, lean: 1, bounce: 1, sway: 0.8, settle: 0.55, roll: 1, twist: 1, elbow: 1, kick: 1, stride: 1, fidget: 'fidgetP' },
   // lighter on her feet; the staff arm stays steadier, the free arm swings naturally
   caster: { swing: 0.95, swingR: 0.45, lean: 0.9, bounce: 0.95, sway: 1, settle: 0.5, roll: 1.1, twist: 0.95, elbow: 0.95, kick: 0.95, stride: 1, fidget: 'fidgetM' },
+  // anime action-game heroine (Inkweaver): a confident, stylish stride. Big hip sway and weight shift
+  // onto every stance foot, the pelvis dropping and turning with each step and the chest countering it,
+  // chest up and shoulders back, steps placed close to one line, arms in close to the body swinging
+  // opposite the legs with a loose wrist, and a springier bounce
+  femme: { swing: 0.9, swingR: 1, lean: 0.7, bounce: 1.3, sway: 2.3, runSway: 2.4, settle: 0.42, roll: 2.1, twist: 1.7, elbow: 0.82, kick: 1.1, stride: 0.96,
+    width: 0.62, armIn: 16, arch: -4, wrist: 14, fidget: 'fidgetP' },
 };
 
 const BAKED = new Map(); // retargeted clips, shared by every instance of the same model
@@ -148,7 +154,7 @@ export class Animator {
     this.planted = false;
     this.lastStep = 'R';
     this.dead = false;
-    this.style = rig.hasProp ? STYLES.caster : STYLES.brawler;
+    this.style = (opts.gait && STYLES[opts.gait]) || (rig.hasProp ? STYLES.caster : STYLES.brawler);
     // a model can ship its own retargeted animations (the Sorcerer's Hollow Purple): they replace
     // the hand-keyed action of the same name for this character
     let data = null;
@@ -520,7 +526,7 @@ export class Animator {
     const idleSink = this.lobby ? -0.012 : -0.03;
     P.hip[1] = lerp(idleSink, lerp(-0.008, -0.03, wFast), wRun) + (walkBob + runBob) * wRun + this.dip;
     // the pelvis shifts over the stance foot: clearly when walking, barely when running
-    P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * lerp(0.022, 0.008, wFast) * st.sway * wRun;
+    P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * lerp(0.022, 0.008 * (st.runSway || 1), wFast) * st.sway * wRun;
     const hipYawD = this.hipYaw * R2D;
     // ---- feet paths
     const feet = {};
@@ -577,7 +583,7 @@ export class Animator {
     const counter = -hipYawD + pelvisYaw;
     const thorax = lerp(3, 7, wFast) * st.twist * stride * wRun;
     // the spine undoes the pelvis roll so the shoulders stay level
-    setE(P, B.spine, 1.5 + lean * 0.45, counter * 0.4, bank * 0.3 - pelvisRoll * 0.85);
+    setE(P, B.spine, 1.5 + lean * 0.45 + (st.arch || 0) * wRun, counter * 0.4, bank * 0.3 - pelvisRoll * 0.85);
     setE(P, B.chest, lean * 0.25, counter * 0.35 + thorax, -pelvisRoll * 0.15);
     setE(P, B.upperChest, 0, counter * 0.2 + thorax * 0.3, 0);
     // the head stays level and looking ahead (the eyes lead the run)
@@ -597,11 +603,12 @@ export class Animator {
       // relaxed ready stance: arms close to the body, casting hand slightly raised
       const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
       const ax = lerp(idleX, sw - 5 * wFast, wRun);
-      const az = lerp(idleZ, lerp(6, 9, wFast) - 4 * fwdSw * wFast, wRun);
+      const az = lerp(idleZ, lerp(6, 9, wFast) - 4 * fwdSw * wFast - (st.armIn || 0), wRun);
       const ex = lerp(idleE, lerp(-24, -(78 + 10 * sstep(4.5, RUN_SPEED, speed)), wFast) * st.elbow - Math.max(0, -sw) * lerp(0.2, 0.35, wFast), wRun);
       setS(P, B['upperArm' + side], sg, ax, 8 * fwdSw * wFast, az);
       setS(P, B['foreArm' + side], sg, ex, -lerp(6, 14, wFast) * wRun, 0);
-      setS(P, B['hand' + side], sg, -6, 0, -4);
+      // a loose wrist that flicks back as the arm swings forward (style)
+      setS(P, B['hand' + side], sg, -6 + (st.wrist || 0) * fwdSw * wRun, 0, -4 - (st.wrist || 0) * 0.4 * wRun);
       setS(P, B['shoulder' + side], sg, -2 * sw / Math.max(1, swingAmt * 0.5) * wFast, 0, -1.5 * wFast);
       addE(P, B['upperArm' + side], 0, 0, -clamp(drag, -10, 10));
     }
@@ -612,7 +619,7 @@ export class Animator {
     for (const side of ['L', 'R']) {
       const f = feet[side];
       const hw = Math.max(0.085, Math.abs(rig.legs.L.hipOff.x) + 0.008);
-      const width = lerp(hw, hw * 0.9, wFast);
+      const width = lerp(hw, hw * 0.9, wFast) * lerp(1, st.width || 1, wRun);
       // base under the hip, turned with the pelvis
       const bx = f.sg * width * cyaw, bz = -f.sg * width * syaw;
       tgt[side] = (this._tg || (this._tg = { L: new THREE.Vector3(), R: new THREE.Vector3() }))[side].set(bx + mx * f.along, ankleH + f.lift, bz + mz * f.along);

@@ -43,7 +43,23 @@ BONES = [  # (name, parent)
     # secondary motion (never animated by the rig; driven by src/character/jiggle.js): a pivot on the
     # upper chest and the soft mass hanging from it, per side
     ('breast_L', 'upperChest'), ('breastTip_L', 'breast_L'), ('breast_R', 'upperChest'), ('breastTip_R', 'breast_R'),
+    # the thighs' soft mass (source: Skn_*_Thigh_Shake)
+    ('thigh_L', 'upperLeg_L'), ('thigh_R', 'upperLeg_R'),
 ]
+# hair: the main strand of each lock is kept as a chain (hair<lock><n>, n from the scalp down); the
+# branches of a lock ride on their nearest kept joint. All swung by spring bones in jiggle.js.
+HAIR = {  # game chain → the source joints, scalp first
+    'BA': ['Ctr_B_HairA_01', 'Ctr_B_HairA_02', 'Ctr_B_HairA_03', 'Ctr_B_HairA_04', 'Ctr_B_HairA_05', 'Ctr_B_HairA_06', 'Ctr_B_HairA_07'],
+    'BB': ['Ctr_B_HairB_01', 'Ctr_B_HairB_02', 'Ctr_B_HairB_03', 'Ctr_B_HairB_04', 'Ctr_B_HairB_05', 'Ctr_B_HairB_06', 'Ctr_B_HairB_07'],
+    'LA': ['Ctr_L_HairA_01', 'Ctr_L_HairA_02', 'Ctr_L_HairA_03', 'Ctr_L_HairA_04'],
+    'LB': ['Ctr_L_HairB_01', 'Ctr_L_HairB_02', 'Ctr_L_HairB_03'],
+    'RA': ['Ctr_R_HairA_01', 'Ctr_R_HairA_02', 'Ctr_R_HairA_04'],
+    'RB': ['Ctr_R_HairB_01', 'Ctr_R_HairB_02', 'Ctr_R_HairB_03'],
+    'RC': ['Ctr_R_HairC_01', 'Ctr_R_HairC_02', 'Ctr_R_HairC_03'],
+    'T': ['Ctr_T_Hair_01', 'Ctr_T_Hair_02'],
+}
+for lock, js_ in HAIR.items():
+    for k in range(len(js_)): BONES.append((f'hair{lock}{k + 1}', 'head' if k == 0 else f'hair{lock}{k}'))
 NAMES = [b[0] for b in BONES]
 IDX = {n: i for i, n in enumerate(NAMES)}
 BIP = {
@@ -59,6 +75,10 @@ BIP = {
 JIGGLE = {'Skn_L_Chest': 'breast_L', 'Skn_L_Chest_Cj_01': 'breastTip_L', 'Skn_L_Chest_Cj_02': 'breast_L', 'Skn_L_Chest_Cj_03': 'breast_L', 'Skn_L_Chest_Cj_04': 'breast_L',
           'Skn_R_Chest': 'breast_R', 'Skn_R_Chest_Cj_01': 'breastTip_R', 'Skn_R_Chest_Cj_02': 'breast_R', 'Skn_R_Chest_Cj_03': 'breast_R', 'Skn_R_Chest_Cj_04': 'breast_R'}
 JIGGLE_POS = {'breast_L': 'Skn_L_Chest', 'breastTip_L': 'Skn_L_Chest_Cj_01', 'breast_R': 'Skn_R_Chest', 'breastTip_R': 'Skn_R_Chest_Cj_01'}
+JIGGLE.update({'Skn_L_Thigh_Shake': 'thigh_L', 'Skn_R_Thigh_Shake': 'thigh_R'})
+JIGGLE_POS.update({'thigh_L': 'Skn_L_Thigh_Shake', 'thigh_R': 'Skn_R_Thigh_Shake'})
+for lock, js_ in HAIR.items():
+    for k, src in enumerate(js_): JIGGLE[src] = f'hair{lock}{k + 1}'; JIGGLE_POS[f'hair{lock}{k + 1}'] = src
 DROP_MATS = ('MAT_YiXuan_Yuansy_UI', 'material_0')   # the pet bird, the hair-shadow overlay
 NO_OUTLINE = ('MAT_YiXuan_Face_UI', 'MAT_YiXuan_Eyebrows_UI', 'MAT_YiXuan_Eye_UI', 'MAT_YiXuan_Body_2_T_UI')
 
