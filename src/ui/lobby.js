@@ -28,7 +28,7 @@ const ART = {
   sorcerer: ['art/sorcerer.jpg', '50% 22%'],
   kineslayer: ['art/kineslayer.jpg', '64% 6%'],
   manipulator: ['art/manipulator.jpg', '62% 8%'],
-  inkweaver: ['art/inkweaver.jpg', '46% 20%'],
+  inkweaver: ['art/inkweaver.jpg', '52% 16%'],
 };
 const MAGES = [
   { id: 'pyro', name: 'SHOTO', icon: ICONS.flame, open: true },

@@ -21,27 +21,85 @@ function canvasTex(key, w, h, paint) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return (TEX[key] = t);
 }
-// a wing of brushed ink feathers (base at the bottom-left corner, sweeping up and out to the right)
+// a great soft wing of dark ink feathers (reference: smoky black-brown plumage, a glowing gold
+// leading edge, ragged wisps at the tips). Texture 1024×512: the root is at the left edge, 36% down;
+// the leading edge arcs up and out to the tip on the right, the feathers hang down from it.
 function wingTex() {
-  return canvasTex('wing', 512, 512, (g, W, H) => {
+  return canvasTex('wing2', 1024, 512, (g, W, H) => {
     const r = mulberry(7);
-    const feather = (x0, y0, ang, len, wid) => {
+    const root = [0, H * 0.36];
+    // leading edge: root → shoulder high point → tip
+    const edge = (u) => {
+      const x = u * W * 0.98;
+      const y = H * 0.36 - Math.sin(Math.min(1, u * 1.6) * Math.PI * 0.5) * H * 0.26 + Math.max(0, u - 0.55) ** 1.6 * H * 0.75;
+      return [x, y];
+    };
+    const feather = (x0, y0, ang, len, wid, a, blur) => {
       g.save(); g.translate(x0, y0); g.rotate(ang);
+      g.filter = blur ? `blur(${blur}px)` : 'none';
       const grd = g.createLinearGradient(0, 0, len, 0);
-      grd.addColorStop(0, 'rgba(8,6,6,0.95)'); grd.addColorStop(0.7, 'rgba(14,10,8,0.92)'); grd.addColorStop(1, 'rgba(30,20,10,0)');
+      grd.addColorStop(0, `rgba(24,14,10,${a})`); grd.addColorStop(0.55, `rgba(36,20,12,${a * 0.9})`); grd.addColorStop(0.85, `rgba(60,34,18,${a * 0.5})`); grd.addColorStop(1, 'rgba(70,40,20,0)');
       g.fillStyle = grd;
-      g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(len * 0.5, -wid, len, -wid * 0.15); g.quadraticCurveTo(len * 0.55, wid * 0.55, 0, 0); g.fill();
-      g.strokeStyle = 'rgba(255,196,80,0.95)'; g.lineWidth = 2.2;
-      g.beginPath(); g.moveTo(len * 0.05, -wid * 0.1); g.quadraticCurveTo(len * 0.5, -wid, len, -wid * 0.15); g.stroke();
-      g.strokeStyle = 'rgba(255,220,140,0.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, 0); g.lineTo(len * 0.92, -wid * 0.2); g.stroke();
+      g.beginPath(); g.moveTo(0, -wid * 0.3); g.quadraticCurveTo(len * 0.45, -wid * 0.75, len, (R2(r) - 0.5) * wid * 0.4); g.quadraticCurveTo(len * 0.5, wid * 0.8, 0, wid * 0.3); g.closePath(); g.fill();
+      // the rachis (a faint warm line down the feather)
+      g.filter = 'none';
+      g.strokeStyle = `rgba(150,90,40,${a * 0.25})`; g.lineWidth = 1.2; g.beginPath(); g.moveTo(4, 0); g.lineTo(len * 0.85, 0); g.stroke();
       g.restore();
     };
-    // three rows: long primaries, middle coverts, short down at the root
-    for (let k = 0; k < 11; k++) { const u = k / 10; feather(40 + u * 60, H - 40 - u * 30, -0.15 - u * 1.25, 330 + R2(r) * 60 - u * 60, 44); }
-    for (let k = 0; k < 9; k++) { const u = k / 8; feather(30 + u * 40, H - 30 - u * 20, -0.25 - u * 1.1, 210 - u * 40, 36); }
-    for (let k = 0; k < 7; k++) { const u = k / 6; feather(20 + u * 26, H - 20 - u * 12, -0.35 - u * 1.0, 110, 30); }
-    // gold ink spatter along the edge
-    for (let k = 0; k < 60; k++) { const a = -0.2 - R2(r) * 1.4, d = 280 + R2(r) * 160; g.fillStyle = `rgba(255,${180 + R2(r) * 60 | 0},80,${0.4 + R2(r) * 0.5})`; g.beginPath(); g.arc(40 + Math.cos(a) * d, H - 40 + Math.sin(a) * d, 1 + R2(r) * 3, 0, 7); g.fill(); }
+    // back layer: long soft primaries (outer half) and secondaries, blurred like smoke
+    for (let k = 0; k < 46; k++) {
+      const u = 0.04 + (k / 45) * 0.94, [x, y] = edge(u);
+      const outer = Math.max(0, (u - 0.45) / 0.55);
+      const len = H * (0.32 + 0.36 * Math.sin(u * Math.PI * 0.85) + 0.25 * outer) * (0.85 + R2(r) * 0.3);
+      const ang = Math.PI * 0.5 - 0.25 - outer * 0.75 + (R2(r) - 0.5) * 0.16;   // hang down, sweeping outward at the tip
+      feather(x, y + 6, ang, len, 30 + outer * 16, 0.82, 3);
+    }
+    // middle layer: coverts, shorter, sharper
+    for (let k = 0; k < 40; k++) {
+      const u = 0.02 + (k / 39) * 0.8, [x, y] = edge(u);
+      const len = H * (0.16 + 0.16 * Math.sin(u * Math.PI)) * (0.8 + R2(r) * 0.4);
+      feather(x, y + 3, Math.PI * 0.5 - 0.35 - u * 0.5 + (R2(r) - 0.5) * 0.2, len, 26, 0.9, 1);
+    }
+    // ragged wisps of ink trailing off the feather tips
+    g.filter = 'blur(1.5px)';
+    for (let k = 0; k < 90; k++) {
+      const u = R2(r), [x, y] = edge(u), outer = Math.max(0, (u - 0.45) / 0.55);
+      const L0 = H * (0.3 + 0.4 * Math.sin(u * Math.PI * 0.85) + 0.25 * outer) * (0.7 + R2(r) * 0.4), a = Math.PI * 0.5 - 0.25 - outer * 0.75;
+      g.strokeStyle = `rgba(30,18,12,${0.25 + R2(r) * 0.4})`; g.lineWidth = 1 + R2(r) * 2.5;
+      g.beginPath(); g.moveTo(x + Math.cos(a) * L0 * 0.8, y + Math.sin(a) * L0 * 0.8);
+      g.quadraticCurveTo(x + Math.cos(a) * L0 * 1.05 + (R2(r) - 0.5) * 30, y + Math.sin(a) * L0 * 1.05, x + Math.cos(a + (R2(r) - 0.5) * 0.4) * L0 * (1.15 + R2(r) * 0.25), y + Math.sin(a) * L0 * (1.2 + R2(r) * 0.2));
+      g.stroke();
+    }
+    g.filter = 'none';
+    // the glowing gold leading edge, strongest near the body, and warm light bleeding into the top feathers
+    g.globalCompositeOperation = 'lighter';
+    for (const [w, a, blur] of [[22, 0.35, 10], [9, 0.7, 4], [3, 1, 0]]) {
+      g.filter = blur ? `blur(${blur}px)` : 'none';
+      g.lineWidth = w; g.lineCap = 'round';
+      for (let k = 0; k < 60; k++) {
+        const u0 = k / 60, u1 = (k + 1) / 60, [x0, y0] = edge(u0), [x1, y1] = edge(u1), fade = Math.max(0, 1 - u0 * 0.85);
+        g.strokeStyle = `rgba(255,${170 + 50 * fade | 0},${70 + 40 * fade | 0},${a * fade})`;
+        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      }
+    }
+    // gold veins along a few upper feathers + sparks
+    g.filter = 'none';
+    for (let k = 0; k < 26; k++) {
+      const u = R2(r) * 0.85, [x, y] = edge(u), a = Math.PI * 0.5 - 0.3 - u * 0.6, L = H * (0.08 + R2(r) * 0.2);
+      g.strokeStyle = `rgba(255,190,90,${0.25 + R2(r) * 0.4})`; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); g.stroke();
+    }
+    for (let k = 0; k < 70; k++) { const u = R2(r), [x, y] = edge(u); g.fillStyle = `rgba(255,${180 + R2(r) * 60 | 0},90,${0.3 + R2(r) * 0.6})`; g.beginPath(); g.arc(x + (R2(r) - 0.5) * 40, y + R2(r) * H * 0.5, 0.8 + R2(r) * 2.2, 0, 7); g.fill(); }
+    g.globalCompositeOperation = 'source-over';
+    void root;
+  });
+}
+// soft radial glow (halo light behind her)
+function glowTex() {
+  return canvasTex('glow', 256, 256, (g, W) => {
+    const grd = g.createRadialGradient(W / 2, W / 2, 0, W / 2, W / 2, W / 2);
+    grd.addColorStop(0, 'rgba(255,240,200,1)'); grd.addColorStop(0.25, 'rgba(255,190,90,0.55)'); grd.addColorStop(0.6, 'rgba(255,140,40,0.15)'); grd.addColorStop(1, 'rgba(255,120,30,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, W, W);
   });
 }
 // the Tai Chi array: yin-yang, eight trigrams, rings of script
@@ -121,24 +179,45 @@ Object.assign(Fx.prototype, {
   // two brushed-ink wings spreading from a point on the back (anchor() → world point; yaw → facing)
   inkWings(anchor, yawOf, size = 3, life = 1.2, o = {}) {
     const tex = wingTex();
-    const mk = () => new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.15, 1.08, 1) }));
+    const mk = () => new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.25, 1.15, 1.05) }));
     const L = mk(), Rw = mk();
     const g = new THREE.Group(); g.add(L, Rw); this.scene.add(g);
+    // a warm glow behind her back and a thin halo ring (the reference's backlight)
+    const glow = o.halo ? new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(1.6, 1.25, 0.8) })) : null;
+    const ring = o.halo ? new THREE.Mesh(new THREE.TorusGeometry(1, 0.012, 6, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.8, 0.9), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })) : null;
+    if (glow) { g.add(glow); g.add(ring); }
     let t = 0;
-    const spread = o.spread ?? 0.22, flap = o.flap ?? 0.12;
+    const spread = o.spread ?? 0.22, flap = o.flap ?? 0.08;
     this.effects.push({ update: (dt) => {
       t += dt;
-      const k = Math.min(1, t / spread), e = 1 - (1 - k) * (1 - k);
+      const k = Math.min(1, t / spread), e = 1 - (1 - k) ** 3;
       const fade = life === Infinity ? 1 : Math.min(1, Math.max(0, (life - t) / 0.3));
       anchor(_v); g.position.copy(_v);
       g.rotation.set(0, yawOf(), 0);
-      const s = size * (0.25 + 0.75 * e), f = Math.sin(t * 5) * flap;
-      // the texture's root is its bottom-left corner: offset each plane so the root sits on the spine
-      L.scale.set(s, s, 1); L.position.set(s * 0.46, s * 0.42, -0.12); L.rotation.set(0, 0.35 + f, 0.06);
-      Rw.scale.set(-s, s, 1); Rw.position.set(-s * 0.46, s * 0.42, -0.12); Rw.rotation.set(0, -0.35 - f, -0.06);
-      L.material.opacity = Rw.material.opacity = fade;
-      if (R() < 0.5) { const sd = R() < 0.5 ? 1 : -1; this.fire.emit(_v.x + Math.cos(g.rotation.y) * sd * s * 0.8 * R(), _v.y + s * (0.3 + R() * 0.6), _v.z - Math.sin(g.rotation.y) * sd * s * 0.8 * R(), (R() - 0.5), 1 + R(), (R() - 0.5), 0.6, 0.06, 0.0, GOLD, GOLD0, 1, -0.5); }
-      if (t >= life || (o.until && o.until())) { this.scene.remove(g); L.material.dispose(); Rw.material.dispose(); return false; }
+      const s = size * (0.2 + 0.8 * e), f = Math.sin(t * 3.2) * flap;
+      // each wing: a 2:1 plane, its root (texture left edge, 36% down) on the spine, slightly behind
+      // the back; the wings open from folded (pointing back) to spread wide
+      const open = 0.15 + 0.85 * e;
+      for (const [w, sd] of [[L, 1], [Rw, -1]]) {
+        w.scale.set(sd * s * 2, s, 1);
+        const a = sd * ((1 - open) * 1.3 + 0.12 + f);                     // swing about the root
+        w.rotation.set(0, a, sd * (0.05 + f * 0.4));
+        // put the texture's root on the anchor: rotate the root offset with the wing
+        const ox = s, oy = -0.14 * s;
+        w.position.set(sd * ox * Math.cos(a), oy + 0.12 * s, -0.18 - ox * Math.sin(Math.abs(a)));
+        w.material.opacity = fade;
+      }
+      if (glow) {
+        const pulse = 1 + Math.sin(t * 2) * 0.05;
+        glow.position.set(0, 0.2, -0.4); glow.scale.setScalar(s * 1.9 * e * pulse); glow.material.opacity = fade * 0.9;
+        ring.position.set(0, 0.25, -0.35); ring.scale.setScalar(s * 0.55 * e); ring.material.opacity = fade * 0.8;
+      }
+      if (R() < 0.7) { const sd = R() < 0.5 ? 1 : -1, u = R(); this.fire.emit(_v.x + Math.cos(g.rotation.y) * sd * s * 1.8 * u, _v.y + s * (0.15 - u * 0.25) + R() * 0.6, _v.z - Math.sin(g.rotation.y) * sd * s * 1.8 * u, (R() - 0.5), 0.6 + R(), (R() - 0.5), 0.9, 0.07, 0.0, GOLD, GOLD0, 1, -0.4); }
+      if (t >= life || (o.until && o.until())) {
+        this.scene.remove(g); L.material.dispose(); Rw.material.dispose();
+        if (glow) { glow.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); }
+        return false;
+      }
       return true;
     } });
     return g;
@@ -278,36 +357,43 @@ Object.assign(Fx.prototype, {
 
   // ---------------------------------------------------------------- Endless Talisman Suppression
   // a talisman falls out of the sky and comes down as a pillar of golden light
-  talismanStrike(p, delay = 0, size = 1) {
+  talismanStrike(p, delay = 0, size = 1, from = null) {
     const mat = new THREE.MeshBasicMaterial({ map: taliTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.5, 1.3, 1.0) });
     const card = new THREE.Mesh(plane(), mat);
     card.scale.set(0.9 * size, 2.2 * size, 1);
     const gy = groundH(p.x, p.z);
-    const top = gy + 24 + R() * 10, spin = (R() - 0.5) * 8;
-    let t = -delay, hit = false, beam = null;
+    // every one falls its own way: its own height, speed, drift, flutter and spin
+    const start = from ? from.clone() : new THREE.Vector3(p.x + (R() - 0.5) * 8, gy + 18 + R() * 22, p.z + (R() - 0.5) * 8);
+    const fall = 0.35 + R() * 0.85, spin = (R() - 0.5) * 12, wob = 4 + R() * 8, ph = R() * 6.28, sway = 0.4 + R() * 1.4;
+    let t = -delay, hit = false, beam = null, boom = null;
     this.effects.push({ update: (dt) => {
       t += dt;
       if (t < 0) return true;
       if (!card.parent && !hit) this.scene.add(card);
-      const fall = 0.35;
       if (!hit) {
-        const u = Math.min(1, t / fall);
-        card.position.set(p.x, top + (gy + 1.2 - top) * u * u, p.z);
-        card.rotation.set(0.2, t * spin, Math.sin(t * 9) * 0.2);
+        const u = Math.min(1, t / fall), e = u * u * (1.6 - 0.6 * u);
+        card.position.set(start.x + (p.x - start.x) * e + Math.sin(t * wob + ph) * sway * (1 - u), start.y + (gy + 1.0 - start.y) * e, start.z + (p.z - start.z) * e + Math.cos(t * wob * 0.8 + ph) * sway * (1 - u));
+        card.rotation.set(0.3 * Math.sin(t * wob + ph), t * spin, Math.sin(t * 9 + ph) * 0.35);
         if (u >= 1) {
           hit = true; this.scene.remove(card);
+          // the talisman detonates: a pillar of light, a burst of ink and gold, a ring, sparks
           beam = new THREE.Mesh(pillar(), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.9, 0.6), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
-          beam.position.set(p.x, gy, p.z); beam.scale.set(0.6 * size, 40, 0.6 * size); this.scene.add(beam);
-          this.groundShock(new THREE.Vector3(p.x, gy + 0.05, p.z), 1.8 * size, { core: [2.0, 1.4, 0.45], edge: [0.06, 0.05, 0.04] });
-          for (let k = 0; k < 10; k++) { const a = R() * 6.283, v = 4 + R() * 5; this.fire.emit(p.x, gy + 0.3, p.z, Math.cos(a) * v, 2 + R() * 4, Math.sin(a) * v, 0.5, 0.09, 0.01, GOLD, GOLD0, 2, 3); }
+          beam.position.set(p.x, gy, p.z); beam.scale.set(0.5 * size, 30, 0.5 * size); this.scene.add(beam);
+          boom = new THREE.Mesh(sphere(), inkSphereMat()); boom.position.set(p.x, gy + 0.6 * size, p.z); boom.renderOrder = 4; this.scene.add(boom);
+          this.groundShock(new THREE.Vector3(p.x, gy + 0.05, p.z), 2.4 * size, { core: [2.0, 1.4, 0.45], edge: [0.06, 0.05, 0.04] });
+          for (let k = 0; k < 16; k++) { const a = R() * 6.283, v = 5 + R() * 7; this.fire.emit(p.x, gy + 0.4, p.z, Math.cos(a) * v, 2 + R() * 6, Math.sin(a) * v, 0.6, 0.1, 0.01, GOLD, GOLD0, 2, 4); }
+          for (let k = 0; k < 6; k++) { const a = R() * 6.283, v = 2 + R() * 3; this.smoke.emit(p.x, gy + 0.5, p.z, Math.cos(a) * v, 1 + R() * 2, Math.sin(a) * v, 0.7, 0.4, 1.2, INKC, INK0, 2, 0); }
+          if (R() < 0.35) this.light(new THREE.Vector3(p.x, gy + 1, p.z), 10 * size, 8, 0.15, 0xffc45a);
           t = 0;
         }
         return true;
       }
-      const k = t / 0.45;
+      const k = t / 0.5;
       beam.material.opacity = Math.max(0, 1 - k);
-      beam.scale.x = beam.scale.z = 0.6 * size * (1 + k * 0.8);
-      if (k >= 1) { this.scene.remove(beam); beam.material.dispose(); mat.dispose(); return false; }
+      beam.scale.x = beam.scale.z = 0.5 * size * (1 + k * 1.2);
+      boom.scale.setScalar(Math.max(0.01, 2.2 * size * (1 - (1 - Math.min(1, k * 2.5)) ** 3)));
+      boom.material.uniforms.uT.value = t; boom.material.uniforms.uA.value = Math.max(0, 1 - k * 1.4);
+      if (k >= 1) { this.scene.remove(beam); this.scene.remove(boom); beam.material.dispose(); boom.material.dispose(); mat.dispose(); return false; }
       return true;
     } });
   },

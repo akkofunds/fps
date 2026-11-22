@@ -1690,14 +1690,25 @@ export class Match {
     const until = () => !this._tali || this._tali.done;
     const cues = [
       [0.05, () => { this.fx.taiChiArray(T.c, 6.5, TALISMAN.cine - 0.3, { spin: 0.5 }); mono('Ink becomes wings. Wings become heaven.'); }],
-      [0.9, () => { if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 5.2, Infinity, { spread: 0.6, flap: 0.1, until }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
-      [1.9, () => { this.fx.talismanHalo(T.c, this.map.Q.particles <= 2000 ? 36 : 80, 24, 15, until); mono(''); }],
+      [0.9, () => { if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 3.4, Infinity, { spread: 0.8, flap: 0.05, until, halo: true }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
+      [1.9, () => { this.fx.talismanHalo(T.c, this.map.Q.particles <= 2000 ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown); mono(''); }],
       [2.4, () => { hud.flash(0.6); hud.cineCard('ENDLESS TALISMAN SUPPRESSION', '無 窮 符 鎮', ''); }],
       [3.0, () => mono('Heaven and earth, hear my command.')],
       [4.7, () => mono('Every talisman a seal. Every seal a sentence.')],
       [6.3, () => mono('Be still.')],
       [TALISMAN.boom - 0.12, () => { mono(''); hud.impactFrames(() => hud.flash(1)); }],
-      [TALISMAN.boom, () => { this.fx.inkNova(new THREE.Vector3(T.c.x, T.c.y + 1, T.c.z), TALISMAN.boomR); this.sound('slam', T.c, 1.6, 300); this.sound('novaBoom', T.c, 1.2, 300); }],
+      // the finale: every talisman in the sky comes down at once, each one detonating where it lands
+      [TALISMAN.boom - 0.75, () => {
+        T.haloDown = true;
+        const n = this.map.Q.particles <= 2000 ? 28 : 60;
+        for (let k = 0; k < n; k++) {
+          const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * TALISMAN.radius;
+          const from = new THREE.Vector3(T.c.x + Math.cos(a) * 18, T.c.y + 14 + Math.random() * 6, T.c.z + Math.sin(a) * 18);
+          this.fx.talismanStrike(new THREE.Vector3(T.c.x + Math.cos(a + (Math.random() - 0.5)) * rr, 0, T.c.z + Math.sin(a + (Math.random() - 0.5)) * rr), Math.random() * 0.35, 1.6, from);
+        }
+        for (const v of T.victims) if (v.alive) this.fx.talismanStrike(v.pos.clone(), 0.25, 2.0);
+      }],
+      [TALISMAN.boom, () => { this.fx.shake(0.9); this.sound('slam', T.c, 1.6, 300); this.sound('novaBoom', T.c, 1.2, 300); this.fx.groundShock(new THREE.Vector3(T.c.x, T.c.y + 0.1, T.c.z), TALISMAN.boomR, { core: [2.2, 1.6, 0.5], edge: [0.05, 0.04, 0.03] }); }],
       [TALISMAN.cine - 0.3, () => mono('')],
     ];
     while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
