@@ -15,11 +15,11 @@ import * as THREE from 'three';
 // limited so a big hit can never fold the mesh.
 
 const SPEC = {
-  stiff: 0.045,   // share of the gap to the posed position closed per 1/60 s: a soft ~2.8 Hz swing
-  drag: 0.06,     // share of the wobble lost per 1/60 s: a landing rings 3-4 times, each smaller
-  inertia: 2.6,   // how hard the body's own accelerations throw the mass (its weight)
-  maxAng: 0.55,   // soft limit on the simulated swing (radians, ~32°)
-  gain: 1.5,      // how much further the hinge turns than the swing (the skin is only partly bound to it)
+  stiff: 0.03,    // share of the gap to the posed position closed per 1/60 s: a soft, heavy ~2.3 Hz swing
+  drag: 0.035,    // share of the wobble lost per 1/60 s: a landing rings several times, each smaller
+  inertia: 3.6,   // how hard the body's own accelerations throw the mass (its weight)
+  maxAng: 0.6,    // soft limit on the simulated swing (radians, ~34°)
+  gain: 2.0,      // how much further the hinge turns than the swing (the skin is only partly bound to it)
   lever: new THREE.Vector3(0, -0.045, 0.112),   // hinge → centre of the mass, in model space (metres; +z = her front)
 };
 // the two sides are not quite identical, so they drift a little apart while staying attached
