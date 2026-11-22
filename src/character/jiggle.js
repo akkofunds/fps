@@ -1,105 +1,120 @@
 import * as THREE from 'three';
 
-// Soft-body secondary motion for chest bones (spring–damper, per bone, per axis).
+// Soft-body secondary motion for the chest, done the way anime action games do it: a spring bone.
 //
 // The model carries extra bones the animation rig never touches (see tools/characters/rig_yixuan.py):
-//   breast_L / breast_R        pivot joints on the upper chest (source: Skn_*_Chest)
-//   breastTip_L / breastTip_R  the main soft mass, children of the pivots (source: Skn_*_Chest_Cj_01)
-// Each frame we measure how the bone's anchor point (its rest position, carried along by the
-// animated parent) accelerates through the world, and feed the opposite of that acceleration into
-// a damped spring in the parent's local frame: the mass lags behind when the body moves, swings
-// past, and rings down. A low natural frequency and a light damping ratio give the soft, heavy,
-// settling bounce; the tip bones sit on top of the pivots with their own (quicker) spring, so the
-// motion follows through instead of moving as one rigid lump. Big velocity changes (a jump take-off,
-// a landing) arrive as one huge spike in acceleration: they are converted into a velocity kick and
-// squashed through a soft limit, so a hard landing bounces strongly without ever tearing the mesh.
+//   breast_L / breast_R        a hinge on the upper chest (source: Skn_*_Chest)
+//   breastTip_L / breastTip_R  the centre of the soft mass, a child of the hinge (source: Skn_*_Chest_Cj_01)
+//
+// Each side is one weighted point (the tip) hanging off its hinge. Every frame the animation carries
+// the hinge somewhere new; the point lags behind with its own inertia (Verlet), is pulled back toward
+// where the pose wants it by a spring, loses some speed to drag, and is kept at its fixed distance
+// from the hinge. The hinge then ROTATES to aim at the point, so the shape swings and settles about
+// its root instead of sliding around: a soft follow-through on every step, a heavier swing and one or
+// two settling bounces on a landing or a dash, never a rubbery jelly wobble. The swing angle is soft-
+// limited so a big hit can never fold the mesh.
 
 const SPEC = {
-  // f: natural frequency per axis (Hz) [side, vertical, front], zeta: damping ratio,
-  // gain: how much of the inertial force the mass feels per axis, max: soft travel limit (metres),
-  // tilt: radians of rotation per metre of travel (curves the shape as it swings)
-  pivot: { f: [3.2, 2.6, 3.0], zeta: 0.13, gain: [0.13, 0.26, 0.2], max: [0.024, 0.044, 0.03], tilt: 5.5 },
-  tip: { f: [4.2, 3.6, 4.0], zeta: 0.17, gain: [0.08, 0.15, 0.12], max: [0.015, 0.026, 0.019], tilt: 3.0 },
+  stiff: 0.11,   // share of the gap to the posed position closed per 1/60 s (spring)
+  drag: 0.2,     // share of the speed lost per 1/60 s (damping: settles in about one and a half bounces)
+  maxAng: 0.33,  // soft limit on the swing (radians, ~19°)
+  lever: new THREE.Vector3(0, -0.035, 0.085),   // hinge → centre of the mass, in model space (metres; +z = her front)
 };
-const SUB = 1 / 240;           // integration step (stable for these stiffnesses)
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
+const SUB = 1 / 120;
+const _P = new THREE.Vector3(), _T = new THREE.Vector3(), _Qw = new THREE.Quaternion(), _q = new THREE.Quaternion(), _qi = new THREE.Quaternion();
+const _tm = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _ax = new THREE.Vector3(), _tg = new THREE.Vector3(), _pv = new THREE.Vector3(), _v = new THREE.Vector3();
 
-class Spring {
-  constructor(bone, spec) {
-    this.bone = bone; this.spec = spec;
-    this.rest = bone.position.clone();
-    this.restQ = bone.quaternion.clone();
-    this.p = new THREE.Vector3(); this.v = new THREE.Vector3();
-    this.anchor = new THREE.Vector3(); this.prev = null; this.prevVel = new THREE.Vector3();
-    this.k = spec.f.map((f) => (2 * Math.PI * f) ** 2);
-    this.c = spec.f.map((f) => 2 * spec.zeta * 2 * Math.PI * f);
+class SpringBone {
+  constructor(hinge, tip, spec) {
+    this.bone = hinge; this.tip = tip; this.spec = spec;
+    this.restQ = hinge.quaternion.clone();
+    this.tipPos = tip.position.clone(); this.tipQ = tip.quaternion.clone();
+    // the lever: from the hinge to the centre of the soft mass. The source rig puts its "tip" bone
+    // almost on top of the hinge (3-4 mm), far too short to swing on, so the lever is set in the
+    // model's own space (forward and a little down, where the mass really is) and carried into the
+    // hinge's frame
+    this.lever = spec.lever.clone();
+    this.cur = null; this.prev = new THREE.Vector3(); this.lastT = new THREE.Vector3(); this.lastP = new THREE.Vector3();
+    this.p = new THREE.Vector3();   // where the mass is relative to where the pose puts it (metres, world axes)
   }
-  // the bone's rest point in world space (where the animated parent carries it)
-  _anchor(out) {
-    const par = this.bone.parent;
-    par.updateWorldMatrix(true, false);
-    return out.copy(this.rest).applyMatrix4(par.matrixWorld);
+  // the hinge back in its posed rotation: where it is, where the tip would be if rigid, its world rotation
+  _posed() {
+    const b = this.bone;
+    b.quaternion.copy(this.restQ);
+    this.tip.position.copy(this.tipPos); this.tip.quaternion.copy(this.tipQ);
+    b.updateWorldMatrix(true, false);
+    b.getWorldPosition(_P);
+    _T.copy(this.lever).applyMatrix4(b.matrixWorld);
+    b.getWorldQuaternion(_Qw);
   }
-  reset() { this.p.set(0, 0, 0); this.v.set(0, 0, 0); this.prev = null; }
+  _apply() { this.bone.quaternion.copy(this.restQ); this.tip.position.copy(this.tipPos); this.p.set(0, 0, 0); }
+  reset() { this.cur = null; this._apply(); }
   step(dt, strength) {
     if (dt <= 0) return;
-    dt = Math.min(dt, 1 / 20);
-    const par = this.bone.parent;
-    this._anchor(this.anchor);
-    if (!this.prev) { this.prev = this.anchor.clone(); this.prevVel.set(0, 0, 0); this._apply(); return; }
-    // a teleport / respawn is not motion: start over instead of reading it as a huge jolt
-    if (this.anchor.distanceToSquared(this.prev) > 2.25) { this.prev.copy(this.anchor); this.prevVel.set(0, 0, 0); return; }
-    // world velocity and acceleration of the anchor
-    const vel = _v.subVectors(this.anchor, this.prev).divideScalar(dt);
-    const acc = _s.subVectors(vel, this.prevVel).divideScalar(dt);
-    this.prev.copy(this.anchor); this.prevVel.copy(vel);
-    // into the parent's local frame (rotation only; unscale)
-    par.matrixWorld.decompose(_e._p || (_e._p = new THREE.Vector3()), _q, _e._sc || (_e._sc = new THREE.Vector3()));
-    const sc = _e._sc.x || 1;
-    _qi.copy(_q).invert();
-    acc.applyQuaternion(_qi).divideScalar(sc);
-    // the inertial "kick": -acceleration × gain, as a velocity change spread over this frame
-    const G = this.spec.gain, k = this.k, c = this.c, max = this.spec.max;
-    const kick = [-acc.x * G[0] * strength, -acc.y * G[1] * strength, -acc.z * G[2] * strength];
-    let left = dt;
-    const p = this.p, v = this.v;
-    const ax = ['x', 'y', 'z'];
-    while (left > 1e-6) {
-      const h = Math.min(SUB, left); left -= h;
-      for (let i = 0; i < 3; i++) {
-        const a = ax[i];
-        // spread the frame's inertial impulse evenly over the substeps
-        const f = kick[i] - k[i] * p[a] - c[i] * v[a];
-        v[a] += f * h;
-        p[a] += v[a] * h;
-        // soft travel limit: past ~70% of the range the spring stiffens sharply and sheds velocity
-        const m = max[i], ex = Math.abs(p[a]) - m * 0.7;
-        if (ex > 0) {
-          const sgn = Math.sign(p[a]), lim = m * 0.7 + m * 0.3 * Math.tanh(ex / (m * 0.3));
-          if (sgn * v[a] > 0) v[a] *= 0.6;
-          p[a] = sgn * lim;
-        }
-      }
+    dt = Math.min(dt, 0.1);
+    this._posed();
+    if (!this.cur || _T.distanceToSquared(this.lastT) > 1) {   // first frame, or a teleport / respawn
+      this.cur = _T.clone(); this.prev.copy(_T); this.lastT.copy(_T); this.lastP.copy(_P); this.p.set(0, 0, 0);
+      return;
     }
-    this._apply();
-  }
-  _apply() {
-    const b = this.bone, p = this.p, t = this.spec.tilt;
-    b.position.copy(this.rest).add(p);
-    // swing the shape with its travel: up/down pitches it, side to side rolls it a little
-    _e.set(-p.y * t + p.z * t * 0.4, 0, p.x * t * 0.6);
-    b.quaternion.copy(this.restQ).multiply(_q.setFromEuler(_e));
+    const { stiff, drag, maxAng } = this.spec;
+    const n = Math.max(1, Math.ceil(dt / SUB)), h = dt / n;
+    const keep = Math.pow(1 - drag, h * 60), pull = 1 - Math.pow(1 - stiff, h * 60);
+    const cur = this.cur;
+    for (let i = 1; i <= n; i++) {
+      // the pose moves smoothly across the frame
+      const u = i / n;
+      _tm.lerpVectors(this.lastT, _T, (i - 1) / n);
+      _tg.lerpVectors(this.lastT, _T, u); _pv.lerpVectors(this.lastP, _P, u);
+      // inertia: the mass keeps its velocity; drag only eats the part that differs from the body's
+      // own motion (the wobble), never the steady motion of running or flying along
+      _d.subVectors(_tg, _tm);                                    // how far the body moved this substep
+      _v.subVectors(cur, this.prev).sub(_d).multiplyScalar(keep).add(_d);
+      this.prev.copy(cur);
+      cur.add(_v).addScaledVector(_d.subVectors(_tg, cur), pull);
+      // the mass stays its own distance from the hinge…
+      const L = _a.subVectors(_tg, _pv).length();
+      _b.subVectors(cur, _pv);
+      if (_b.lengthSq() < 1e-12) _b.copy(_a);
+      _b.setLength(L);
+      // …and swings no further than the soft limit
+      _a.normalize();
+      const ang = _a.angleTo(_d.copy(_b).normalize());
+      if (ang > 1e-5) {
+        const lim = maxAng * Math.tanh(ang / maxAng);
+        if (lim < ang) { _ax.crossVectors(_a, _d).normalize(); _b.copy(_a).applyAxisAngle(_ax, lim).multiplyScalar(L); }
+      }
+      cur.addVectors(_pv, _b);
+    }
+    this.lastT.copy(_T); this.lastP.copy(_P);
+    // turn the hinge so the mass sits where the simulation put it
+    _a.subVectors(_T, _P).normalize(); _b.subVectors(cur, _P).normalize();
+    _q.setFromUnitVectors(_a, _b);
+    if (strength !== 1) _q.slerp(_qi.identity(), 1 - Math.max(0, Math.min(1, strength)));
+    // world-space turn → the hinge's own frame
+    _qi.copy(_Qw).invert();
+    this.bone.quaternion.copy(this.restQ).multiply(_qi.multiply(_q).multiply(_Qw));
+    this.p.subVectors(cur, _T);
   }
 }
 
 export class JiggleSim {
   static create(model, opts = {}) {
-    const names = { breast_L: 'pivot', breast_R: 'pivot', breastTip_L: 'tip', breastTip_R: 'tip' };
     const springs = [];
-    model.traverse((o) => { if (o.isBone && names[o.name]) springs.push(new Spring(o, SPEC[names[o.name]])); });
+    for (const side of ['L', 'R']) {
+      let hinge = null, tip = null;
+      model.traverse((o) => { if (o.isBone && o.name === 'breast_' + side) hinge = o; if (o.isBone && o.name === 'breastTip_' + side) tip = o; });
+      if (!hinge || !tip) continue;
+      // the model-space lever, expressed in the hinge's own frame (rotation and scale)
+      model.updateMatrixWorld(true);
+      const mInv = new THREE.Matrix4().copy(model.matrixWorld).invert();
+      const hm = new THREE.Matrix4().multiplyMatrices(mInv, hinge.matrixWorld);   // hinge in model space
+      const lever = SPEC.lever.clone().transformDirection(new THREE.Matrix4().copy(hm).invert());
+      const sc = new THREE.Vector3().setFromMatrixScale(hm).x || 1;
+      lever.multiplyScalar(SPEC.lever.length() / sc);
+      springs.push(new SpringBone(hinge, tip, { ...SPEC, ...(opts.spec || {}), lever }));
+    }
     if (!springs.length) return null;
-    // parents first, so a tip always sees its pivot's motion of this frame
-    springs.sort((a, b) => (SPEC.tip === a.spec ? 1 : 0) - (SPEC.tip === b.spec ? 1 : 0));
     return new JiggleSim(springs, opts);
   }
   constructor(springs, opts) { this.springs = springs; this.strength = opts.strength ?? 1; }
