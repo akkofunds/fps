@@ -40,6 +40,9 @@ BONES = [  # (name, parent)
     ('shoulder_R', 'upperChest'), ('upperArm_R', 'shoulder_R'), ('foreArm_R', 'upperArm_R'), ('hand_R', 'foreArm_R'),
     ('upperLeg_L', 'hips'), ('lowerLeg_L', 'upperLeg_L'), ('foot_L', 'lowerLeg_L'), ('toes_L', 'foot_L'),
     ('upperLeg_R', 'hips'), ('lowerLeg_R', 'upperLeg_R'), ('foot_R', 'lowerLeg_R'), ('toes_R', 'foot_R'),
+    # secondary motion (never animated by the rig; driven by src/character/jiggle.js): a pivot on the
+    # upper chest and the soft mass hanging from it, per side
+    ('breast_L', 'upperChest'), ('breastTip_L', 'breast_L'), ('breast_R', 'upperChest'), ('breastTip_R', 'breast_R'),
 ]
 NAMES = [b[0] for b in BONES]
 IDX = {n: i for i, n in enumerate(NAMES)}
@@ -51,6 +54,11 @@ BIP = {
     'Bip001 L Thigh': 'upperLeg_L', 'Bip001 L Calf': 'lowerLeg_L', 'Bip001 L Foot': 'foot_L', 'Bip001 L Toe0': 'toes_L',
     'Bip001 R Thigh': 'upperLeg_R', 'Bip001 R Calf': 'lowerLeg_R', 'Bip001 R Foot': 'foot_R', 'Bip001 R Toe0': 'toes_R',
 }
+# chest joints kept for the jiggle: the pivot (Skn_*_Chest) and its control joints. Cj_01 carries most
+# of the skin (the main mass) → the tip bone; Cj_02..04 (the sides / underside) stay with the pivot
+JIGGLE = {'Skn_L_Chest': 'breast_L', 'Skn_L_Chest_Cj_01': 'breastTip_L', 'Skn_L_Chest_Cj_02': 'breast_L', 'Skn_L_Chest_Cj_03': 'breast_L', 'Skn_L_Chest_Cj_04': 'breast_L',
+          'Skn_R_Chest': 'breast_R', 'Skn_R_Chest_Cj_01': 'breastTip_R', 'Skn_R_Chest_Cj_02': 'breast_R', 'Skn_R_Chest_Cj_03': 'breast_R', 'Skn_R_Chest_Cj_04': 'breast_R'}
+JIGGLE_POS = {'breast_L': 'Skn_L_Chest', 'breastTip_L': 'Skn_L_Chest_Cj_01', 'breast_R': 'Skn_R_Chest', 'breastTip_R': 'Skn_R_Chest_Cj_01'}
 DROP_MATS = ('MAT_YiXuan_Yuansy_UI', 'material_0')   # the pet bird, the hair-shadow overlay
 NO_OUTLINE = ('MAT_YiXuan_Face_UI', 'MAT_YiXuan_Eyebrows_UI', 'MAT_YiXuan_Eye_UI', 'MAT_YiXuan_Body_2_T_UI')
 
@@ -97,6 +105,7 @@ def main():
         i = node
         while i is not None:
             nm = strip(N[i].get('name', ''))
+            if nm in JIGGLE: return JIGGLE[nm]
             if nm in BIP: return BIP[nm]
             i = par.get(i)
         return 'hips'
@@ -104,6 +113,7 @@ def main():
 
     G = np.zeros((len(NAMES), 3))
     for src, g in BIP.items(): G[IDX[g]] = bindpos(node_of[src])
+    for g, src in JIGGLE_POS.items(): G[IDX[g]] = bindpos(node_of[src])
     fing = lambda sd, k: bindpos(node_of[f'Bip001 {sd} Finger{k}'])
     tails = {
         'head': G[IDX['head']] + np.array([0, 0.2, 0]),

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CapeSim } from './cape.js';
+import { JiggleSim } from './jiggle.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { Rig, B } from './rig.js';
@@ -113,11 +114,17 @@ export class MageInstance {
     this.chest = this.rig.bones[B.upperChest];
     this._tint = 0;
     this.cape = new CapeSim(this.model);
+    // soft-body secondary motion on models that carry the extra chest bones (Inkweaver)
+    this.jiggle = JiggleSim.create(this.model);
     if (!this.cape.ok) this.cape = null;
   }
 
   // secondary motion (cape physics) — call after the root is placed and the pose is applied
-  stepCape(dt) { if (this.cape && this.root.visible) this.cape.step(dt, { wind: this.anim.windBoost || 0, groundY: this.root.position.y }); }
+  stepCape(dt) {
+    if (!this.root.visible) return;
+    if (this.cape) this.cape.step(dt, { wind: this.anim.windBoost || 0, groundY: this.root.position.y });
+    if (this.jiggle) this.jiggle.step(dt);
+  }
 
   // flash the body (hit feedback) / fade
   setFlash(v) {
