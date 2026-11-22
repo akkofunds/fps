@@ -11,9 +11,11 @@ import '../fx/limitless.js';
 import '../fx/melee.js';
 import '../fx/heavenly.js';
 import { ChessWorld, miniBoard, MONO as MONO_PAL } from '../fx/chess.js';
-import '../fx/ink.js';
+import { PLATE, WING_ROOT } from '../fx/ink.js';
 import { CHECKMATE, ROOK, QUEEN } from './manipulator.js';
-import { ORB as INK_ORB, ERUPT as INK_ERUPT, TALISMAN } from './inkweaver.js';
+import { ORB as INK_ORB, ERUPT as INK_ERUPT, TALISMAN, WING_SHOT } from './inkweaver.js';
+const PLATE_D = 16;        // metres from the camera to the wing shot's backdrop plate
+const CINE_BAND = 0.78;    // the part of the screen height between the cutscene bars (11vh each)
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
 import { FREEZE, BLITZ, ZERO } from './shoto.js';
@@ -1676,7 +1678,7 @@ export class Match {
     if (this.cine) this._endCine();
     const victims = [...this.ents.values()].filter((t) => t !== e && t.alive && Math.hypot(t.pos.x - c.x, t.pos.z - c.z) < TALISMAN.radius);
     this._tali = { c, f, side, caster: e, victims, done: false, rainT: 0 };
-    if (e.view) e.view.anim.play('nova');
+    if (e.view) e.view.anim.play('inkAscend');
     this.cine = { t: 0, dur: TALISMAN.cine, caster: e, c: c.clone(), o: c.clone(), f, side, cue: 0, local,
       update: this._taliCineUpdate, camera: this._taliCineCamera, end: this._taliCineEnd };
     this.app.hud.cineStart('ENDLESS TALISMAN SUPPRESSION', '');
@@ -1690,12 +1692,14 @@ export class Match {
     const until = () => !this._tali || this._tali.done;
     const cues = [
       [0.05, () => { this.fx.taiChiArray(T.c, 6.5, TALISMAN.cine - 0.3, { spin: 0.5 }); mono('Ink becomes wings. Wings become heaven.'); }],
-      [0.9, () => { if (e.view) this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.04, until, halo: true }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
-      [1.9, () => { this.fx.talismanHalo(T.c, this.map.Q.particles <= 2000 ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown); mono(''); }],
-      [2.4, () => { hud.flash(0.6); hud.cineCard('ENDLESS TALISMAN SUPPRESSION', '無 窮 符 鎮', ''); }],
-      [3.0, () => mono('Heaven and earth, hear my command.')],
-      [4.7, () => mono('Every talisman a seal. Every seal a sentence.')],
-      [6.3, () => mono('Be still.')],
+      [0.9, () => { if (e.view) T.wings = this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.025, until, halo: true, bare: () => !!(this._tali && this._tali.plate) }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
+      [1.9, () => { T.halo = this.fx.talismanHalo(T.c, this.map.Q.particles <= 2000 ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown, () => !!(this._tali && this._tali.plate)); mono(''); }],
+      // the reference shot: front-on, level, her wings filling the frame against the light behind her
+      [WING_SHOT[0], () => { hud.flash(0.45); T.plate = this.fx.inkPlate(); }],
+      [WING_SHOT[1], () => { this._taliPlateOff(); hud.flash(0.35); hud.cineCard('ENDLESS TALISMAN SUPPRESSION', '無 窮 符 鎮', ''); }],
+      [WING_SHOT[1] + 0.5, () => mono('Heaven and earth, hear my command.')],
+      [WING_SHOT[1] + 2.1, () => mono('Every talisman a seal. Every seal a sentence.')],
+      [WING_SHOT[1] + 3.4, () => mono('Be still.')],
       [TALISMAN.boom - 0.12, () => { mono(''); hud.impactFrames(() => hud.flash(1)); }],
       // the finale: every talisman in the sky comes down at once, each one detonating where it lands
       [TALISMAN.boom - 0.75, () => {
@@ -1713,7 +1717,7 @@ export class Match {
     ];
     while (C.cue < cues.length && t >= cues[C.cue][0]) cues[C.cue++][1]();
     // she rises on her wings, and comes back down at the end
-    e.liftY = t < 0.9 ? 0 : t < 2.4 ? 6 * (1 - Math.cos((t - 0.9) / 1.5 * Math.PI)) / 2 : t < TALISMAN.cine - 1.1 ? 6 + Math.sin(t * 1.6) * 0.25 : 6 * Math.max(0, (TALISMAN.cine - 0.1 - t) / 1.0);
+    e.liftY = t < 0.9 ? 0 : t < WING_SHOT[0] ? 6 * (1 - Math.cos((t - 0.9) / 1.5 * Math.PI)) / 2 : t < TALISMAN.cine - 1.1 ? 6 + Math.sin(t * 1.6) * 0.25 : 6 * Math.max(0, (TALISMAN.cine - 0.1 - t) / 1.0);
     // the rain: talismans across the whole field, more and more of them, and on every victim
     if (t > r0 && t < r1) {
       T.rainT -= dt;
@@ -1728,12 +1732,17 @@ export class Match {
         if (t - dt < tk - 0.35 && t >= tk - 0.35) for (const v of T.victims) if (v.alive) this.fx.talismanStrike(v.pos.clone(), 0, 1.3);
       }
     }
-    hud.cineDark(t < 0.9 ? 0.35 : t < TALISMAN.boom ? 0.2 : 0.1);
+    hud.cineDark(T.plate ? 0 : t < 0.9 ? 0.35 : t < TALISMAN.boom ? 0.2 : 0.1);
     if (t >= C.dur) this._endCine();
   }
-  _taliCineEnd() {
+  _taliPlateOff() {
     const T = this._tali;
-    if (T) { T.done = true; T.caster.liftY = 0; }
+    if (T && T.plate) { this.scene.remove(T.plate); T.plate.material.dispose(); T.plate = null; }
+  }
+  _taliCineEnd() {
+    this._taliPlateOff();
+    const T = this._tali;
+    if (T) { T.done = true; T.caster.liftY = 0; if (T.caster.view) T.caster.view.anim.stopAction(['inkAscend']); }
     this._tali = null;
     for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;
   }
@@ -1753,21 +1762,19 @@ export class Match {
       const k = ease((t - 0.9) / 1.5);
       P.set(o.x - f.x * (4 + k * 2) + sd.x * 1.4, o.y + 0.6, o.z - f.z * (4 + k * 2) + sd.z * 1.4);
       L.set(head.x, head.y + 0.6, head.z); fov = 52; roll = -0.03;
-    } else if (t < 3.2) { // wide, from in front: hanging in the sky inside her ring of talismans
-      const k = ease((t - 2.4) / 0.8);
-      P.set(o.x + f.x * (16 + k * 4), o.y + 3 + lift * 0.5, o.z + f.z * (16 + k * 4));
-      L.set(o.x, o.y + 4 + lift, o.z); fov = 50;
-    } else if (t < 5.0) { // high over her shoulder: the talismans come down across the whole field
-      const k = ease((t - 3.2) / 1.8), a = Math.atan2(f.x, f.z) + Math.PI + k * 0.5;
+    } else if (t < WING_SHOT[1] && T.plate) { // the reference shot (see _wingShot)
+      fov = this._wingShot(T, t - WING_SHOT[0], P, L);
+    } else if (t < WING_SHOT[1] + 1.8) { // high over her shoulder: the talismans come down across the whole field
+      const k = ease((t - WING_SHOT[1]) / 1.8), a = Math.atan2(f.x, f.z) + Math.PI + k * 0.5;
       P.set(o.x + Math.sin(a) * 6, o.y + lift + 4 + k * 3, o.z + Math.cos(a) * 6);
       L.set(o.x + f.x * 18, o.y, o.z + f.z * 18); fov = 60;
-    } else if (t < 6.3) { // on the ground among the pillars, looking up at her
+    } else if (t < WING_SHOT[1] + 3.1) { // on the ground among the pillars, looking up at her
       const v = T.victims.find((x) => x.view) || null, g = v ? v.pos : new THREE.Vector3(o.x + f.x * 12, o.y, o.z + f.z * 12);
-      const k = ease((t - 5.0) / 1.3);
+      const k = ease((t - WING_SHOT[1] - 1.8) / 1.3);
       P.set(g.x + sd.x * (2 - k), g.y + 0.8, g.z + sd.z * (2 - k));
       L.set(head.x, head.y + 0.5, head.z); fov = 50; roll = 0.04;
     } else if (t < TALISMAN.boom) { // her face, close: calm, eyes half closed
-      const k = ease((t - 6.3) / (TALISMAN.boom - 6.3));
+      const k = ease((t - WING_SHOT[1] - 3.1) / (TALISMAN.boom - WING_SHOT[1] - 3.1));
       P.set(head.x + f.x * (0.9 - k * 0.25) + sd.x * 0.15, head.y + 0.02, head.z + f.z * (0.9 - k * 0.25) + sd.z * 0.15);
       L.set(head.x, head.y, head.z); fov = 28;
     } else { // high and wide: the explosion swallows the field
@@ -1779,7 +1786,38 @@ export class Match {
     cam.position.copy(P); cam.lookAt(L);
     if (roll) cam.rotateZ(roll);
     if (Math.abs(cam.fov - fov) > 0.01) { cam.fov = fov; cam.updateProjectionMatrix(); }
+    if (T.plate) this._placePlate(T);
     return L;
+  }
+  // The front-on wing shot frames her exactly as the reference art does. The backdrop plate (the art
+  // with her and the wings taken out) sits PLATE_D metres in front of the camera, sized to cover the
+  // letterboxed frame; the camera then stands at the distance where her real 1.66 m matches her
+  // height in the art at that plate scale, shifted so the point where her wings meet her back lands
+  // on the same art pixel. Wings (cut from the same art, metre-sized at her scale) line up with it.
+  _wingShot(T, t, P, L) {
+    const f = T.f;
+    const fov = 35 - Math.min(1, t / (WING_SHOT[1] - WING_SHOT[0])) * 2.2;      // a slow push in
+    const { ph } = this._plateSize(fov);
+    const k = 1.66 / PLATE.body_px, mp = ph / PLATE.h;
+    const d = k * PLATE_D / mp;
+    const xr = (PLATE.root[0] - PLATE.w / 2) * k, yr = -(PLATE.root[1] - PLATE.h / 2) * k;
+    const root = this._wingRoot || (this._wingRoot = new THREE.Vector3());
+    if (T.wings) T.wings.localToWorld(root.copy(WING_ROOT)); else root.set(T.c.x, T.c.y + 7.3, T.c.z);
+    const rx = f.z, rz = -f.x;                                                     // camera right (her left)
+    P.set(root.x - rx * xr + f.x * d, root.y - yr, root.z - rz * xr + f.z * d);
+    L.set(P.x - f.x, P.y, P.z - f.z);
+    return fov;
+  }
+  _plateSize(fov) {
+    const cam = this.camera, th = Math.tan(fov * Math.PI / 360);
+    const Hf = 2 * PLATE_D * th, Wf = Hf * cam.aspect, Hb = Hf * CINE_BAND, ra = PLATE.w / PLATE.h;
+    return Wf / Hb > ra ? { pw: Wf, ph: Wf / ra } : { pw: Hb * ra, ph: Hb };
+  }
+  _placePlate(T) {
+    const cam = this.camera, m = T.plate, { pw, ph } = this._plateSize(cam.fov);
+    m.quaternion.copy(cam.quaternion);
+    m.position.set(0, 0, -PLATE_D).applyQuaternion(cam.quaternion).add(cam.position);
+    m.scale.set(pw, ph, 1);
   }
 
   // ---------------------------------------------------------------- Domain Expansion: Unlimited Void

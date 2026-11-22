@@ -37,6 +37,7 @@ const ACTIONS = {
   death: { clip: C.DEATH, in: 0.06, out: 0, hold: true, aimOff: true, staffBody: true },
   plant: { clip: C.M_PLANT, in: 0.06, out: 0.18 },
   nova: { clip: C.M_NOVA, in: 0.08, out: 0.2, upright: [0.2, 1.8], twoHand: [0.15, 99] },
+  inkAscend: { clip: C.INK_ASCEND, in: 0.1, out: 0.3, aimOff: true },
   exhausted: { clip: C.M_EXHAUSTED, in: 0.05, out: 0.25, aimOff: true },
   respawn: { clip: C.RESPAWN, in: 0.02, out: 0.2, aimOff: true, freeProp: true },
   kick: { clip: C.KICK_CLIP, in: 0.03, out: 0.14, aimOff: true },

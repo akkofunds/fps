@@ -77,16 +77,59 @@ wcol=np.stack([gblur(col2[...,c]*alpha2,12) for c in range(3)],-1)/np.maximum(gb
 alpha2=np.maximum(alpha2,disc*0.97); col2=col2*(1-disc[...,None])+wcol*disc[...,None]
 xs=np.arange(W)[None,:]
 alpha2=alpha2*np.where((xs>548)&(xs<702),0.0,1.0)
-# ---- crops (each wing: its bounding box) with the shoulder point marked
+# ---- carry each wing in behind her body to her spine: the wing's inner edge (where it vanishes
+# behind her) is extended to the centre line, narrowing as it goes, so seen from any side the wing
+# grows out of her back; seen from the front her body covers the extension exactly as in the art
+CX, RY = 607, 360                     # her centre line, and the height where both wings meet her back
+yy,xx=np.indices((H,W))
+smooth_a=gblur(alpha2,3); smooth_c=np.stack([gblur(col2[...,c]*alpha2,3) for c in range(3)],-1)/np.maximum(smooth_a,1e-3)[...,None]
+for x0, x1, edge in ((CX, 717, 717), (531, CX, 531)):          # from just outside her hair / cloak
+    xs_=np.arange(x0,x1); u=np.abs(xs_-CX)/abs(edge-CX)           # 0 at the spine .. 1 at the edge column
+    sc=0.5+0.5*u
+    for i,x in enumerate(xs_):
+        src=np.clip(np.round(RY+(np.arange(H)-RY)/sc[i]).astype(int),0,H-1)
+        alpha2[:,x]=smooth_a[src,edge]; col2[:,x]=smooth_c[src,edge]*(0.8+0.2*u[i])
+# soften the edges where the art's frame cut the wing tips off
+edge=ss(0,14,xx.astype(np.float32))*ss(0,14,(W-1-xx).astype(np.float32))
+alpha2=alpha2*edge
+# ---- crops (each wing: its bounding box) with the root on the spine
 body_px=332.0; body_m=1.66
-def crop(x0,x1,root,flip,name):
+def crop(x0,x1,flip,name):
     al=alpha2[:,x0:x1]; rows=np.where(al.max(1)>0.03)[0]; y0,y1=max(0,rows.min()-4),min(H,rows.max()+4)
     rgba=np.dstack([col2[y0:y1,x0:x1],al[y0:y1]])
     img=Image.fromarray((np.clip(rgba,0,1)*255+0.5).astype(np.uint8),'RGBA')
-    rx,ry=root[0]-x0,root[1]-y0; w,h=img.size
+    rx,ry=CX-x0,RY-y0; w,h=img.size
     if flip: img=img.transpose(Image.FLIP_LEFT_RIGHT); rx=w-rx
     img.save(os.path.join(OUTDIR, name + '.png'), optimize=True)
     return {'w': round(w/body_px*body_m,3), 'h': round(h/body_px*body_m,3), 'ru': round(rx/w,4), 'rv': round(ry/h,4)}
 os.makedirs(OUTDIR, exist_ok=True)
-meta={'L': crop(702,1282,(704,300),False,'wing_l'), 'R': crop(0,548,(546,330),True,'wing_r')}
+meta={'L': crop(CX,W,False,'wing_l'), 'R': crop(0,CX,True,'wing_r')}
+# ---- the backdrop plate for the front-on shot: the art with the wings and her taken out (filled
+# with the haze around them), and the light that was behind her painted back in: the halo ring,
+# the shaft of light through her, and the warm glow at her chest
+# wings: the haze estimate the wing colours were un-premultiplied against, so wing over plate gives back
+# the art exactly; her: the light around her, filled in from her surroundings
+holew=(gblur((alpha2>0.02).astype(np.float32),4)>0.05).astype(np.float32)
+her=np.clip(1-np.maximum(np.abs(xx-CX)/80.0, np.where(yy<255,(255-yy)/6.0,np.where(yy>600,(yy-600)/6.0,0))),0,1)
+holeh=(her>0).astype(np.float32)
+keep=(1-np.maximum(holew,holeh))
+def nfill(s):
+    w=gblur(keep,s); return np.stack([gblur(a[...,c]*keep,s) for c in range(3)],-1)/np.maximum(w,1e-4)[...,None], w
+f1,w1=nfill(10); f2,w2=nfill(30); f3,w3=nfill(80)
+fill=np.where((w1>0.25)[...,None],f1,np.where((w2>0.2)[...,None],f2,f3))
+fill=np.stack([gblur(fill[...,c],4) for c in range(3)],-1)
+hw=gblur(holew,2)[...,None]; hs=gblur(holeh,8)[...,None]
+plate=a*(1-hw)+bg*hw
+plate=plate*(1-hs)+fill*hs
+# painted light inside the hole only (outside it the art has its own)
+gold=np.array([1.0,0.78,0.45],np.float32)
+rr=np.hypot(xx-CX,yy-357)
+ring=(np.exp(-((rr-180)/1.6)**2)*0.4+np.exp(-((rr-180)/7)**2)*0.1)*(0.55+0.45*np.exp(-((xx-CX)/60.0)**2))
+ring=ring+np.exp(-((yy-537)/2.2)**2-((xx-CX)/55.0)**2)*0.9   # the flare where the ring meets the shaft below her
+shaft=(np.exp(-((xx-CX)/1.4)**2)*0.85+np.exp(-((xx-CX)/7)**2)*0.22)*ss(560,500,yy)
+glow=np.exp(-(np.hypot(xx-CX,(yy-318)*1.15)/70)**2)*0.55
+light=(ring+shaft+glow)[...,None]*gold*hs
+plate=1-(1-plate)*(1-np.clip(light,0,1))
+Image.fromarray((np.clip(plate,0,1)*255+0.5).astype(np.uint8)).save(os.path.join(OUTDIR,'wing_plate.jpg'),quality=90)
+meta['plate']={'w':W,'h':H,'root':[CX,RY],'body_px':body_px}
 print(json.dumps(meta))

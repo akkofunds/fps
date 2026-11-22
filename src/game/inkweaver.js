@@ -39,7 +39,9 @@ export const INK_M1 = {
 export const RUSH = { dash: 7, dashT: 0.16, beats: [0.2, 0.42, 0.66], range: 3.3, cone: 0.25, dmg: [10, 10, 18], stun: [0.6, 0.6, 0.9] };
 export const ORB = { range: 30, delay: 0.25, life: 2.2, pullR: 9.5, coreR: 3.2, pull: 22, tick: 0.25, tickDmg: 3, burst: 16, burstR: 6, burstKb: 14 };
 export const ERUPT = { charge: 0.62, len: 18, width: 3.6, near: 4.2, dmg: 36, up: 11, kb: 18 };
-export const TALISMAN = { cine: 9.0, rain: [3.2, 7.0], radius: 34, strikes: 6, strikeDmg: 6, boom: 7.6, boomDmg: 70, boomR: 34 };
+export const TALISMAN = { cine: 10.2, rain: [4.4, 8.2], radius: 34, strikes: 6, strikeDmg: 6, boom: 8.8, boomDmg: 70, boomR: 34 };
+// the front-on wing shot of the ultimate (the reference art), seconds into the cutscene
+export const WING_SHOT = [2.4, 4.4];
 
 const COOLDOWN = { rush: 8, orb: 10, erupt: 14 };
 const cdOf = (base) => (BAL.noCooldowns ? 0 : base * BAL.cd);

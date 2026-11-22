@@ -22,10 +22,20 @@ function canvasTex(key, w, h, paint) {
   return (TEX[key] = t);
 }
 // The wings themselves are cut straight from the reference art (public/fx/wing_l.png / wing_r.png,
-// tools/fx/cut_wings.py): w × h in metres at her scale, and where the wing meets her back (ru, rv:
+// tools/fx/cut_wings.py): w × h in metres at her scale, and where the wing meets her spine (ru, rv:
 // 0..1 across / down the image). Both images have the root on their left edge.
-const WING = {"L": {"w": 2.9, "h": 2.28, "ru": 0.0034, "rv": 0.5833}, "R": {"w": 2.74, "h": 2.165, "ru": 0.0036, "rv": 0.5427}};
+export const WING = {"L": {"w": 3.375, "h": 2.28, "ru": 0.0, "rv": 0.7149}, "R": {"w": 3.035, "h": 2.165, "ru": 0.0, "rv": 0.612}};
+// the backdrop for the front-on shot: the same art with the wings and her taken out (fx/wing_plate.jpg),
+// its size in pixels, the art pixel where both wings meet her back, and her height in art pixels
+export const PLATE = {"w": 1282, "h": 622, "root": [607, 360], "body_px": 332.0};
+// where the wings meet her back, in the wing group's frame
+export const WING_ROOT = new THREE.Vector3(0, 0.06, -0.16);
 const WTEX = {};
+let PLATE_TEX = null;
+function plateImg() {
+  if (!PLATE_TEX) { PLATE_TEX = new THREE.TextureLoader().load('fx/wing_plate.jpg'); PLATE_TEX.colorSpace = THREE.SRGBColorSpace; }
+  return PLATE_TEX;
+}
 function wingImg(side) {
   if (!WTEX[side]) { WTEX[side] = new THREE.TextureLoader().load(side === 'L' ? 'fx/wing_l.png' : 'fx/wing_r.png'); WTEX[side].colorSpace = THREE.SRGBColorSpace; WTEX[side].anisotropy = 4; }
   return WTEX[side];
@@ -116,6 +126,7 @@ Object.assign(Fx.prototype, {
   inkWings(anchor, yawOf, size = 3, life = 1.2, o = {}) {
     const mk = (side) => new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: wingImg(side), transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.12, 1.08, 1.04) }));
     const L = mk('L'), Rw = mk('R');
+    plateImg();
     const g = new THREE.Group(); g.add(L, Rw); this.scene.add(g);
     // a warm glow behind her back and a thin halo ring (the reference's backlight)
     const glow = o.halo ? new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(1.6, 1.25, 0.8) })) : null;
@@ -137,14 +148,16 @@ Object.assign(Fx.prototype, {
       for (const [w, sd, M] of [[L, 1, WING.L], [Rw, -1, WING.R]]) {
         // her left wing extends to her left (+x); the right one is the mirrored image
         w.scale.set(sd * M.w * s, M.h * s, 1);
-        const a = sd * ((1 - open) * 1.3 + 0.08 + f);                     // swing about the root (folded → open)
+        const a = sd * ((1 - open) * 1.3 + 0.03 + f);                     // swing about the root (folded → open)
         w.rotation.set(0, a, 0);
         // put the image's root point (where the wing meets her back) on the spine, behind the shoulders
         const rx = sd * M.w * s * (M.ru - 0.5), ry = M.h * s * (0.5 - M.rv);
-        w.position.set(-rx * Math.cos(a), 0.06 - ry, -0.16 + rx * Math.sin(a));
+        w.position.set(WING_ROOT.x - rx * Math.cos(a), WING_ROOT.y - ry, WING_ROOT.z + rx * Math.sin(a));
         w.material.opacity = fade;
       }
       if (glow) {
+        const bare = !!(o.bare && o.bare());   // the backdrop plate carries its own ring, shaft and glow
+        glow.visible = ring.visible = shaft.visible = !bare;
         const pulse = 1 + Math.sin(t * 2) * 0.05;
         glow.position.set(0, 0.2, -0.4); glow.scale.setScalar(s * 1.9 * e * pulse); glow.material.opacity = fade * 0.9;
         ring.position.set(0, 0.0, -0.35); ring.scale.setScalar(s * 0.68 * e); ring.material.opacity = fade * 0.8;
@@ -159,6 +172,13 @@ Object.assign(Fx.prototype, {
       return true;
     } });
     return g;
+  },
+
+  // the backdrop plate of the front-on wing shot (a plane the caller keeps in front of the camera)
+  inkPlate() {
+    const m = new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: plateImg(), fog: false, toneMapped: false }));
+    m.frustumCulled = false; this.scene.add(m);      // opaque, writes depth: the world behind it is gone
+    return m;
   },
 
   // ---------------------------------------------------------------- Ink Manifestation
@@ -336,7 +356,7 @@ Object.assign(Fx.prototype, {
     } });
   },
   // a ring of talismans hanging in the sky round the caster, slowly turning (until() → true ends it)
-  talismanHalo(c, n, r, h, until) {
+  talismanHalo(c, n, r, h, until, hide = null) {
     const mat = new THREE.MeshBasicMaterial({ map: taliTex(), transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.6, 1.35, 1.0) });
     const im = new THREE.InstancedMesh(plane(), mat, n);
     im.frustumCulled = false; this.scene.add(im);
@@ -353,6 +373,7 @@ Object.assign(Fx.prototype, {
         im.setMatrixAt(i, m4);
       });
       im.instanceMatrix.needsUpdate = true;
+      im.visible = !(hide && hide());
       mat.opacity = Math.min(1, t / 0.5);
       if (until()) { this.scene.remove(im); im.dispose(); mat.dispose(); return false; }
       return true;
