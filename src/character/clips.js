@@ -1185,8 +1185,8 @@ export const MN_D = compileClip([
 // arms loose and a little out from her sides with open hands, head tipped gently to her left
 export const ASCEND = {
   hips: [-4, 0, -2], spine: [-3, 0, -2], chest: [-2, 0, 0], neck: [8, 0, 3], head: [15, 4, 8],
-  // left: thigh forward and a little out, knee folded tight, the foot tucked behind the right knee
-  upperLegL: [-38, 25, 14], lowerLegL: [142, 0, 0], footL: [52, 0, 0],
+  // left: thigh forward and a little out, knee softly bent, the foot drifting back toward the right shin
+  upperLegL: [-30, 20, 10], lowerLegL: [100, 0, 0], footL: [40, 0, 0],
   // right: hanging long and crossing in under her centre, toe pointed
   upperLegR: [4, -4, -12], lowerLegR: [6, 0, 0], footR: [50, 0, 0],
   upperArmL: [-4, 0, 17], foreArmL: [-34, 0, 0], handL: [8, 0, -18],
