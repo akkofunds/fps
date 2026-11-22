@@ -1184,7 +1184,7 @@ export const MN_D = compileClip([
 // hangs long with the toe pointed, the left knee drawn up with the foot tucked behind the right shin,
 // arms loose and a little out from her sides with open hands, head tipped gently to her left
 export const ASCEND = {
-  hips: [-4, 0, -2], spine: [-3, 0, -2], chest: [-2, 0, 0], neck: [2, 0, 3], head: [6, 4, 8],
+  hips: [-4, 0, -2], spine: [-3, 0, -2], chest: [-2, 0, 0], neck: [8, 0, 3], head: [15, 4, 8],
   // left: thigh forward and a little out, knee folded tight, the foot tucked behind the right knee
   upperLegL: [-38, 25, 14], lowerLegL: [142, 0, 0], footL: [52, 0, 0],
   // right: hanging long and crossing in under her centre, toe pointed
@@ -1196,7 +1196,7 @@ export const INK_ASCEND = compileClip([
   { t: 0, hip: [0, -0.03, 0], ik: STAND, b: { spine: [2, 0, 0], upperArmL: [-10, 0, 14], upperArmR: [-10, 0, 14] } },
   { t: 0.45, ease: 'smooth', hip: [0, -0.06, 0], ik: STAND, b: { spine: [4, 0, 0], head: [-4, 0, 0], upperArmL: [-14, 0, 22], foreArmL: [-30, 0, 0], upperArmR: [-14, 0, 22], foreArmR: [-30, 0, 0] } },
   { t: 1.3, ease: 'smooth', hip: [0, 0, 0], b: ASCEND },
-  { t: 3.4, ease: 'smooth', hip: [0, 0.02, 0], b: { ...ASCEND, head: [5, 3, 9], upperArmL: [-3, 0, 19], upperArmR: [-3, 0, 19] } },
-  { t: 6.0, ease: 'smooth', hip: [0, 0, 0], b: { ...ASCEND, head: [7, 5, 7] } },
+  { t: 3.4, ease: 'smooth', hip: [0, 0.02, 0], b: { ...ASCEND, head: [14, 3, 9], upperArmL: [-3, 0, 19], upperArmR: [-3, 0, 19] } },
+  { t: 6.0, ease: 'smooth', hip: [0, 0, 0], b: { ...ASCEND, head: [16, 5, 7] } },
   { t: 10.4, ease: 'smooth', hip: [0, 0.01, 0], b: ASCEND },
 ]);

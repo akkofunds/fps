@@ -29,7 +29,7 @@ export const WING = {"L": {"w": 3.375, "h": 2.28, "ru": 0.0, "rv": 0.7149}, "R":
 // its size in pixels, the art pixel where both wings meet her back, and her height in art pixels
 export const PLATE = {"w": 1282, "h": 622, "root": [607, 360], "body_px": 332.0};
 // where the wings meet her back, in the wing group's frame
-export const WING_ROOT = new THREE.Vector3(0, -0.03, -0.16);
+export const WING_ROOT = new THREE.Vector3(0, -0.07, -0.16);
 const WTEX = {};
 let PLATE_TEX = null;
 function plateImg() {

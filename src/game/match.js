@@ -16,7 +16,7 @@ import { CHECKMATE, ROOK, QUEEN } from './manipulator.js';
 import { ORB as INK_ORB, ERUPT as INK_ERUPT, TALISMAN, WING_SHOT } from './inkweaver.js';
 const PLATE_D = 16;        // metres from the camera to the wing shot's backdrop plate
 const CINE_BAND = 0.78;
-const WING_VIEW = { yaw: 0.25, pitch: 0.27 }; // the reference camera: ~14° round to her left (right of frame), ~15° below her, looking up
+const WING_VIEW = { yaw: 0.25, pitch: 0.5 };  // the reference camera: ~14° round to her left (right of frame), ~29° below her, looking up
 const DUSK_FOG = new THREE.Color(0.3, 0.19, 0.1);   // the haze under the ink sky    // the part of the screen height between the cutscene bars (11vh each)
 import { UnlimitedVoid } from '../world/void.js';
 import { BLUE, RED, PURPLE, VOID } from './sorcerer.js';
