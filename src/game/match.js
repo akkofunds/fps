@@ -1699,7 +1699,7 @@ export class Match {
     const fromSeal = () => { const a = Math.random() * 6.283, rr = Math.sqrt(Math.random()) * 20; return new THREE.Vector3(T.c.x + Math.cos(a) * rr, T.seal.y - 0.5, T.c.z + Math.sin(a) * rr); };
     const cues = [
       [0.05, () => { this.fx.taiChiArray(T.c, 6.5, TALISMAN.cine - 0.3, { spin: 0.5 }); mono('Ink becomes wings. Wings become heaven.'); }],
-      [0.9, () => { if (e.view) T.wings = this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.025, until, halo: true, bare: () => !!(this._tali && this._tali.plate), face: () => !!(this._tali && this._tali.plate) }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
+      [0.9, () => { if (e.view) T.wings = this.fx.inkWings((out) => e.view.rig.bones[3].getWorldPosition(out), () => Math.atan2(T.f.x, T.f.z), 1.0, Infinity, { spread: 0.8, flap: 0.025, beats: 1.6, until, halo: true, bare: () => !!(this._tali && this._tali.plate), face: () => !!(this._tali && this._tali.plate) }); this.sound('domain', T.c, 1.1, 150); this.fx.shake(0.3); }],
       [1.9, () => { T.halo = this.fx.talismanHalo(T.c, low ? 36 : 80, 24, 15, () => !this._tali || this._tali.done || this._tali.haloDown, () => !!(this._tali && this._tali.plate)); mono(''); }],
       // the reference shot: front-on, level, her wings filling the frame against the light behind her
       [WING_SHOT[0], () => { hud.flash(0.45); T.plate = this.fx.inkPlate(); }],
@@ -1712,6 +1712,8 @@ export class Match {
       }],
       [S1 + 0.5, () => mono('Heaven and earth, hear my command.')],
       [S1 + 1.7, () => mono('Every talisman a seal. Every seal a sentence.')],
+      // the sentence: 鎮, written in gold across the sky under the seal
+      [S1 + 2.0, () => { T.glyph = { y: T.c.y + 20, a: 1, s: 1, done: false }; this.fx.skyGlyph(T.c, '鎮', 13, T.glyph); hud.flash(0.25); this.sound('domainCast', T.c, 0.8, 300); }],
       [S1 + 3.05, () => mono('Be still.')],
       [B - 0.12, () => { mono(''); hud.impactFrames(() => hud.flash(1)); }],
       // the finale: the seal comes down, every talisman in the sky falls at once…
@@ -1747,6 +1749,7 @@ export class Match {
     sl.s = ease((t - S1) / 1.2); sl.a = t < S1 ? 0 : Math.min(1, (t - S1) / 0.6) * (1 - ease((t - B - 0.3) / 0.8));
     sl.y = T.c.y + 30 - 22 * ease((t - (B - 0.75)) / 0.75);
     sl.flash = Math.max(0, (sl.flash || 0) - dt * 2.5);
+    if (T.glyph) { const g = T.glyph; g.y = Math.min(T.c.y + 20, sl.y - 6); g.a = 1 - ease((t - B) / 0.25); if (t > B + 0.3) g.done = true; }
     if (t > B + 1.2) sl.done = true;
     // the rain: talismans out of the seal across the whole field, more and more of them, and on every victim
     if (t > r0 && t < r1) {
@@ -1784,7 +1787,7 @@ export class Match {
   _taliCineEnd() {
     this._taliPlateOff();
     const T = this._tali;
-    if (T) { if (T.lit) this._taliDusk(0); T.seal.done = true; }
+    if (T) { if (T.lit) this._taliDusk(0); T.seal.done = true; if (T.glyph) T.glyph.done = true; }
     if (T) { T.done = true; T.caster.liftY = 0; if (T.caster.view) T.caster.view.anim.stopAction(['inkAscend']); }
     this._tali = null;
     for (const e of this.ents.values()) if (e.alive) e.view.root.visible = true;

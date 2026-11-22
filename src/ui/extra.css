@@ -110,7 +110,7 @@ body.touch .top-center { transform: translateX(-50%) scale(0.8); transform-origi
 #cine .cine-sub.big { bottom: 40vh; font: 800 clamp(42px, 9vw, 120px)/1 'Rajdhani', 'Segoe UI', sans-serif; font-style: normal; letter-spacing: 0.12em; color: #fff3e0; text-shadow: 0 0 30px #ff3a20, 0 0 80px #ff2010, 0 4px 8px #000; animation: cineShout 1.1s cubic-bezier(.2,1.4,.3,1) both; }
 @keyframes cineShout { from { transform: translateX(-50%) scale(2.2); opacity: 0; filter: blur(8px); } 40% { opacity: 1; filter: blur(0); } to { transform: translateX(-50%) scale(1); } }
 #cine .cine-tag { position: absolute; top: 3vh; left: 50%; transform: translateX(-50%); color: #ff9a8a; font: 700 12px/1 'Rajdhani', sans-serif; letter-spacing: 0.5em; opacity: 0.85; }
-body.cine-on #hud > *:not(#flash) { visibility: hidden; }
+body.cine-on #hud > *:not(#flash):not(#dmgNums) { visibility: hidden; }  /* damage still shows in cutscenes */
 body.cine-on #touch, body.cine-on .touch-ui { visibility: hidden; }
 
 /* ---------------- queue lobby bar */

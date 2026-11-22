@@ -156,38 +156,75 @@ function inkSphereMat() {
 Object.assign(Fx.prototype, {
   // ---------------------------------------------------------------- wings
   // two brushed-ink wings spreading from a point on the back (anchor() → world point; yaw → facing)
+  // The wings are real surfaces, not cards: each is a dense grid in metres (root on the spine at the
+  // origin, span along +x) carrying the painted wing, re-shaped every frame. The span sweeps back and
+  // the feathers cup, the wing beats with a wave that runs out from the root to the tips, and a dark
+  // under-layer just behind gives it body from the side and below. o.face() (the reference shot)
+  // eases all of that flat so the painting lines up with the art.
   inkWings(anchor, yawOf, size = 3, life = 1.2, o = {}) {
-    const mk = (side) => new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: wingImg(side), transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: new THREE.Color(1.12, 1.08, 1.04) }));
-    const L = mk('L'), Rw = mk('R');
+    const NX = 26, NY = 10;
+    const build = (M) => {
+      const geo = new THREE.PlaneGeometry(1, 1, NX, NY);
+      const p = geo.attributes.position, base = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) { base[i * 3] = (p.getX(i) + 0.5 - M.ru) * M.w; base[i * 3 + 1] = (p.getY(i) - (0.5 - M.rv)) * M.h; base[i * 3 + 2] = 0; }
+      geo.userData.base = base; geo.userData.M = M;
+      return geo;
+    };
+    const gL = build(WING.L), gR = build(WING.R);
+    const mat = (side, c) => new THREE.MeshBasicMaterial({ map: wingImg(side), transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, color: c });
+    const L = new THREE.Mesh(gL, mat('L', new THREE.Color(1.12, 1.08, 1.04))), Rw = new THREE.Mesh(gR, mat('R', new THREE.Color(1.12, 1.08, 1.04)));
+    const Lb = new THREE.Mesh(gL, mat('L', new THREE.Color(0.32, 0.26, 0.22))), Rb = new THREE.Mesh(gR, mat('R', new THREE.Color(0.32, 0.26, 0.22)));
+    L.frustumCulled = Rw.frustumCulled = Lb.frustumCulled = Rb.frustumCulled = false;
+    Lb.renderOrder = Rb.renderOrder = -1;
     plateImg();
-    const g = new THREE.Group(); g.add(L, Rw); this.scene.add(g);
+    const g = new THREE.Group(); g.add(Lb, Rb, L, Rw); this.scene.add(g);
     // a warm glow behind her back and a thin halo ring (the reference's backlight)
     const glow = o.halo ? new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(1.6, 1.25, 0.8) })) : null;
     const ring = o.halo ? new THREE.Mesh(new THREE.TorusGeometry(1, 0.012, 6, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.8, 0.9), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })) : null;
     // and the thin vertical shaft of light running through her (reference)
     const shaft = o.halo ? new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(2.0, 1.6, 1.0) })) : null;
     if (glow) { g.add(glow); g.add(ring); g.add(shaft); }
-    let t = 0;
-    const spread = o.spread ?? 0.22, flap = o.flap ?? 0.08;
+    let t = 0, flat = 0;
+    const spread = o.spread ?? 0.22, flap = o.flap ?? 0.08, beats = o.beats ?? 0;
+    // bend the grid: sweep (span curving back), cup (top and bottom edges curling forward), and the
+    // beat (a wave of lift running from root to tip)
+    const shape = (geo, sweep, cup, beat, ph) => {
+      const p = geo.attributes.position, b = geo.userData.base, M = geo.userData.M;
+      for (let i = 0; i < p.count; i++) {
+        const X = b[i * 3], Y = b[i * 3 + 1], u = Math.max(0, X / M.w), v = Y / M.h;
+        const lift = beat * Math.sin(ph - u * 1.6) * u * u * M.w;           // the wave out along the span
+        const ang = beat * Math.sin(ph - u * 1.6) * u;                      // and the wing tilting with it
+        const z = -sweep * u * u * M.w - cup * v * v * M.h * (0.4 + u) - Math.abs(lift) * 0.35;
+        p.setXYZ(i, X * (1 - Math.abs(ang) * 0.12), Y + lift, z);
+      }
+      p.needsUpdate = true;
+    };
     this.effects.push({ update: (dt, cam) => {
       t += dt;
       const k = Math.min(1, t / spread), e = 1 - (1 - k) ** 3;
       const fade = life === Infinity ? 1 : Math.min(1, Math.max(0, (life - t) / 0.3));
       anchor(_v); g.position.copy(_v);
       // o.face(): the wings are flat paintings: in the reference shot they turn square to the lens
-      if (o.face && o.face() && cam) g.quaternion.copy(cam.quaternion); else g.rotation.set(0, yawOf(), 0);
+      const facing = !!(o.face && o.face() && cam);
+      flat = facing ? 1 : Math.max(0, flat - dt * 3);
+      if (facing) g.quaternion.copy(cam.quaternion); else g.rotation.set(0, yawOf(), 0);
       // size: 1 = the reference's proportions to her body
-      const s = size * (0.35 + 0.65 * e), f = Math.sin(t * 2.4) * flap;
+      const s = size * (0.35 + 0.65 * e), f = Math.sin(t * 2.4) * flap * (1 - flat);
       const open = 0.15 + 0.85 * e;
-      for (const [w, sd, M] of [[L, 1, WING.L], [Rw, -1, WING.R]]) {
+      // big beats while she takes off (o.beats seconds), then a slow hovering pulse
+      const strong = beats > 0 ? Math.max(0, 1 - t / beats) : 0;
+      const beat = (strong * 0.55 + 0.1) * (1 - flat) * e;
+      const ph = t * (5.2 * strong + 2.3 * (1 - strong));
+      const sweep = (0.32 + 0.1 * Math.sin(t * 1.3)) * (1 - flat), cup = 0.28 * (1 - flat);
+      shape(gL, sweep, cup, beat, ph); shape(gR, sweep, cup, beat, ph);
+      for (const [w, wb, sd] of [[L, Lb, 1], [Rw, Rb, -1]]) {
         // her left wing extends to her left (+x); the right one is the mirrored image
-        w.scale.set(sd * M.w * s, M.h * s, 1);
         const a = sd * ((1 - open) * 1.3 + 0.03 + f);                     // swing about the root (folded → open)
-        w.rotation.set(0, a, 0);
-        // put the image's root point (where the wing meets her back) on the spine, behind the shoulders
-        const rx = sd * M.w * s * (M.ru - 0.5), ry = M.h * s * (0.5 - M.rv);
-        w.position.set(WING_ROOT.x - rx * Math.cos(a), WING_ROOT.y - ry, WING_ROOT.z + rx * Math.sin(a));
+        w.scale.set(sd * s, s, s); w.rotation.set(0, a, 0); w.position.copy(WING_ROOT);
         w.material.opacity = fade;
+        // the under-layer: a hair smaller, just behind, only when the wing is not flat
+        wb.scale.set(sd * s * 0.985, s * 0.985, s); wb.rotation.set(0, a, 0); wb.position.set(WING_ROOT.x, WING_ROOT.y - 0.01, WING_ROOT.z - 0.07 * s);
+        wb.visible = flat < 0.99; wb.material.opacity = fade * 0.85 * (1 - flat);
       }
       if (glow) {
         const bare = !!(o.bare && o.bare());   // the backdrop plate carries its own ring, shaft and glow
@@ -199,7 +236,7 @@ Object.assign(Fx.prototype, {
       }
       if (R() < 0.7) { const sd = R() < 0.5 ? 1 : -1, u = R(); this.fire.emit(_v.x + Math.cos(g.rotation.y) * sd * s * 1.8 * u, _v.y + s * (0.15 - u * 0.25) + R() * 0.6, _v.z - Math.sin(g.rotation.y) * sd * s * 1.8 * u, (R() - 0.5), 0.6 + R(), (R() - 0.5), 0.9, 0.07, 0.0, GOLD, GOLD0, 1, -0.4); }
       if (t >= life || (o.until && o.until())) {
-        this.scene.remove(g); L.material.dispose(); Rw.material.dispose();
+        this.scene.remove(g); L.material.dispose(); Rw.material.dispose(); Lb.material.dispose(); Rb.material.dispose(); gL.dispose(); gR.dispose();
         if (glow) { glow.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); shaft.material.dispose(); }
         return false;
       }
@@ -494,6 +531,29 @@ Object.assign(Fx.prototype, {
       b.material.opacity = ctl.a * 0.32 + fl * 0.5;
       glow.material.opacity = ctl.a * 0.3 + fl * 0.6;
       if (ctl.done) { this.scene.remove(g); a.material.dispose(); b.material.dispose(); glow.material.dispose(); return false; }
+      return true;
+    } });
+  },
+  // A single giant character written in gold across the sky (鎮, "suppress"): it flashes in with a
+  // spray of gold, hangs there, and drops with the seal. ctl: { y, a, s, done }.
+  skyGlyph(c, ch, size, ctl) {
+    const tex = canvasTex('glyph_' + ch, 512, 512, (g, W) => {
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 380px serif';
+      g.shadowColor = 'rgba(255,170,60,1)'; g.shadowBlur = 40; g.fillStyle = 'rgba(255,214,130,1)';
+      g.fillText(ch, W / 2, W / 2 + 14);
+      g.shadowBlur = 0; g.fillStyle = 'rgba(255,250,220,1)'; g.font = 'bold 372px serif'; g.fillText(ch, W / 2, W / 2 + 14);
+    });
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(2.2, 1.6, 0.8), fog: false }));
+    this.scene.add(sp);
+    for (let k = 0; k < 40; k++) { const a = R() * 6.283, v = 4 + R() * 8; this.fire.emit(c.x, ctl.y, c.z, Math.cos(a) * v, Math.sin(a) * v, (R() - 0.5) * v, 1.0, 0.3, 0.02, GOLD, GOLD0, 0.5, 0); }
+    let t = 0;
+    this.effects.push({ update: (dt) => {
+      t += dt;
+      sp.position.set(c.x, ctl.y, c.z);
+      const k = Math.min(1, t / 0.25);
+      sp.scale.setScalar(size * (1.25 - 0.25 * k) * (ctl.s ?? 1));
+      sp.material.opacity = ctl.a * (0.85 + 0.15 * Math.sin(t * 5));
+      if (ctl.done) { this.scene.remove(sp); sp.material.dispose(); return false; }
       return true;
     } });
   },

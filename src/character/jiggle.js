@@ -18,8 +18,8 @@ const SPEC = {
   // f: natural frequency per axis (Hz) [side, vertical, front], zeta: damping ratio,
   // gain: how much of the inertial force the mass feels per axis, max: soft travel limit (metres),
   // tilt: radians of rotation per metre of travel (curves the shape as it swings)
-  pivot: { f: [3.6, 3.0, 3.4], zeta: 0.16, gain: [0.06, 0.12, 0.08], max: [0.018, 0.036, 0.022], tilt: 5.5 },
-  tip: { f: [4.6, 4.0, 4.4], zeta: 0.2, gain: [0.04, 0.07, 0.05], max: [0.012, 0.022, 0.014], tilt: 3.0 },
+  pivot: { f: [3.2, 2.6, 3.0], zeta: 0.13, gain: [0.13, 0.26, 0.2], max: [0.024, 0.044, 0.03], tilt: 5.5 },
+  tip: { f: [4.2, 3.6, 4.0], zeta: 0.17, gain: [0.08, 0.15, 0.12], max: [0.015, 0.026, 0.019], tilt: 3.0 },
 };
 const SUB = 1 / 240;           // integration step (stable for these stiffnesses)
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler();
