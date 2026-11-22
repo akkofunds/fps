@@ -21,77 +21,87 @@ function canvasTex(key, w, h, paint) {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return (TEX[key] = t);
 }
-// a great soft wing of dark ink feathers (reference: smoky black-brown plumage, a glowing gold
-// leading edge, ragged wisps at the tips). Texture 1024×512: the root is at the left edge, 36% down;
-// the leading edge arcs up and out to the tip on the right, the feathers hang down from it.
+// The wing from the reference: seen from the front, it sweeps straight up and out from the shoulder
+// to a high tip (leading edge lit gold), and below that edge hangs a broad mass of dark brown-black
+// feathers in layered rows — each row's upper edge catching orange light — fading at the bottom
+// into ragged smoky wisps. Texture 1024×512 (2:1): the root is at the left edge, 56% down; the tip
+// at the top right. One wing ≈ 1.85× her height wide and ≈ her height tall (reference proportions).
 function wingTex() {
-  return canvasTex('wing2', 1024, 512, (g, W, H) => {
-    const r = mulberry(7);
-    const root = [0, H * 0.36];
-    // leading edge: root → shoulder high point → tip
-    const edge = (u) => {
-      const x = u * W * 0.98;
-      const y = H * 0.36 - Math.sin(Math.min(1, u * 1.6) * Math.PI * 0.5) * H * 0.26 + Math.max(0, u - 0.55) ** 1.6 * H * 0.75;
-      return [x, y];
-    };
-    const feather = (x0, y0, ang, len, wid, a, blur) => {
-      g.save(); g.translate(x0, y0); g.rotate(ang);
-      g.filter = blur ? `blur(${blur}px)` : 'none';
+  return canvasTex('wing3', 1024, 512, (g, W, H) => {
+    const r = mulberry(19);
+    // leading edge (top): root (0, .56H) → tip (W, .04H), gently convex
+    const top = (u) => [u * W, H * (0.56 - 0.52 * Math.pow(u, 0.82))];
+    // trailing edge (bottom): hangs low by the body, rises toward the tip
+    const bot = (u) => [u * W, H * (0.98 - 0.08 * u - 0.62 * Math.pow(u, 2.4))];
+    // ---- the body of the wing: long feathers from the leading edge down to the trailing edge
+    const feather = (x0, y0, x1, y1, wid, col, a, blur) => {
+      const len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
+      g.save(); g.translate(x0, y0); g.rotate(ang); g.filter = blur ? `blur(${blur}px)` : 'none';
       const grd = g.createLinearGradient(0, 0, len, 0);
-      grd.addColorStop(0, `rgba(24,14,10,${a})`); grd.addColorStop(0.55, `rgba(36,20,12,${a * 0.9})`); grd.addColorStop(0.85, `rgba(60,34,18,${a * 0.5})`); grd.addColorStop(1, 'rgba(70,40,20,0)');
+      grd.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${a})`);
+      grd.addColorStop(0.7, `rgba(${col[0] * 0.8 | 0},${col[1] * 0.8 | 0},${col[2] * 0.8 | 0},${a * 0.85})`);
+      grd.addColorStop(1, `rgba(${col[0] * 0.6 | 0},${col[1] * 0.6 | 0},${col[2] * 0.6 | 0},0)`);
       g.fillStyle = grd;
-      g.beginPath(); g.moveTo(0, -wid * 0.3); g.quadraticCurveTo(len * 0.45, -wid * 0.75, len, (R2(r) - 0.5) * wid * 0.4); g.quadraticCurveTo(len * 0.5, wid * 0.8, 0, wid * 0.3); g.closePath(); g.fill();
-      // the rachis (a faint warm line down the feather)
-      g.filter = 'none';
-      g.strokeStyle = `rgba(150,90,40,${a * 0.25})`; g.lineWidth = 1.2; g.beginPath(); g.moveTo(4, 0); g.lineTo(len * 0.85, 0); g.stroke();
-      g.restore();
+      g.beginPath(); g.moveTo(0, -wid * 0.5); g.quadraticCurveTo(len * 0.5, -wid * 0.62, len, (R2(r) - 0.5) * wid * 0.3);
+      g.quadraticCurveTo(len * 0.5, wid * 0.62, 0, wid * 0.5); g.closePath(); g.fill();
+      g.restore(); g.filter = 'none';
     };
-    // back layer: long soft primaries (outer half) and secondaries, blurred like smoke
-    for (let k = 0; k < 46; k++) {
-      const u = 0.04 + (k / 45) * 0.94, [x, y] = edge(u);
-      const outer = Math.max(0, (u - 0.45) / 0.55);
-      const len = H * (0.32 + 0.36 * Math.sin(u * Math.PI * 0.85) + 0.25 * outer) * (0.85 + R2(r) * 0.3);
-      const ang = Math.PI * 0.5 - 0.25 - outer * 0.75 + (R2(r) - 0.5) * 0.16;   // hang down, sweeping outward at the tip
-      feather(x, y + 6, ang, len, 30 + outer * 16, 0.82, 3);
+    // back layer: smoky, blurred, the full drop from leading to trailing edge
+    for (let k = 0; k < 70; k++) {
+      const u = k / 69, [x0, y0] = top(u * 0.97), [, yb] = bot(Math.min(1, u + 0.04));
+      const x1 = x0 + 18 + u * 40 + (R2(r) - 0.5) * 20, y1 = yb + (R2(r) - 0.3) * 30;
+      feather(x0, y0 + 4, x1, y1, 46 - u * 18, [34, 20, 15], 0.88, 4);
     }
-    // middle layer: coverts, shorter, sharper
-    for (let k = 0; k < 40; k++) {
-      const u = 0.02 + (k / 39) * 0.8, [x, y] = edge(u);
-      const len = H * (0.16 + 0.16 * Math.sin(u * Math.PI)) * (0.8 + R2(r) * 0.4);
-      feather(x, y + 3, Math.PI * 0.5 - 0.35 - u * 0.5 + (R2(r) - 0.5) * 0.2, len, 26, 0.9, 1);
-    }
-    // ragged wisps of ink trailing off the feather tips
-    g.filter = 'blur(1.5px)';
-    for (let k = 0; k < 90; k++) {
-      const u = R2(r), [x, y] = edge(u), outer = Math.max(0, (u - 0.45) / 0.55);
-      const L0 = H * (0.3 + 0.4 * Math.sin(u * Math.PI * 0.85) + 0.25 * outer) * (0.7 + R2(r) * 0.4), a = Math.PI * 0.5 - 0.25 - outer * 0.75;
-      g.strokeStyle = `rgba(30,18,12,${0.25 + R2(r) * 0.4})`; g.lineWidth = 1 + R2(r) * 2.5;
-      g.beginPath(); g.moveTo(x + Math.cos(a) * L0 * 0.8, y + Math.sin(a) * L0 * 0.8);
-      g.quadraticCurveTo(x + Math.cos(a) * L0 * 1.05 + (R2(r) - 0.5) * 30, y + Math.sin(a) * L0 * 1.05, x + Math.cos(a + (R2(r) - 0.5) * 0.4) * L0 * (1.15 + R2(r) * 0.25), y + Math.sin(a) * L0 * (1.2 + R2(r) * 0.2));
-      g.stroke();
+    // three rows of overlapping feathers, each a little lighter and warmer, each row's top edge lit
+    const rows = [[0.0, 0.42, [44, 26, 18], 0.9, 30], [0.0, 0.66, [52, 30, 20], 0.92, 26], [0.0, 0.9, [40, 24, 17], 0.9, 24]];
+    rows.forEach(([, frac, col, a, wid], ri) => {
+      for (let k = 0; k < 54; k++) {
+        const u = k / 53, [x0, y0] = top(u * 0.98), [, yb] = bot(Math.min(1, u + 0.03));
+        const drop = (yb - y0) * frac * (0.85 + R2(r) * 0.3);
+        const x1 = x0 + 10 + u * 34 + (R2(r) - 0.5) * 14, y1 = y0 + drop;
+        const oy = (yb - y0) * (ri * 0.16);
+        feather(x0 + (R2(r) - 0.5) * 6, y0 + oy, x1, y1 + oy * 0.4, wid * (1 - u * 0.4), col, a, ri === 2 ? 1.5 : 0.6);
+      }
+    });
+    // warm light caught along the top of every row (the reference's orange streaks through the plumage)
+    g.globalCompositeOperation = 'lighter';
+    [0.0, 0.16, 0.32].forEach((off, ri) => {
+      for (let k = 0; k < 38; k++) {
+        const u = R2(r) * 0.95, [x0, y0] = top(u), [, yb] = bot(u);
+        const y = y0 + (yb - y0) * off + 6, len = 30 + R2(r) * 60 * (1 - u * 0.5);
+        g.filter = 'blur(1.2px)';
+        g.strokeStyle = `rgba(255,${120 + R2(r) * 60 | 0},50,${(0.35 - ri * 0.08) * (1 - u * 0.6)})`; g.lineWidth = 2 + R2(r) * 2;
+        g.beginPath(); g.moveTo(u * W, y); g.quadraticCurveTo(u * W + len * 0.4, y + len * 0.5, u * W + len * 0.25, y + len); g.stroke();
+      }
+    });
+    g.filter = 'none';
+    g.globalCompositeOperation = 'source-over';
+    // ragged smoky wisps trailing off the bottom
+    g.filter = 'blur(2px)';
+    for (let k = 0; k < 120; k++) {
+      const u = R2(r), [x, y] = bot(u);
+      g.strokeStyle = `rgba(32,20,15,${0.2 + R2(r) * 0.4})`; g.lineWidth = 2 + R2(r) * 5;
+      g.beginPath(); g.moveTo(x, y - 20); g.quadraticCurveTo(x + (R2(r) - 0.5) * 30, y + 20, x + (R2(r) - 0.3) * 40, y + 30 + R2(r) * 50 * (1 - u)); g.stroke();
     }
     g.filter = 'none';
-    // the glowing gold leading edge, strongest near the body, and warm light bleeding into the top feathers
+    // the gold leading edge: a soft wide glow, a bright core line, brightest by the body
     g.globalCompositeOperation = 'lighter';
-    for (const [w, a, blur] of [[22, 0.35, 10], [9, 0.7, 4], [3, 1, 0]]) {
-      g.filter = blur ? `blur(${blur}px)` : 'none';
-      g.lineWidth = w; g.lineCap = 'round';
-      for (let k = 0; k < 60; k++) {
-        const u0 = k / 60, u1 = (k + 1) / 60, [x0, y0] = edge(u0), [x1, y1] = edge(u1), fade = Math.max(0, 1 - u0 * 0.85);
-        g.strokeStyle = `rgba(255,${170 + 50 * fade | 0},${70 + 40 * fade | 0},${a * fade})`;
-        g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+    for (const [w, a, blur] of [[26, 0.3, 12], [10, 0.6, 5], [3.5, 1, 0]]) {
+      g.filter = blur ? `blur(${blur}px)` : 'none'; g.lineWidth = w; g.lineCap = 'round';
+      for (let k = 0; k < 70; k++) {
+        const u0 = k / 70, u1 = (k + 1) / 70, [x0, y0] = top(u0), [x1, y1] = top(u1), fade = Math.max(0.15, 1 - u0 * 0.8);
+        g.strokeStyle = `rgba(255,${160 + 60 * fade | 0},${60 + 50 * fade | 0},${a * fade})`;
+        g.beginPath(); g.moveTo(x0, y0 + 3); g.lineTo(x1, y1 + 3); g.stroke();
       }
     }
-    // gold veins along a few upper feathers + sparks
+    // a warm glow where the wing meets her back
     g.filter = 'none';
-    for (let k = 0; k < 26; k++) {
-      const u = R2(r) * 0.85, [x, y] = edge(u), a = Math.PI * 0.5 - 0.3 - u * 0.6, L = H * (0.08 + R2(r) * 0.2);
-      g.strokeStyle = `rgba(255,190,90,${0.25 + R2(r) * 0.4})`; g.lineWidth = 1.5;
-      g.beginPath(); g.moveTo(x, y + 4); g.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); g.stroke();
-    }
-    for (let k = 0; k < 70; k++) { const u = R2(r), [x, y] = edge(u); g.fillStyle = `rgba(255,${180 + R2(r) * 60 | 0},90,${0.3 + R2(r) * 0.6})`; g.beginPath(); g.arc(x + (R2(r) - 0.5) * 40, y + R2(r) * H * 0.5, 0.8 + R2(r) * 2.2, 0, 7); g.fill(); }
+    const rg = g.createRadialGradient(0, H * 0.56, 0, 0, H * 0.56, H * 0.6);
+    rg.addColorStop(0, 'rgba(255,170,80,0.55)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, W * 0.4, H);
+    // embers
+    for (let k = 0; k < 90; k++) { const u = R2(r), [x, y0] = top(u), [, yb] = bot(u), y = y0 + (yb - y0) * R2(r); g.fillStyle = `rgba(255,${170 + R2(r) * 70 | 0},90,${0.35 + R2(r) * 0.6})`; g.beginPath(); g.arc(x, y, 0.8 + R2(r) * 2.4, 0, 7); g.fill(); }
     g.globalCompositeOperation = 'source-over';
-    void root;
   });
 }
 // soft radial glow (halo light behind her)
@@ -185,7 +195,9 @@ Object.assign(Fx.prototype, {
     // a warm glow behind her back and a thin halo ring (the reference's backlight)
     const glow = o.halo ? new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(1.6, 1.25, 0.8) })) : null;
     const ring = o.halo ? new THREE.Mesh(new THREE.TorusGeometry(1, 0.012, 6, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.8, 0.9), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })) : null;
-    if (glow) { g.add(glow); g.add(ring); }
+    // and the thin vertical shaft of light running through her (reference)
+    const shaft = o.halo ? new THREE.Mesh(plane(), new THREE.MeshBasicMaterial({ map: glowTex(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, color: new THREE.Color(2.0, 1.6, 1.0) })) : null;
+    if (glow) { g.add(glow); g.add(ring); g.add(shaft); }
     let t = 0;
     const spread = o.spread ?? 0.22, flap = o.flap ?? 0.08;
     this.effects.push({ update: (dt) => {
@@ -194,28 +206,29 @@ Object.assign(Fx.prototype, {
       const fade = life === Infinity ? 1 : Math.min(1, Math.max(0, (life - t) / 0.3));
       anchor(_v); g.position.copy(_v);
       g.rotation.set(0, yawOf(), 0);
-      const s = size * (0.2 + 0.8 * e), f = Math.sin(t * 3.2) * flap;
+      const s = size * (0.35 + 0.65 * e), f = Math.sin(t * 2.4) * flap;
       // each wing: a 2:1 plane, its root (texture left edge, 36% down) on the spine, slightly behind
       // the back; the wings open from folded (pointing back) to spread wide
       const open = 0.15 + 0.85 * e;
       for (const [w, sd] of [[L, 1], [Rw, -1]]) {
         w.scale.set(sd * s * 2, s, 1);
-        const a = sd * ((1 - open) * 1.3 + 0.12 + f);                     // swing about the root
-        w.rotation.set(0, a, sd * (0.05 + f * 0.4));
-        // put the texture's root on the anchor: rotate the root offset with the wing
-        const ox = s, oy = -0.14 * s;
-        w.position.set(sd * ox * Math.cos(a), oy + 0.12 * s, -0.18 - ox * Math.sin(Math.abs(a)));
+        const a = sd * ((1 - open) * 1.3 + 0.1 + f);                      // swing about the root (folded → open)
+        w.rotation.set(0, a, 0);
+        // the texture's root (left edge, 56% down) sits on the spine just behind the shoulder blades
+        const ox = s, oy = 0.06 * s;
+        w.position.set(sd * ox * Math.cos(a), oy + 0.08, -0.16 - ox * Math.sin(Math.abs(a)));
         w.material.opacity = fade;
       }
       if (glow) {
         const pulse = 1 + Math.sin(t * 2) * 0.05;
         glow.position.set(0, 0.2, -0.4); glow.scale.setScalar(s * 1.9 * e * pulse); glow.material.opacity = fade * 0.9;
-        ring.position.set(0, 0.25, -0.35); ring.scale.setScalar(s * 0.55 * e); ring.material.opacity = fade * 0.8;
+        ring.position.set(0, 0.0, -0.35); ring.scale.setScalar(s * 0.68 * e); ring.material.opacity = fade * 0.8;
+        shaft.position.set(0, 0.1, -0.45); shaft.scale.set(0.14, s * 5 * e, 1); shaft.material.opacity = fade * 0.75;
       }
       if (R() < 0.7) { const sd = R() < 0.5 ? 1 : -1, u = R(); this.fire.emit(_v.x + Math.cos(g.rotation.y) * sd * s * 1.8 * u, _v.y + s * (0.15 - u * 0.25) + R() * 0.6, _v.z - Math.sin(g.rotation.y) * sd * s * 1.8 * u, (R() - 0.5), 0.6 + R(), (R() - 0.5), 0.9, 0.07, 0.0, GOLD, GOLD0, 1, -0.4); }
       if (t >= life || (o.until && o.until())) {
         this.scene.remove(g); L.material.dispose(); Rw.material.dispose();
-        if (glow) { glow.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); }
+        if (glow) { glow.material.dispose(); ring.geometry.dispose(); ring.material.dispose(); shaft.material.dispose(); }
         return false;
       }
       return true;
@@ -246,7 +259,7 @@ Object.assign(Fx.prototype, {
       const c = at(0, down ? 1.6 : 1.4, 0.6);
       this.ribbon(c, e1, e2, down ? 2.3 : 2.0, down ? 2.6 : 2.9, { pal: GLOSS.inkDark, w: 0.9, sweep: 0.08, life: 0.38, grow: 0.15, flare: 0.5 });
       this.ribbon(c, e1, e2, down ? 2.45 : 2.15, down ? 2.5 : 2.8, { pal: GLOSS.ink, w: 0.22, sweep: 0.08, life: 0.34, grow: 0.15, delay: 0.02 });
-      if (view) this.inkWings((out) => view.rig.bones[3].getWorldPosition(out), () => Math.atan2(F.x, F.z), down ? 3.2 : 2.6, 0.45, { spread: 0.12, flap: 0.3 });
+      if (view) this.inkWings((out) => view.rig.bones[3].getWorldPosition(out), () => Math.atan2(F.x, F.z), down ? 1.6 : 1.4, 0.45, { spread: 0.12, flap: 0.18 });
       for (let k = 0; k < 16; k++) {
         const a = R() * Math.PI, rr = 1.6 + R() * 0.9, p = c.clone().addScaledVector(e1.clone().normalize(), Math.cos(a) * rr).addScaledVector(e2.clone().normalize(), Math.sin(a) * rr);
         this.fire.emit(p.x, p.y, p.z, F.x * 6 + (R() - 0.5) * 3, (R() - 0.3) * 3, F.z * 6 + (R() - 0.5) * 3, 0.4, 0.07, 0.0, GOLD, GOLD0, 2, 2);
