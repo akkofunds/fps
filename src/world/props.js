@@ -111,33 +111,44 @@ let LEAF_DETAIL = 2, LEAF_LITE = false;
 // per vertex), alpha-cut — every canopy is built from cards of this round a dark inner hull
 let LEAF_TEX = null;
 function leafTexture() {
-  // a cluster of real-looking lobed (oak / maple) leaves with their own colour drift baked in —
-  // some redder, some yellower, a few browned — tinted per tree by the vertex colour; ragged edges
-  // and gaps so light shows through the canopy
+  // a spray of real leaves: twigs fanning out from the bottom, each carrying lobed (oak / maple)
+  // leaves with their own colour drift — redder, yellower, a few browned. The outline is ragged and
+  // open (light comes through), so a canopy built from these never reads as balls.
   if (LEAF_TEX) return LEAF_TEX;
   const S = 512, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d');
   const r = mulberry32(77);
   const leaf = (L, W, lobes) => {
-    // a lobed outline along the midrib (x from -L/2 stem to +L/2 tip)
     g.beginPath(); g.moveTo(-L / 2, 0);
     const n = lobes * 2;
-    for (let k = 1; k <= n; k++) { const u = k / n, x = -L / 2 + u * L, w = W * Math.sin(u * Math.PI) * (k % 2 ? 1 : 0.62); g.quadraticCurveTo(x - L / n * 0.5, -w * 1.1, x, k === n ? 0 : -w); }
-    for (let k = n - 1; k >= 0; k--) { const u = k / n, x = -L / 2 + u * L, w = W * Math.sin(u * Math.PI) * (k % 2 ? 1 : 0.62); g.quadraticCurveTo(x + L / n * 0.5, w * 1.1, x, w); }
+    for (let k = 1; k <= n; k++) { const u = k / n, x = -L / 2 + u * L, w = W * Math.sin(u * Math.PI) * (k % 2 ? 1 : 0.6); g.quadraticCurveTo(x - L / n * 0.5, -w * 1.15, x, k === n ? 0 : -w); }
+    for (let k = n - 1; k >= 0; k--) { const u = k / n, x = -L / 2 + u * L, w = W * Math.sin(u * Math.PI) * (k % 2 ? 1 : 0.6); g.quadraticCurveTo(x + L / n * 0.5, w * 1.15, x, w); }
     g.closePath(); g.fill();
   };
-  for (let i = 0; i < 340; i++) {
-    const a = r() * 6.283, d = Math.pow(r(), 0.62) * 220, x = S / 2 + Math.cos(a) * d, y = S / 2 + Math.sin(a) * d * 0.9;
-    const L = 30 + r() * 26, W = 11 + r() * 7, rot = a + (r() - 0.5) * 1.6;
-    // leaves in shadow deeper in the clump are darker; colour drift: red ↔ gold ↔ brown
-    const shade = 0.62 + r() * 0.38 - (1 - d / 220) * 0.18;
-    const hue = r();
-    const rr = 255 * shade, gg = 255 * shade * (hue < 0.3 ? 0.68 : hue < 0.8 ? 0.9 : 1.0), bb = 255 * shade * (hue < 0.3 ? 0.62 : hue < 0.9 ? 0.8 : 0.55);
+  const paint = (x, y, rot, L) => {
+    const shade = 0.6 + r() * 0.4, hue = r();
+    const rr = 255 * shade, gg = 255 * shade * (hue < 0.3 ? 0.66 : hue < 0.8 ? 0.9 : 1.0), bb = 255 * shade * (hue < 0.3 ? 0.6 : hue < 0.9 ? 0.78 : 0.55);
     g.save(); g.translate(x, y); g.rotate(rot);
     g.fillStyle = `rgb(${rr | 0},${gg | 0},${bb | 0})`;
-    leaf(L, W, 2 + Math.floor(r() * 2));
-    g.strokeStyle = 'rgba(60,25,5,0.35)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-L / 2 - 4, 0); g.lineTo(L / 2 - 3, 0); g.stroke();
+    leaf(L, L * (0.36 + r() * 0.12), 2 + Math.floor(r() * 2));
+    g.strokeStyle = 'rgba(70,30,8,0.4)'; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-L / 2 - 5, 0); g.lineTo(L / 2 - 3, 0); g.stroke();
     g.restore();
+  };
+  const twigs = 7;
+  for (let t = 0; t < twigs; t++) {
+    let x = S / 2 + (r() - 0.5) * 50, y = S * 0.92, a = -Math.PI / 2 + (t / (twigs - 1) - 0.5) * 2.3 + (r() - 0.5) * 0.3;
+    const len = S * (0.5 + r() * 0.32), steps = 13, bend = (r() - 0.5) * 0.08;
+    const pts = [];
+    g.strokeStyle = 'rgb(66,38,20)'; g.lineWidth = 3; g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < steps; k++) { a += bend; x += Math.cos(a) * len / steps; y += Math.sin(a) * len / steps; g.lineTo(x, y); pts.push([x, y, a, (k + 1) / steps]); }
+    g.stroke();
+    pts.forEach(([px, py, pa, u], k) => {
+      if (u < 0.2) return;
+      const side = k % 2 ? 1 : -1, L = 32 + 30 * Math.sin(u * Math.PI) + r() * 14;
+      paint(px + Math.cos(pa + side * 1.57) * L * 0.42, py + Math.sin(pa + side * 1.57) * L * 0.42, pa + side * (0.9 + r() * 0.5), L);
+    });
+    const [tx, ty, ta] = pts[pts.length - 1];
+    for (let k = 0; k < 3; k++) paint(tx + Math.cos(ta) * 16, ty + Math.sin(ta) * 16, ta + (k - 1) * 0.7, 38 + r() * 16);
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.generateMipmaps = true;
@@ -162,7 +173,6 @@ function barkTexture() {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.repeat.set(2, 3);
   return (BARK_TEX = t);
 }
-const solidUV = (g) => { const n = g.attributes.position.count, uv = new Float32Array(n * 2).fill(0.5); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); return g; };
 // one foliage clump: a dark inner hull + leaf cards scattered over its surface, facing outward.
 // Each clump shades as its own soft ball (normals bent away from the clump centre, a little away
 // from the crown centre too) and carries its own light→shadow gradient: the "cauliflower" canopy of
@@ -176,38 +186,37 @@ const LEAF_PALS = [
 ];
 let LEAF_TOP = LEAF_PALS[0][0], LEAF_MID = LEAF_PALS[0][1], LEAF_BOT = LEAF_PALS[0][2];
 function foliage(out, s, x, y, z, sy, seed, ctr = [x, y - s, z], warm = 0) {
+  // a cluster of leaf sprays: cards scattered THROUGH a lumpy volume (not wrapped round a ball),
+  // each tilted its own way, no solid core — ragged edges and gaps, like a real branch of leaves
   const r = mulberry32(seed);
   const parts = [];
-  if (LEAF_DETAIL <= 0) { const g = jitter(new THREE.IcosahedronGeometry(s, 1), 0.1 * s, seed); g.scale(1, sy, 1); g.translate(x, y, z); parts.push(solidUV(ni(g))); }
-  else {
-    const hull = ni(jitter(new THREE.IcosahedronGeometry(s * 0.5, 1), 0.1 * s, seed)); hull.scale(1, sy, 1);
-    { const hp = hull.attributes.position, uv = new Float32Array(hp.count * 2), v = new THREE.Vector3();
-      for (let i = 0; i < hp.count; i++) { v.fromBufferAttribute(hp, i).normalize(); uv[i * 2] = 0.5 + 0.26 * v.x + 0.08 * v.z; uv[i * 2 + 1] = 0.5 + 0.26 * v.y - 0.08 * v.z; }
-      hull.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); }
-    hull.translate(x, y, z); parts.push(hull);
-    const n = LEAF_DETAIL >= 2 ? 20 : LEAF_LITE ? 6 : 9;
-    const u = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
-    for (let k = 0; k < n; k++) {
-      u.set(r() * 2 - 1, r() * 1.7 - 0.5, r() * 2 - 1).normalize();
-      const cs = s * (0.9 + r() * 0.5), d = s * (0.5 + r() * 0.42);
-      const card = new THREE.PlaneGeometry(cs, cs);
-      q.setFromUnitVectors(Z, u).multiply(new THREE.Quaternion().setFromAxisAngle(Z, r() * 6.283));
-      m.compose(new THREE.Vector3(x + u.x * d, y + u.y * d * sy, z + u.z * d), q, new THREE.Vector3(1, 1, 1));
-      card.applyMatrix4(m);
-      parts.push(ni(card));
-    }
+  const n = LEAF_DETAIL >= 2 ? 16 : LEAF_DETAIL >= 1 ? (LEAF_LITE ? 5 : 8) : 3;
+  const u = new THREE.Vector3(), d = new THREE.Vector3(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), Z = new THREE.Vector3(0, 0, 1);
+  const ax = 0.8 + r() * 0.5, az = 0.8 + r() * 0.5;                       // each cluster its own lumpy shape
+  for (let k = 0; k < n; k++) {
+    do u.set(r() * 2 - 1, r() * 2 - 1, r() * 2 - 1); while (u.lengthSq() > 1);
+    const px = x + u.x * s * 0.8 * ax, py = y + u.y * s * 0.6 * sy, pz = z + u.z * s * 0.8 * az;
+    // facing: mostly away from the crown centre, tilted at random (no two sprays parallel)
+    d.set(px - ctr[0], (py - ctr[1]) * 0.6, pz - ctr[2]).normalize().add(new THREE.Vector3(r() * 2 - 1, r() * 1.6 - 0.4, r() * 2 - 1).multiplyScalar(0.9)).normalize();
+    const cs = s * (LEAF_DETAIL <= 0 ? 2.0 : 1.05 + r() * 0.6);
+    const card = new THREE.PlaneGeometry(cs, cs);
+    card.translate(0, cs * 0.2, 0);                                         // the spray grows out from its twig
+    q.setFromUnitVectors(Z, d).multiply(new THREE.Quaternion().setFromAxisAngle(Z, r() * 6.283));
+    m.compose(new THREE.Vector3(px, py, pz), q, new THREE.Vector3(1, 1, 1));
+    card.applyMatrix4(m);
+    parts.push(ni(card));
   }
   const hue = (r() - 0.5) * 0.25 + warm;
-  const c = new THREE.Color(), a = new THREE.Vector3(), b = new THREE.Vector3();
+  const c = new THREE.Color(), a = new THREE.Vector3();
   for (const g of parts) {
     const p = g.attributes.position, nrm = new Float32Array(p.count * 3), col = new Float32Array(p.count * 3);
+    const jn = new THREE.Vector3(r() - 0.5, r() - 0.5, r() - 0.5).multiplyScalar(0.6);
     for (let i = 0; i < p.count; i++) {
       const px = p.getX(i), py = p.getY(i), pz = p.getZ(i);
-      a.set(px - x, (py - y) / sy, pz - z).normalize();
-      b.set(px - ctr[0], py - ctr[1], pz - ctr[2]).normalize();
-      a.multiplyScalar(0.42).addScaledVector(b, 0.58); a.y += 0.1; a.normalize();
+      // light the whole crown as one mass (sunlit outside, shaded inside/below), a little per spray
+      a.set(px - ctr[0], (py - ctr[1]) * 1.2, pz - ctr[2]).normalize().add(jn); a.y += 0.15; a.normalize();
       nrm.set([a.x, a.y, a.z], i * 3);
-      const t = Math.min(1, Math.max(0, ((py - y) / (s * sy) + 1) / 2));
+      const t = Math.min(1, Math.max(0, (py - ctr[1]) / 6 + 0.55));
       if (t > 0.5) c.copy(LEAF_MID).lerp(LEAF_TOP, (t - 0.5) * 2); else c.copy(LEAF_BOT).lerp(LEAF_MID, t * 2);
       c.r *= 1 + hue; c.g *= 1 + hue * 0.3;
       col.set([c.r, c.g, c.b], i * 3);
