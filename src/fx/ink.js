@@ -27,80 +27,84 @@ function canvasTex(key, w, h, paint) {
 // into ragged smoky wisps. Texture 1024×512 (2:1): the root is at the left edge, 56% down; the tip
 // at the top right. One wing ≈ 1.85× her height wide and ≈ her height tall (reference proportions).
 function wingTex() {
-  return canvasTex('wing3', 1024, 512, (g, W, H) => {
-    const r = mulberry(19);
-    // leading edge (top): root (0, .56H) → tip (W, .04H), gently convex
-    const top = (u) => [u * W, H * (0.56 - 0.52 * Math.pow(u, 0.82))];
-    // trailing edge (bottom): hangs low by the body, rises toward the tip
-    const bot = (u) => [u * W, H * (0.98 - 0.08 * u - 0.62 * Math.pow(u, 2.4))];
-    // ---- the body of the wing: long feathers from the leading edge down to the trailing edge
-    const feather = (x0, y0, x1, y1, wid, col, a, blur) => {
-      const len = Math.hypot(x1 - x0, y1 - y0), ang = Math.atan2(y1 - y0, x1 - x0);
-      g.save(); g.translate(x0, y0); g.rotate(ang); g.filter = blur ? `blur(${blur}px)` : 'none';
+  return canvasTex('wing4', 1024, 512, (g, W, H) => {
+    const r = mulberry(23);
+    const top = (u) => H * (0.55 - 0.5 * Math.pow(u, 0.85));                 // leading edge (y)
+    const bot = (u) => H * (0.99 - 0.1 * u - 0.58 * Math.pow(u, 3));         // where the mass ends (y)
+    const lerp = (a, b, k) => a + (b - a) * k;
+    // 1. the solid dark silhouette of the wing (soft edged)
+    g.filter = 'blur(3px)';
+    g.fillStyle = 'rgba(30,18,13,0.94)';
+    g.beginPath(); g.moveTo(0, top(0));
+    for (let k = 1; k <= 60; k++) { const u = k / 60; g.lineTo(u * W, top(u)); }
+    for (let k = 60; k >= 0; k--) { const u = k / 60; g.lineTo(u * W, bot(u)); }
+    g.closePath(); g.fill();
+    g.filter = 'none';
+    // one rounded feather: pointing down-outward from (x, y), lit along one edge
+    const feather = (x, y, ang, len, wid, base, lit, blur = 0) => {
+      g.save(); g.translate(x, y); g.rotate(ang); g.filter = blur ? `blur(${blur}px)` : 'none';
+      g.beginPath(); g.moveTo(0, -wid * 0.45);
+      g.bezierCurveTo(len * 0.55, -wid * 0.6, len * 0.95, -wid * 0.35, len, 0);
+      g.bezierCurveTo(len * 0.95, wid * 0.35, len * 0.55, wid * 0.6, 0, wid * 0.45); g.closePath();
       const grd = g.createLinearGradient(0, 0, len, 0);
-      grd.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${a})`);
-      grd.addColorStop(0.7, `rgba(${col[0] * 0.8 | 0},${col[1] * 0.8 | 0},${col[2] * 0.8 | 0},${a * 0.85})`);
-      grd.addColorStop(1, `rgba(${col[0] * 0.6 | 0},${col[1] * 0.6 | 0},${col[2] * 0.6 | 0},0)`);
-      g.fillStyle = grd;
-      g.beginPath(); g.moveTo(0, -wid * 0.5); g.quadraticCurveTo(len * 0.5, -wid * 0.62, len, (R2(r) - 0.5) * wid * 0.3);
-      g.quadraticCurveTo(len * 0.5, wid * 0.62, 0, wid * 0.5); g.closePath(); g.fill();
+      grd.addColorStop(0, `rgba(${base[0]},${base[1]},${base[2]},0.96)`); grd.addColorStop(1, `rgba(${base[0] * 0.7 | 0},${base[1] * 0.7 | 0},${base[2] * 0.7 | 0},0.9)`);
+      g.fillStyle = grd; g.fill();
+      if (lit) { g.strokeStyle = `rgba(150,82,40,${lit})`; g.lineWidth = 1.6; g.beginPath(); g.moveTo(len * 0.08, -wid * 0.48); g.bezierCurveTo(len * 0.55, -wid * 0.6, len * 0.95, -wid * 0.35, len, 0); g.stroke(); }
+      g.strokeStyle = 'rgba(12,8,6,0.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(2, 0); g.lineTo(len * 0.9, 0); g.stroke();
       g.restore(); g.filter = 'none';
     };
-    // back layer: smoky, blurred, the full drop from leading to trailing edge
+    // 2. long primaries / secondaries along the bottom, overhanging the edge into the air
+    for (let k = 0; k < 64; k++) {
+      const u = k / 63, x = u * W * 0.98, yb = bot(u), yt = top(u), h = yb - yt;
+      const len = Math.max(40, h * 0.55) * (0.9 + R2(r) * 0.3), ang = Math.PI * 0.5 - 0.15 - u * 0.75 + (R2(r) - 0.5) * 0.1;
+      feather(x + (R2(r) - 0.5) * 8, yb - len * 0.62 * Math.sin(ang), ang, len, 34 - u * 12, [34, 20, 14], 0.25, 1);
+    }
+    // 3. rows of overlapping coverts, bottom row first so each upper row lies over the one below
+    const rows = 4;
+    for (let ri = rows - 1; ri >= 0; ri--) {
+      const n = 46 - ri * 4;
+      for (let k = 0; k < n; k++) {
+        const u = (k + (ri % 2) * 0.5) / n, x = u * W * 0.98, yt = top(u), yb = bot(u), h = yb - yt;
+        const y = lerp(yt, yb, 0.05 + ri * 0.19), len = h * (0.24 + 0.04 * ri) * (0.85 + R2(r) * 0.3);
+        const ang = Math.PI * 0.5 - 0.25 - u * 0.65 + (R2(r) - 0.5) * 0.12;
+        const shade = 1 - ri * 0.08;
+        feather(x, y, ang, len, (30 - u * 10) * (1 - ri * 0.06), [44 * shade | 0, 26 * shade | 0, 18 * shade | 0], 0.45 - ri * 0.07);
+      }
+    }
+    // 4. warm light glancing through the upper plumage (the reference's orange streaks)
+    g.globalCompositeOperation = 'lighter';
+    g.filter = 'blur(1.5px)';
     for (let k = 0; k < 70; k++) {
-      const u = k / 69, [x0, y0] = top(u * 0.97), [, yb] = bot(Math.min(1, u + 0.04));
-      const x1 = x0 + 18 + u * 40 + (R2(r) - 0.5) * 20, y1 = yb + (R2(r) - 0.3) * 30;
-      feather(x0, y0 + 4, x1, y1, 46 - u * 18, [34, 20, 15], 0.88, 4);
+      const u = R2(r) * 0.9, x = u * W, yt = top(u), yb = bot(u), y = yt + (yb - yt) * R2(r) * 0.45, len = 25 + R2(r) * 50;
+      const ang = Math.PI * 0.5 - 0.25 - u * 0.65;
+      g.strokeStyle = `rgba(255,${110 + R2(r) * 70 | 0},40,${(0.28 + R2(r) * 0.25) * (1 - u * 0.5)})`; g.lineWidth = 1.5 + R2(r) * 2;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); g.stroke();
     }
-    // three rows of overlapping feathers, each a little lighter and warmer, each row's top edge lit
-    const rows = [[0.0, 0.42, [44, 26, 18], 0.9, 30], [0.0, 0.66, [52, 30, 20], 0.92, 26], [0.0, 0.9, [40, 24, 17], 0.9, 24]];
-    rows.forEach(([, frac, col, a, wid], ri) => {
-      for (let k = 0; k < 54; k++) {
-        const u = k / 53, [x0, y0] = top(u * 0.98), [, yb] = bot(Math.min(1, u + 0.03));
-        const drop = (yb - y0) * frac * (0.85 + R2(r) * 0.3);
-        const x1 = x0 + 10 + u * 34 + (R2(r) - 0.5) * 14, y1 = y0 + drop;
-        const oy = (yb - y0) * (ri * 0.16);
-        feather(x0 + (R2(r) - 0.5) * 6, y0 + oy, x1, y1 + oy * 0.4, wid * (1 - u * 0.4), col, a, ri === 2 ? 1.5 : 0.6);
-      }
-    });
-    // warm light caught along the top of every row (the reference's orange streaks through the plumage)
-    g.globalCompositeOperation = 'lighter';
-    [0.0, 0.16, 0.32].forEach((off, ri) => {
-      for (let k = 0; k < 38; k++) {
-        const u = R2(r) * 0.95, [x0, y0] = top(u), [, yb] = bot(u);
-        const y = y0 + (yb - y0) * off + 6, len = 30 + R2(r) * 60 * (1 - u * 0.5);
-        g.filter = 'blur(1.2px)';
-        g.strokeStyle = `rgba(255,${120 + R2(r) * 60 | 0},50,${(0.35 - ri * 0.08) * (1 - u * 0.6)})`; g.lineWidth = 2 + R2(r) * 2;
-        g.beginPath(); g.moveTo(u * W, y); g.quadraticCurveTo(u * W + len * 0.4, y + len * 0.5, u * W + len * 0.25, y + len); g.stroke();
-      }
-    });
-    g.filter = 'none';
-    g.globalCompositeOperation = 'source-over';
-    // ragged smoky wisps trailing off the bottom
-    g.filter = 'blur(2px)';
-    for (let k = 0; k < 120; k++) {
-      const u = R2(r), [x, y] = bot(u);
-      g.strokeStyle = `rgba(32,20,15,${0.2 + R2(r) * 0.4})`; g.lineWidth = 2 + R2(r) * 5;
-      g.beginPath(); g.moveTo(x, y - 20); g.quadraticCurveTo(x + (R2(r) - 0.5) * 30, y + 20, x + (R2(r) - 0.3) * 40, y + 30 + R2(r) * 50 * (1 - u)); g.stroke();
+    g.filter = 'none'; g.globalCompositeOperation = 'source-over';
+    // 5. smoky wisps trailing from the bottom edge
+    g.filter = 'blur(2.5px)';
+    for (let k = 0; k < 110; k++) {
+      const u = R2(r), x = u * W, y = bot(u) + 10;
+      g.strokeStyle = `rgba(30,18,13,${0.18 + R2(r) * 0.35})`; g.lineWidth = 3 + R2(r) * 6;
+      g.beginPath(); g.moveTo(x, y - 10); g.quadraticCurveTo(x + (R2(r) - 0.5) * 30, y + 25, x + (R2(r) - 0.2) * 40, Math.min(H - 2, y + 20 + R2(r) * 60 * (1 - u))); g.stroke();
     }
     g.filter = 'none';
-    // the gold leading edge: a soft wide glow, a bright core line, brightest by the body
+    // 6. the gold leading edge: wide soft glow, bright core, brightest at the root
     g.globalCompositeOperation = 'lighter';
-    for (const [w, a, blur] of [[26, 0.3, 12], [10, 0.6, 5], [3.5, 1, 0]]) {
+    for (const [w, a, blur] of [[30, 0.3, 14], [11, 0.6, 5], [3.5, 1, 0]]) {
       g.filter = blur ? `blur(${blur}px)` : 'none'; g.lineWidth = w; g.lineCap = 'round';
       for (let k = 0; k < 70; k++) {
-        const u0 = k / 70, u1 = (k + 1) / 70, [x0, y0] = top(u0), [x1, y1] = top(u1), fade = Math.max(0.15, 1 - u0 * 0.8);
+        const u0 = k / 70, u1 = (k + 1) / 70, fade = Math.max(0.15, 1 - u0 * 0.8);
         g.strokeStyle = `rgba(255,${160 + 60 * fade | 0},${60 + 50 * fade | 0},${a * fade})`;
-        g.beginPath(); g.moveTo(x0, y0 + 3); g.lineTo(x1, y1 + 3); g.stroke();
+        g.beginPath(); g.moveTo(u0 * W, top(u0) + 3); g.lineTo(u1 * W, top(u1) + 3); g.stroke();
       }
     }
-    // a warm glow where the wing meets her back
     g.filter = 'none';
-    const rg = g.createRadialGradient(0, H * 0.56, 0, 0, H * 0.56, H * 0.6);
-    rg.addColorStop(0, 'rgba(255,170,80,0.55)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
-    g.fillStyle = rg; g.fillRect(0, 0, W * 0.4, H);
-    // embers
-    for (let k = 0; k < 90; k++) { const u = R2(r), [x, y0] = top(u), [, yb] = bot(u), y = y0 + (yb - y0) * R2(r); g.fillStyle = `rgba(255,${170 + R2(r) * 70 | 0},90,${0.35 + R2(r) * 0.6})`; g.beginPath(); g.arc(x, y, 0.8 + R2(r) * 2.4, 0, 7); g.fill(); }
+    // a warm glow where the wing meets her back, and embers
+    const rg = g.createRadialGradient(0, H * 0.6, 0, 0, H * 0.6, H * 0.55);
+    rg.addColorStop(0, 'rgba(255,170,80,0.6)'); rg.addColorStop(1, 'rgba(255,120,40,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, W * 0.35, H);
+    for (let k = 0; k < 80; k++) { const u = R2(r), x = u * W, y = top(u) + (bot(u) - top(u)) * R2(r); g.fillStyle = `rgba(255,${170 + R2(r) * 70 | 0},90,${0.35 + R2(r) * 0.6})`; g.beginPath(); g.arc(x, y, 0.8 + R2(r) * 2.2, 0, 7); g.fill(); }
     g.globalCompositeOperation = 'source-over';
   });
 }
