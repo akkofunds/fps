@@ -112,6 +112,13 @@ const STYLES = {
   brawler: { swing: 1.05, swingR: 1, lean: 1, bounce: 1, sway: 0.8, settle: 0.55, roll: 1, twist: 1, elbow: 1, kick: 1, stride: 1, fidget: 'fidgetP' },
   // lighter on her feet; the staff arm stays steadier, the free arm swings naturally
   caster: { swing: 0.95, swingR: 0.45, lean: 0.9, bounce: 0.95, sway: 1, settle: 0.5, roll: 1.1, twist: 0.95, elbow: 0.95, kick: 0.95, stride: 1, fidget: 'fidgetM' },
+  // anime action-game heroine (Inkweaver): a clean, controlled, confident run. Clear but natural hip
+  // sway and weight transfer, a slight forward lean with the chest up, a weighted up-and-down, steps
+  // a little inside the hip line, and arms close to the body swinging cleanly opposite the legs
+  femme: { swing: 1.0, swingR: 1, lean: 1.15, bounce: 0.92, sway: 1.8, runSway: 1.9, settle: 0.45, roll: 1.7, twist: 1.4, elbow: 1.05, kick: 1.05, stride: 0.95,
+    width: 0.72, armIn: 14, cross: 8, arch: -2, wrist: 6, follow: 0.32,
+    // her walk (hold to walk): a catwalk line, a full hip sway and drop, small relaxed arm swings
+    walkWidth: 0.22, walkSway: 2.6, walkRoll: 2.4, walkArm: 0.55, fidget: 'fidgetP' },
 };
 
 const BAKED = new Map(); // retargeted clips, shared by every instance of the same model
@@ -148,7 +155,7 @@ export class Animator {
     this.planted = false;
     this.lastStep = 'R';
     this.dead = false;
-    this.style = rig.hasProp ? STYLES.caster : STYLES.brawler;
+    this.style = (opts.gait && STYLES[opts.gait]) || (rig.hasProp ? STYLES.caster : STYLES.brawler);
     // a model can ship its own retargeted animations (the Sorcerer's Hollow Purple): they replace
     // the hand-keyed action of the same name for this character
     let data = null;
@@ -498,6 +505,7 @@ export class Animator {
     const T = lerp(Twalk, Trun, wFast) * legK * (st.stride || 1) * (this.lobby ? 1.05 : 1) * (1 - 0.28 * sideK * wFast);
     const betaRun = clamp(1.3 * Lg * (1 - 0.35 * sideK) / Math.max(speed * T, 1e-3), 0.24, 0.45);
     const beta = lerp(0.6, betaRun, wFast);
+    this.gaitBeta = beta;   // share of the stride a foot is down (read by the chest motion)
     const Ls = speed * beta * T;
     // running: the foot lands a little ahead of the hips and pushes off well behind them
     const touch = lerp(0.5, 0.42, wFast);
@@ -520,7 +528,9 @@ export class Animator {
     const idleSink = this.lobby ? -0.012 : -0.03;
     P.hip[1] = lerp(idleSink, lerp(-0.008, -0.03, wFast), wRun) + (walkBob + runBob) * wRun + this.dip;
     // the pelvis shifts over the stance foot: clearly when walking, barely when running
-    P.hip[0] += Math.sin(2 * Math.PI * (this.phase - 0.1)) * lerp(0.022, 0.008, wFast) * st.sway * wRun;
+    // (peaking at mid-stance of each foot, whatever the gait: at a run the foot is only down for the
+    // first ~35% of the stride, so timing this for a walk put the weight over a foot already in the air)
+    P.hip[0] += Math.cos(2 * Math.PI * (this.phase - beta * 0.5)) * lerp(0.022 * (st.walkSway ?? st.sway), 0.008 * (st.runSway || 1) * st.sway, wFast) * wRun;
     const hipYawD = this.hipYaw * R2D;
     // ---- feet paths
     const feet = {};
@@ -557,7 +567,10 @@ export class Animator {
       this[key] = inStance;
     }
     // pelvis/torso motion from the stride
-    const stride = Ls > 1e-3 ? (feet.L.along - feet.R.along) / Ls : 0; // + when L foot ahead
+    // + when the L foot is ahead. A smooth wave in step with the feet (not the feet's own sawtooth: a
+    // planted foot slides back in a straight line and then snaps forward, and torso and arms that
+    // copied that looked robotic)
+    const stride = Ls > 1e-3 ? Math.cos(2 * Math.PI * this.phase) : 0;
     // trunk: ~3° forward walking, ~7° running, a little more while accelerating
     const leanT = ((2.5 + 4.5 * wFast) * Math.max(0, fwdness) - 3 * wFast * Math.max(0, -fwdness)) * st.lean + clamp(this.az * 0.9, -5, 7) * wRun;
     const bankT = clamp(-this.ax * 0.8 + this.yawRate * 2.2 * Math.min(1, speed / 3), -8, 8) * wRun;
@@ -571,14 +584,19 @@ export class Animator {
     const glance = (Math.sin(this.t * 0.31) * 0.6 + Math.sin(this.t * 0.83 + 1) * 0.4) * idleW;
     // pelvis: turns with the swinging leg (±4° walk, ±6° run) and drops on the swing side (±4°)
     const pelvisYaw = lerp(4, 6, wFast) * st.twist * stride * wRun * Math.max(0.3, Math.abs(fwdness));
-    const pelvisRoll = lerp(4, 4.5, wFast) * st.roll * Math.sin(2 * Math.PI * this.phase) * wRun;
+    // the swing-side hip drops most at mid-stance of the other foot (the same timing as the weight shift)
+    const pelvisRoll = lerp(4 * (st.walkRoll ?? st.roll), 4.5 * st.roll, wFast) * Math.cos(2 * Math.PI * (this.phase - beta * 0.5)) * wRun;
     setE(P, B.hips, lean * 0.25, hipYawD - pelvisYaw, bank * 0.5 + pelvisRoll - shift * 2.5);
     // the thorax counter-rotates against the pelvis so the shoulders swing opposite the hips
     const counter = -hipYawD + pelvisYaw;
     const thorax = lerp(3, 7, wFast) * st.twist * stride * wRun;
     // the spine undoes the pelvis roll so the shoulders stay level
-    setE(P, B.spine, 1.5 + lean * 0.45, counter * 0.4, bank * 0.3 - pelvisRoll * 0.85);
-    setE(P, B.chest, lean * 0.25, counter * 0.35 + thorax, -pelvisRoll * 0.15);
+    // st.follow: how much of the hip roll the spine lets through to the chest, so the weight shift of
+    // each step travels up the body (the chest sways a little with the hips) instead of the shoulders
+    // staying dead level
+    const fol = (st.follow || 0) * wRun;
+    setE(P, B.spine, 1.5 + lean * 0.45 + (st.arch || 0) * wRun, counter * 0.4, bank * 0.3 - pelvisRoll * (0.85 - fol));
+    setE(P, B.chest, lean * 0.25, counter * 0.35 + thorax, -pelvisRoll * (0.15 - fol * 0.4));
     setE(P, B.upperChest, 0, counter * 0.2 + thorax * 0.3, 0);
     // the head stays level and looking ahead (the eyes lead the run)
     setE(P, B.neck, -lean * 0.45, -thorax * 0.4 + counter * 0.05, -bank * 0.3);
@@ -587,21 +605,26 @@ export class Animator {
     // arms: counter-swing to the legs from the shoulder. Walking: relaxed, ±12°, elbows soft.
     // Running: elbows ~80-90°, ±30° swing, carried a touch forward, hands crossing toward the
     // midline on the forward swing
-    const swingAmt = lerp(24, 62, wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness)) * st.swing;
+    const swingAmt = lerp(24 * (st.walkArm ?? 1), 62, wFast) * wRun * (0.35 + 0.65 * Math.abs(fwdness)) * st.swing;
     // arms drag behind sharp turns / strafes, then swing back through
     const drag = spring(this.sArm, this.yawRate * 3.5 - this.ax * 0.6, 45, 0.45, dt);
     for (const side of ['L', 'R']) {
       const sg = side === 'L' ? 1 : -1;
-      const sw = (Ls > 1e-3 ? (feet[side].along - Ls * (touch - 0.5)) / (Ls * 0.5) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
+      // a smooth pendulum opposite the leg, trailing it a little (follow-through)
+      const uA = (this.phase + (side === 'R' ? 0.5 : 0) - 0.02 + 1) % 1;
+      const sw = (Ls > 1e-3 ? Math.cos(2 * Math.PI * uA) : 0) * swingAmt * 0.5 * (side === 'R' ? st.swingR : 1);
       const fwdSw = Math.max(0, -sw) / Math.max(1, swingAmt * 0.5); // 0..1 while the arm swings forward
       // relaxed ready stance: arms close to the body, casting hand slightly raised
       const idleX = side === 'R' ? -12 : -6, idleZ = side === 'R' ? 8 : 6, idleE = side === 'R' ? -58 : -30;
       const ax = lerp(idleX, sw - 5 * wFast, wRun);
-      const az = lerp(idleZ, lerp(6, 9, wFast) - 4 * fwdSw * wFast, wRun);
+      // (the forward swing of an A-posed arm drifts outward along a cone: st.cross pulls it in toward
+      // the centre line instead, so the hand travels across the body)
+      const az = lerp(idleZ, lerp(6, 9, wFast) - 4 * fwdSw * wFast - (st.armIn || 0) - (st.cross || 0) * fwdSw, wRun);
       const ex = lerp(idleE, lerp(-24, -(78 + 10 * sstep(4.5, RUN_SPEED, speed)), wFast) * st.elbow - Math.max(0, -sw) * lerp(0.2, 0.35, wFast), wRun);
       setS(P, B['upperArm' + side], sg, ax, 8 * fwdSw * wFast, az);
       setS(P, B['foreArm' + side], sg, ex, -lerp(6, 14, wFast) * wRun, 0);
-      setS(P, B['hand' + side], sg, -6, 0, -4);
+      // a loose wrist that flicks back as the arm swings forward (style)
+      setS(P, B['hand' + side], sg, -6 + (st.wrist || 0) * fwdSw * wRun, 0, -4 - (st.wrist || 0) * 0.4 * wRun);
       setS(P, B['shoulder' + side], sg, -2 * sw / Math.max(1, swingAmt * 0.5) * wFast, 0, -1.5 * wFast);
       addE(P, B['upperArm' + side], 0, 0, -clamp(drag, -10, 10));
     }
@@ -612,7 +635,7 @@ export class Animator {
     for (const side of ['L', 'R']) {
       const f = feet[side];
       const hw = Math.max(0.085, Math.abs(rig.legs.L.hipOff.x) + 0.008);
-      const width = lerp(hw, hw * 0.9, wFast);
+      const width = lerp(hw, hw * 0.9, wFast) * lerp(1, lerp(st.walkWidth ?? st.width ?? 1, st.width ?? 1, wFast), wRun);
       // base under the hip, turned with the pelvis
       const bx = f.sg * width * cyaw, bz = -f.sg * width * syaw;
       tgt[side] = (this._tg || (this._tg = { L: new THREE.Vector3(), R: new THREE.Vector3() }))[side].set(bx + mx * f.along, ankleH + f.lift, bz + mz * f.along);

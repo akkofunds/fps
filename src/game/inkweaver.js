@@ -13,6 +13,7 @@ export const INKWEAVER = {
   name: 'INKWEAVER',
   role: 'MASTER OF YUNKUI',
   model: 'models/inkweaver.glb',
+  gait: 'femme',   // her walk and run: see STYLES.femme in character/animator.js
   color: '#f2c45a',
   perk: { speed: 1.03, airJumps: 1, dashMax: 2, dashRate: 1.1 },
   bio: 'The master of Yunkui Summit. Her ink is never just ink: a stroke of it becomes wings, a swirl becomes a storm cloud, and a single talisman can hold a mountain down. Calm, unhurried, and very, very thorough.',
@@ -39,7 +40,7 @@ export const INK_M1 = {
 export const RUSH = { dash: 7, dashT: 0.16, beats: [0.2, 0.42, 0.66], range: 3.3, cone: 0.25, dmg: [10, 10, 18], stun: [0.6, 0.6, 0.9] };
 export const ORB = { range: 30, delay: 0.25, life: 2.2, pullR: 9.5, coreR: 3.2, pull: 22, tick: 0.25, tickDmg: 3, burst: 16, burstR: 6, burstKb: 14 };
 export const ERUPT = { charge: 0.62, len: 18, width: 3.6, near: 4.2, dmg: 36, up: 11, kb: 18 };
-export const TALISMAN = { cine: 10.2, rain: [4.4, 8.2], radius: 34, strikes: 6, strikeDmg: 6, boom: 8.8, boomDmg: 70, boomR: 34 };
+export const TALISMAN = { cine: 10.2, rain: [4.4, 8.2], radius: 34, strikes: 10, strikeDmg: 6, boom: 8.8, boomDmg: 90, boomR: 34 };
 // the front-on wing shot of the ultimate (the reference art), seconds into the cutscene
 export const WING_SHOT = [2.4, 4.4];
 
@@ -214,7 +215,7 @@ export class InkweaverKit {
     for (let k = 0; k < TALISMAN.strikes; k++) this.pending.push({ t: r0 + (r1 - r0) * (k + 0.5) / TALISMAN.strikes, fn: () => {
       for (const e of this._enemies()) {
         if (Math.hypot(e.pos.x - c.x, e.pos.z - c.z) > TALISMAN.radius) continue;
-        m.reportHit(e, TALISMAN.strikeDmg, 'talismanRain', { slow: [0.4, 0.6], at: new THREE.Vector3(e.pos.x, e.pos.y + 1.0, e.pos.z) });
+        m.reportHit(e, TALISMAN.strikeDmg, 'talismanRain', { slow: [0.4, 0.6], stun: 0.35, at: new THREE.Vector3(e.pos.x, e.pos.y + 1.0, e.pos.z) });
       }
     } });
     this.pending.push({ t: TALISMAN.boom, fn: () => {

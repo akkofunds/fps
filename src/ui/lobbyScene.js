@@ -47,7 +47,7 @@ export class LobbyScene {
     if (this.mageId !== md.id) return; // a newer pick won
     const vis = this.inst ? this.inst.root.visible : true;
     if (this.inst) this.scene.remove(this.inst.root);
-    this.inst = new MageInstance(tmpl, { lobby: true, outlines: this.map.Q.outlines, groundAt: (x, z) => this.map.world.groundAt(x, z, 50) });
+    this.inst = new MageInstance(tmpl, { lobby: true, outlines: this.map.Q.outlines, gait: md.gait, groundAt: (x, z) => this.map.world.groundAt(x, z, 50) });
     this.inst.root.position.copy(this.P);
     this.inst.root.visible = vis;
     this.scene.add(this.inst.root);

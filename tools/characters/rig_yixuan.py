@@ -43,7 +43,39 @@ BONES = [  # (name, parent)
     # secondary motion (never animated by the rig; driven by src/character/jiggle.js): a pivot on the
     # upper chest and the soft mass hanging from it, per side
     ('breast_L', 'upperChest'), ('breastTip_L', 'breast_L'), ('breast_R', 'upperChest'), ('breastTip_R', 'breast_R'),
+    # the thighs' soft mass (source: Skn_*_Thigh_Shake)
+    ('thigh_L', 'upperLeg_L'), ('thigh_R', 'upperLeg_R'),
 ]
+# hair, cloth and accessories: the main strand of each lock of hair, each hanging sleeve, jacket flap
+# and dangling ornament is kept as a chain (<kind><chain><n>, n from the root down); the branches ride
+# on their nearest kept joint. All swung by spring bones in src/character/jiggle.js.
+CHAINS = {  # game chain name → (game parent of its root, the source joints root first)
+    'hairBA': ('head', ['Ctr_B_HairA_01', 'Ctr_B_HairA_02', 'Ctr_B_HairA_03', 'Ctr_B_HairA_04', 'Ctr_B_HairA_05', 'Ctr_B_HairA_06', 'Ctr_B_HairA_07']),
+    'hairBB': ('head', ['Ctr_B_HairB_01', 'Ctr_B_HairB_02', 'Ctr_B_HairB_03', 'Ctr_B_HairB_04', 'Ctr_B_HairB_05', 'Ctr_B_HairB_06', 'Ctr_B_HairB_07']),
+    'hairLA': ('head', ['Ctr_L_HairA_01', 'Ctr_L_HairA_02', 'Ctr_L_HairA_03', 'Ctr_L_HairA_04']),
+    'hairLB': ('head', ['Ctr_L_HairB_01', 'Ctr_L_HairB_02', 'Ctr_L_HairB_03']),
+    'hairRA': ('head', ['Ctr_R_HairA_01', 'Ctr_R_HairA_02', 'Ctr_R_HairA_04']),
+    'hairRB': ('head', ['Ctr_R_HairB_01', 'Ctr_R_HairB_02', 'Ctr_R_HairB_03']),
+    'hairRC': ('head', ['Ctr_R_HairC_01', 'Ctr_R_HairC_02', 'Ctr_R_HairC_03']),
+    'hairT': ('head', ['Ctr_T_Hair_01', 'Ctr_T_Hair_02']),
+    'hairAA': ('head', ['Ctr_Accessories_01', 'Ctr_Accessories_03', 'Ctr_Accessories_04', 'Ctr_Accessories_05']),
+    'hairAB': ('head', ['Ctr_Accessories_07', 'Ctr_Accessories_08', 'Ctr_Accessories_09']),
+    # the long hanging sleeves (the yellow panels), from the upper arms
+    'clothSL': ('upperArm_L', ['Ctr_L_SleeveB_01', 'Ctr_L_SleeveB_03', 'Ctr_L_SleeveB_05', 'Ctr_L_SleeveB_Z_01', 'Ctr_L_SleeveB_Z_03']),
+    'clothSR': ('upperArm_R', ['Ctr_R_SleeveB_01', 'Ctr_R_SleeveB_03', 'Ctr_R_SleeveB_05', 'Ctr_R_SleeveB_Z_01', 'Ctr_R_SleeveB_Z_03']),
+    # the jacket's hem flaps
+    'clothJLA': ('upperChest', ['Ctr_L_JacA_01', 'Ctr_L_JacA_02', 'Ctr_L_JacA_03']),
+    'clothJLB': ('upperChest', ['Ctr_L_JacB_01', 'Ctr_L_JacB_02', 'Ctr_L_JacB_03']),
+    'clothJM': ('upperChest', ['Ctr_M_Jac_01', 'Ctr_M_Jac_02', 'Ctr_M_Jac_03']),
+    'clothJRA': ('upperChest', ['Ctr_R_JacA_01', 'Ctr_R_JacA_02', 'Ctr_R_JacA_03']),
+    'clothJRB': ('upperChest', ['Ctr_R_JacB_01', 'Ctr_R_JacB_02', 'Ctr_R_JacB_03']),
+    # ornaments: the string of copper coins at her waist, the two pendants
+    'clothCC': ('spine', ['Ctr_CopperCoins_01', 'Ctr_CopperCoins_02', 'Ctr_CopperCoins_03', 'Ctr_CopperCoins_04']),
+    'clothPL': ('chest', ['Ctr_L_Pendant_01', 'Ctr_L_Pendant_02']),
+    'clothPR': ('chest', ['Ctr_R_Pendant_01', 'Ctr_R_Pendant_02']),
+}
+for cname, (cpar, js_) in CHAINS.items():
+    for k in range(len(js_)): BONES.append((f'{cname}{k + 1}', cpar if k == 0 else f'{cname}{k}'))
 NAMES = [b[0] for b in BONES]
 IDX = {n: i for i, n in enumerate(NAMES)}
 BIP = {
@@ -59,6 +91,10 @@ BIP = {
 JIGGLE = {'Skn_L_Chest': 'breast_L', 'Skn_L_Chest_Cj_01': 'breastTip_L', 'Skn_L_Chest_Cj_02': 'breast_L', 'Skn_L_Chest_Cj_03': 'breast_L', 'Skn_L_Chest_Cj_04': 'breast_L',
           'Skn_R_Chest': 'breast_R', 'Skn_R_Chest_Cj_01': 'breastTip_R', 'Skn_R_Chest_Cj_02': 'breast_R', 'Skn_R_Chest_Cj_03': 'breast_R', 'Skn_R_Chest_Cj_04': 'breast_R'}
 JIGGLE_POS = {'breast_L': 'Skn_L_Chest', 'breastTip_L': 'Skn_L_Chest_Cj_01', 'breast_R': 'Skn_R_Chest', 'breastTip_R': 'Skn_R_Chest_Cj_01'}
+JIGGLE.update({'Skn_L_Thigh_Shake': 'thigh_L', 'Skn_R_Thigh_Shake': 'thigh_R'})
+JIGGLE_POS.update({'thigh_L': 'Skn_L_Thigh_Shake', 'thigh_R': 'Skn_R_Thigh_Shake'})
+for cname, (_, js_) in CHAINS.items():
+    for k, src in enumerate(js_): JIGGLE[src] = f'{cname}{k + 1}'; JIGGLE_POS[f'{cname}{k + 1}'] = src
 DROP_MATS = ('MAT_YiXuan_Yuansy_UI', 'material_0')   # the pet bird, the hair-shadow overlay
 NO_OUTLINE = ('MAT_YiXuan_Face_UI', 'MAT_YiXuan_Eyebrows_UI', 'MAT_YiXuan_Eye_UI', 'MAT_YiXuan_Body_2_T_UI')
 
@@ -141,6 +177,16 @@ def main():
                 for row in np.unique(Js[:, k]):
                     sel = Js[:, k] == row
                     Wt[sel, IDX[jgame[row]]] += Ws[sel, k]
+            # the thighs' soft flesh: hand part of each upper leg's weight to its thigh bone, peaking
+            # mid-thigh and fading to nothing at the hip and the knee (the source's shake joints only
+            # carry a sliver of the skin, so the thighs could never move on their own)
+            for sd in ('L', 'R'):
+                a_, b_ = G[IDX['upperLeg_' + sd]], G[IDX['lowerLeg_' + sd]]
+                ax_ = b_ - a_; ln = float(np.dot(ax_, ax_))
+                t_ = np.clip(((P - a_) @ ax_) / ln, 0, 1)
+                bump = np.clip(1 - np.abs(t_ - 0.42) / 0.32, 0, 1) ** 1.5
+                mv = Wt[:, IDX['upperLeg_' + sd]] * 0.6 * bump
+                Wt[:, IDX['upperLeg_' + sd]] -= mv; Wt[:, IDX['thigh_' + sd]] += mv
             tex = mat['pbrMetallicRoughness']['baseColorTexture']['index']
             tex = js['textures'][tex]['source']
             parts.append(dict(name=mat['name'].replace('MAT_YiXuan_', '').replace('_UI', '').lower(), mat=mat['name'], outline=False,
