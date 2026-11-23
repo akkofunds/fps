@@ -217,7 +217,7 @@ export class Hud {
   }
 
   damageNumber(pos, dmg, head) {
-    const d = el('div', 'dnum' + (dmg >= 40 ? ' big' : head ? ' head' : ''), String(dmg));
+    const d = el('div', 'dnum' + (head ? ' head' : ''), String(dmg));
     $('dmgNums').appendChild(d);
     this.nums.push({ d, p: new THREE.Vector3(pos.x + (Math.random() - 0.5) * 0.4, pos.y + 0.2, pos.z + (Math.random() - 0.5) * 0.4), t: 0 });
     if (this.nums.length > 24) { const o = this.nums.shift(); o.d.remove(); }

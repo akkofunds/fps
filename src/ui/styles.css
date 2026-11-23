@@ -208,7 +208,6 @@ svg { fill: currentColor; }
 .ntag.dummy .hb i { background: #e8c070; }
 .dnum { position: absolute; left: 0; top: 0; will-change: transform, opacity; font-family: var(--font-d); font-weight: 700; font-size: 20px; color: #fff; text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 2px #000; }
 .dnum.head { color: var(--yellow); font-size: 25px; }
-.dnum.big { color: #ffd27a; font-size: 38px; text-shadow: 0 0 10px rgba(255,160,40,0.9), 0 0 3px #000, 0 0 2px #000; }
 #xhair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --c: #fff; }
 #xhair i { position: absolute; background: var(--c); box-shadow: 0 0 2px rgba(0,0,0,0.9); }
 #xhair .d { width: 3px; height: 3px; left: -1.5px; top: -1.5px; border-radius: 50%; }

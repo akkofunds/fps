@@ -1192,22 +1192,11 @@ export const ASCEND = {
   upperArmL: [-4, 0, 17], foreArmL: [-34, 0, 0], handL: [8, 0, -18],
   upperArmR: [-4, 0, 17], foreArmR: [-34, 0, 0], handR: [8, 0, -18],
 };
-// her hands through the cutscene (seconds match the cutscene clock): the wing shot holds the pose of
-// the reference, then she lifts her right hand to call the seal open, holds it there through the rain,
-// points down at the field on "Be still.", and flings both arms wide as the field explodes
-const ASC_CALL = { ...ASCEND, upperArmR: [-150, 0, 22], foreArmR: [-18, 0, 0], handR: [-20, 0, 0], head: [-4, 6, 6], neck: [0, 0, 3], spine: [-6, 0, -3] };
-const ASC_POINT = { ...ASCEND, upperArmR: [-62, 0, 8], foreArmR: [-6, 0, 0], handR: [24, 0, 0], head: [20, 2, 4], neck: [10, 0, 2], spine: [4, 0, -2] };
-const ASC_WIDE = { ...ASCEND, upperArmL: [-30, 0, 78], foreArmL: [-10, 0, 0], upperArmR: [-30, 0, 78], foreArmR: [-10, 0, 0], head: [-10, 0, 0], neck: [-4, 0, 0], spine: [-8, 0, 0], chest: [-6, 0, 0] };
 export const INK_ASCEND = compileClip([
   { t: 0, hip: [0, -0.03, 0], ik: STAND, b: { spine: [2, 0, 0], upperArmL: [-10, 0, 14], upperArmR: [-10, 0, 14] } },
   { t: 0.45, ease: 'smooth', hip: [0, -0.06, 0], ik: STAND, b: { spine: [4, 0, 0], head: [-4, 0, 0], upperArmL: [-14, 0, 22], foreArmL: [-30, 0, 0], upperArmR: [-14, 0, 22], foreArmR: [-30, 0, 0] } },
   { t: 1.3, ease: 'smooth', hip: [0, 0, 0], b: ASCEND },
-  { t: 4.4, ease: 'smooth', hip: [0, 0.01, 0], b: ASCEND },
-  { t: 4.85, ease: 'out', hip: [0, 0.03, 0], b: ASC_CALL },
-  { t: 7.3, ease: 'smooth', hip: [0, 0.02, 0], b: { ...ASC_CALL, head: [0, 4, 6] } },
-  { t: 7.65, ease: 'out', hip: [0, 0, 0], b: ASC_POINT },
-  { t: 8.75, ease: 'linear', hip: [0, 0, 0], b: { ...ASC_POINT, upperArmR: [-58, 0, 8] } },
-  { t: 8.95, ease: 'out', hip: [0, 0.04, 0], b: ASC_WIDE },
-  { t: 9.6, ease: 'smooth', hip: [0, 0.02, 0], b: ASC_WIDE },
-  { t: 10.4, ease: 'smooth', hip: [0, 0, 0], b: ASCEND },
+  { t: 3.4, ease: 'smooth', hip: [0, 0.02, 0], b: { ...ASCEND, head: [14, 3, 9], upperArmL: [-3, 0, 19], upperArmR: [-3, 0, 19] } },
+  { t: 6.0, ease: 'smooth', hip: [0, 0, 0], b: { ...ASCEND, head: [16, 5, 7] } },
+  { t: 10.4, ease: 'smooth', hip: [0, 0.01, 0], b: ASCEND },
 ]);
