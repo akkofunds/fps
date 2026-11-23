@@ -5,7 +5,6 @@ export const INTERP_DELAY = 0.11; // remote entities render this far in the past
 
 export const MOVE = {
   run: 6.4,
-  walk: 0.26,   // hold-to-walk speed, as a share of the run (~1.7 m/s)
   accel: 62,
   airAccel: 16,
   friction: 11,

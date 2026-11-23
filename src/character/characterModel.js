@@ -17,7 +17,7 @@ export function loadMageModel(url) {
   if (!cache.has(url)) {
     const once = (u) => new Promise((resolve, reject) => {
       new GLTFLoader().load(u, async (g) => {
-        prepareMaterials(g.scene, ...(/inkweaver/.test(url) ? [0.3, 0.78, 0.75] : [0.62, 1, 0]));
+        prepareMaterials(g.scene);
         try { await buildLods(g.scene); } catch (e) { console.warn('LOD build failed', e); }
         resolve(g.scene);
       }, undefined, reject);
@@ -55,9 +55,7 @@ async function buildLods(root) {
   });
 }
 
-// glow: how self-lit the painted textures are, lit: how strongly scene light adds on top (Inkweaver's
-// white outfit and hair wash out to flat white at the defaults)
-function prepareMaterials(root, glow = 0.62, lit = 1, shine = 0) {
+function prepareMaterials(root) {
   root.traverse((o) => {
     if (!o.isMesh) return;
     const m = o.material;
@@ -73,12 +71,12 @@ function prepareMaterials(root, glow = 0.62, lit = 1, shine = 0) {
       const tint = map ? new THREE.Color(1, 1, 1) : (m.color ? m.color.clone() : new THREE.Color(1, 1, 1));
       o.material = new THREE.MeshLambertMaterial({
         // keep each model's own sidedness (Shoto ships a built-in inner ink shell that must stay culled)
-        map, emissiveMap: map, color: tint.clone().multiplyScalar(lit), emissive: new THREE.Color(glow, glow - 0.02, glow - 0.02).multiply(tint), side: m.side,
+        map, emissiveMap: map, color: tint, emissive: new THREE.Color(0.62, 0.6, 0.6).multiply(tint), side: m.side,
         // painted alpha (eyes, lace): blend without writing depth so it never cuts holes behind it
         transparent: !!m.transparent, depthWrite: !m.transparent, alphaTest: m.transparent ? 0.01 : 0,
       });
-      o.material.name = m.name; o.material.userData.glow = glow;
-      rimLight(o.material, shine);
+      o.material.name = m.name;
+      rimLight(o.material);
       o.castShadow = true;
     }
     o.frustumCulled = false;
@@ -86,28 +84,16 @@ function prepareMaterials(root, glow = 0.62, lit = 1, shine = 0) {
 }
 
 // anime-style rim light: a warm fresnel edge that separates characters from the background
-// rim light, plus (shine > 0) a glossy highlight from the sun: a soft sheen with a crisp anime
-// hot-spot inside it, so skin, hair and the glossy suit catch the light as she moves
-function rimLight(mat, shine = 0) {
+function rimLight(mat) {
   mat.onBeforeCompile = (sh) => {
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;\nuniform float uShine;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         float rimF = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 3.0);
-        totalEmissiveRadiance += uRim * rimF;`)
-      .replace('#include <envmap_fragment>', `#include <envmap_fragment>
-        #if NUM_DIR_LIGHTS > 0
-        if (uShine > 0.0) {
-          vec3 Hs = normalize(directionalLights[0].direction + normalize(vViewPosition));
-          float nh = max(dot(normal, Hs), 0.0);
-          float sheen = pow(nh, 24.0) * 0.55 + smoothstep(0.965, 0.985, nh) * 0.6;
-          outgoingLight += directionalLights[0].color * sheen * uShine * 0.25;
-        }
-        #endif`);
+        totalEmissiveRadiance += uRim * rimF;`);
     sh.uniforms.uRim = { value: new THREE.Color(0.55, 0.42, 0.32) };
-    sh.uniforms.uShine = { value: shine };
   };
-  mat.customProgramCacheKey = () => 'mage-rim2';
+  mat.customProgramCacheKey = () => 'mage-rim';
 }
 
 export class MageInstance {
@@ -129,7 +115,7 @@ export class MageInstance {
     this._tint = 0;
     this.cape = new CapeSim(this.model);
     // soft-body secondary motion on models that carry the extra chest bones (Inkweaver)
-    this.jiggle = JiggleSim.create(this.model, { anim: this.anim });
+    this.jiggle = JiggleSim.create(this.model);
     if (!this.cape.ok) this.cape = null;
   }
 
@@ -144,7 +130,7 @@ export class MageInstance {
   setFlash(v) {
     if (v === this._tint) return;
     this._tint = v;
-    for (const m of this.meshes) if (!m.userData.outline) { const mt = m.userData._mat || m.material, g = mt.userData.glow ?? 0.62; mt.emissive.setRGB(g + v * 1.4, g - 0.02 + v * 0.35, g - 0.02 + v * 0.2); }
+    for (const m of this.meshes) if (!m.userData.outline) (m.userData._mat || m.material).emissive.setRGB(0.62 + v * 1.4, 0.6 + v * 0.35, 0.6 + v * 0.2);
   }
 
   // impact frame: the whole body flat-filled with one colour (ink outlines stay); null restores
